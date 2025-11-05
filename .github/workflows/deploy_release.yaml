@@ -18,6 +18,10 @@ jobs:
         id: ver
         run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
 
+      - name: Get current date and time using shell
+        id: current_date
+        run: echo "date=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
+
       # Create an artifact with the root 'public/' folder.
       - name: Build artifact (wrap to public/)
         run: |
@@ -47,4 +51,4 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            /srv/apps/yuriisoft/deploy_static.sh "${{ steps.ver.outputs.VERSION }}" "/tmp/yuriisoft.tar.gz"
+            /srv/apps/yuriisoft/deploy_static.sh "${{steps.current_date.outputs.date}}__${{ steps.ver.outputs.VERSION }}" "/tmp/yuriisoft.tar.gz"
