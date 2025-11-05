@@ -1,21 +1,50 @@
-name: Deploy to VPS
+name: Deploy static site (tag)
+
 on:
   push:
-    # Currently the tag set to weird name, just to not trigger CI/CD pipeline, since it's under construction
-    tags: [ "sajskdjakjdkasjdkasjd" ]
+    tags: ['v*']   # v1.0.0, v1.2.3
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Deploy via SSH
+      - name: Read version from tag
+        id: ver
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      # Create an artifact with the root 'public/' folder.
+      - name: Build artifact (wrap to public/)
+        run: |
+          mkdir -p artifact/public
+          cp -r ./* artifact/public/ || true
+          # remove .git and the artifact folder itself from artifacts.
+          rm -rf artifact/public/.git artifact/public/artifact
+          # Make sure that index.html exists
+          test -f artifact/public/index.html
+          # Pack everything
+          cd artifact
+          tar -czf ../yuriisoft.tar.gz .
+
+      - name: Upload artifact to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "yuriisoft.tar.gz"
+          target: "/tmp/"
+
+      - name: Remote deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: deploy
+          username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            /srv/web/yuriisoft/deploy.sh
+            /srv/apps/yuriisoft/deploy_static.sh "${{ steps.ver.outputs.VERSION }}" "/tmp/yuriisoft.tar.gz"
