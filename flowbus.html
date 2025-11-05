@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="FlowBus — event‑driven фреймворк с persistable событиями, Room, Active Objects и state machine.">
+  <title>FlowBus — детали фреймворка</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <!-- Navigation bar -->
+  <nav>
+    <div class="nav-container container">
+      <div class="logo">Yurii</div>
+      <ul>
+        <li><a href="index.html#hero">Главная</a></li>
+        <li><a href="index.html#about">Обо мне</a></li>
+        <li><a href="index.html#projects">Проекты</a></li>
+        <li><a href="contact.html">Контакты</a></li>
+      </ul>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Переключить тему">🌓</button>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <section class="hero section">
+    <div class="container">
+      <h1 class="fade-in">FlowBus</h1>
+      <p class="tagline fade-in">Мощный event‑driven фреймворк для мобильных приложений</p>
+    </div>
+  </section>
+
+  <!-- Overview -->
+  <section class="section">
+    <div class="container">
+      <h2 class="fade-in">Обзор</h2>
+      <p class="fade-in">FlowBus — это разработанный мной фреймворк для построения событийно‑ориентированных приложений. Он обеспечивает центральную шину событий, которая разрывает жёсткие связи между отправителями и получателями, что увеличивает модульность и позволяет свободно эволюционировать систему. В отличие от простых библиотек шины событий, FlowBus включает в себя поддержку долгоживущих (<em>persistable</em>) событий и обеспечивает высокую производительность, что важно для мобильных приложений.</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section" style="background-color: var(--bg-alt);">
+    <div class="container">
+      <h2 class="fade-in">Ключевые особенности</h2>
+      <ul class="fade-in">
+        <li><strong>Persistable события.</strong> События могут автоматически сохраняться в базу данных Room, что обеспечивает надёжность и возможность восстановления последовательности событий даже после перезагрузки приложения. Room предоставляет абстракцию над SQLite с проверкой запросов во время компиляции и удобными DAO для работы с данными.</li>
+        <li><strong>Active Objects.</strong> Реализация шаблона Active Object позволяет выполнять операции в отдельных потоках, не блокируя основной UI. Каждый объект имеет свою очередь сообщений и потоки выполнения, что обеспечивает безопасное параллельное выполнение.</li>
+        <li><strong>Иерархическая state machine.</strong> Кастомная state machine с поддержкой наследования состояний и вложенных машин. Это обеспечивает изящное управление состояниями сложных компонентов и снижает количество кода.</li>
+        <li><strong>Производительность.</strong> Благодаря оптимизированной доставке событий и минимальным накладным расходам, FlowBus подходит для ресурсоограниченных устройств, позволяя быстро реагировать на события.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Architecture Diagram -->
+  <section class="section">
+    <div class="container">
+      <h2 class="fade-in">Архитектура</h2>
+      <p class="fade-in">Ниже приведена схематическая диаграмма FlowBus, где отображены издатели, центральная шина событий, подписчики и хранилище persistable событий.</p>
+      <img src="images/flowbus_diagram.png" alt="Диаграмма FlowBus" class="fade-in" style="max-width:100%; border-radius:8px; box-shadow:0 4px 8px var(--shadow-color);">
+    </div>
+  </section>
+
+  <!-- Testing and CI/CD -->
+  <section class="section" style="background-color: var(--bg-alt);">
+    <div class="container">
+      <h2 class="fade-in">Тестирование и автоматизация</h2>
+      <p class="fade-in">Все компоненты FlowBus покрыты модульными тестами, что обеспечивает мгновенную обратную связь и поддержку эволюции кода без регрессий. Автоматизированное тестирование ускоряет разработку и уменьшает вероятность ошибок.</p>
+      <p class="fade-in">Сборка, проверка и публикация артефактов происходят через настроенные процессы CI/CD. Автоматизация сборок и тестов ускоряет выпуск новых версий, улучшает качество и уменьшает человеческий фактор.</p>
+    </div>
+  </section>
+
+  <!-- Back link -->
+  <section class="section">
+    <div class="container">
+      <a href="index.html#projects" class="btn">← Вернуться к проектам</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 Yurii. Все права защищены.</p>
+    </div>
+  </footer>
+</body>
+</html>

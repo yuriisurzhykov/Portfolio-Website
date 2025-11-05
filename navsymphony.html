@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="NavSymphony — навигационный фреймворк с поддержкой back stack, цепочек транзакций и систем actors.">
+  <title>NavSymphony — детали навигации</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <!-- Navigation bar -->
+  <nav>
+    <div class="nav-container container">
+      <div class="logo">Yurii</div>
+      <ul>
+        <li><a href="index.html#hero">Главная</a></li>
+        <li><a href="index.html#about">Обо мне</a></li>
+        <li><a href="index.html#projects">Проекты</a></li>
+        <li><a href="contact.html">Контакты</a></li>
+      </ul>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Переключить тему">🌓</button>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <section class="hero section">
+    <div class="container">
+      <h1 class="fade-in">NavSymphony</h1>
+      <p class="tagline fade-in">Гибкий и мощный навигационный фреймворк</p>
+    </div>
+  </section>
+
+  <!-- Overview -->
+  <section class="section">
+    <div class="container">
+      <h2 class="fade-in">Обзор</h2>
+      <p class="fade-in">NavSymphony был создан как ответ на ограниченную функциональность первых версий Jetpack Compose Navigation. Он обеспечивает полный контроль над стеком экранов, сложными цепочками переходов и поддерживает гибкую архитектуру приложений. Современный Navigation 3 также реализует стек экранов и упрощает работу с несколькими маршрутов, но NavSymphony появился раньше и обеспечивает больше гибкости для бизнес‑сценариев.</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section" style="background-color: var(--bg-alt);">
+    <div class="container">
+      <h2 class="fade-in">Ключевые особенности</h2>
+      <ul class="fade-in">
+        <li><strong>Полноценный back stack.</strong> NavSymphony хранит список экранов и поддерживает операции push/pop, что позволяет реализовывать сценарии возврата и многошаговые процессы. Navigation 3 в Jetpack Compose также перешёл на list‑based model, но NavSymphony предлагал эту возможность ранее.</li>
+        <li><strong>Сложные транзакции и цепочки.</strong> Фреймворк позволяет определять цепочки экранов и транзакций, которые могут выполняться атомарно. Это удобно для onboarding или wizard‑процессов.</li>
+        <li><strong>Система commands ↔ intents.</strong> Вместо жесткой связи между экраном и навигатором, NavSymphony использует архитектуру команд, где модуль отправляет команду навигации, а реализующий компонент интерпретирует её как переход. Это облегчает тестирование и повышает гибкость.</li>
+        <li><strong>Actors.</strong> Пользователи могут создавать собственные actors для обработки команд, что упрощает расширяемость фреймворка и позволяет подключать дополнительные модули навигации.</li>
+        <li><strong>Адаптивность.</strong> В связке с Compose NavSymphony поддерживает отображение нескольких destinations одновременно, что позволяет адаптировать UI под большие экраны и foldable‑устройства.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Diagram -->
+  <section class="section">
+    <div class="container">
+      <h2 class="fade-in">Диаграмма</h2>
+      <p class="fade-in">Диаграмма ниже показывает, как NavSymphony управляет стеком экранов, обрабатывает push/pop операции и взаимодействует с commands и actors.</p>
+      <img src="images/navsymphony_diagram.png" alt="Диаграмма NavSymphony" class="fade-in" style="max-width:100%; border-radius:8px; box-shadow:0 4px 8px var(--shadow-color);">
+    </div>
+  </section>
+
+  <!-- Testing and CI/CD -->
+  <section class="section" style="background-color: var(--bg-alt);">
+    <div class="container">
+      <h2 class="fade-in">Тестирование и автоматизация</h2>
+      <p class="fade-in">Как и другие мои проекты, NavSymphony тщательно покрыт unit‑тестами, что обеспечивает высокую стабильность и надёжность. Автоматизация CI/CD позволяет быстро разворачивать новые версии и получать обратную связь на каждом этапе разработки.</p>
+    </div>
+  </section>
+
+  <!-- Back link -->
+  <section class="section">
+    <div class="container">
+      <a href="index.html#projects" class="btn">← Вернуться к проектам</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 Yurii. Все права защищены.</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Дизайн‑системы, кастомные компоненты и Gradle‑плагины.">
+  <title>Дизайн‑системы и tooling</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <!-- Navigation bar -->
+  <nav>
+    <div class="nav-container container">
+      <div class="logo">Yurii</div>
+      <ul>
+        <li><a href="index.html#hero">Главная</a></li>
+        <li><a href="index.html#about">Обо мне</a></li>
+        <li><a href="index.html#projects">Проекты</a></li>
+        <li><a href="contact.html">Контакты</a></li>
+      </ul>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Переключить тему">🌓</button>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <section class="hero section">
+    <div class="container">
+      <h1 class="fade-in">Дизайн‑системы и tooling</h1>
+      <p class="tagline fade-in">Оптимизация интерфейсов и процессов разработки</p>
+    </div>
+  </section>
+
+  <!-- Overview -->
+  <section class="section">
+    <div class="container">
+      <h2 class="fade-in">Обзор</h2>
+      <p class="fade-in">Чтобы обеспечить согласованный и производительный интерфейс, я разрабатывал наборы компонентов и дизайн‑систем, в которых используются токены для описания цветов, отступов, типографики и других визуальных параметров. Такой подход позволяет в одной точке изменять внешний вид приложения и быстро адаптировать UI под требуемые бренды.</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section" style="background-color: var(--bg-alt);">
+    <div class="container">
+      <h2 class="fade-in">Ключевые решения</h2>
+      <ul class="fade-in">
+        <li><strong>Design Tokens.</strong> Использование ограниченных наборов палитр для цветов, интервалов и типографики делает дизайн систематизированным и удобным для разработки и коммуникации. Токены выступают ключами, которые переводятся в конкретные значения через функции и миксины.</li>
+        <li><strong>Кастомные компоненты.</strong> Разработаны оптимизированные layouts и виджеты, которые работают плавно даже на слабом оборудовании. Они повторно используются в приложении, что уменьшает дублирование кода.</li>
+        <li><strong>Адаптивность.</strong> Компоненты и стили оптимизированы под разные размеры экранов, обеспечивая отзывчивость и последовательный опыт на мобильных устройствах, планшетах и десктопах.</li>
+        <li><strong>Gradle‑плагины.</strong> Для упрощения работы над дизайн‑системой и всего проекта были написаны плагины Gradle. Они инкапсулируют конфигурацию и обеспечивают консистентность в multi‑module проектах, что лучше масштабируемости и поддерживаемости.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Diagram -->
+  <section class="section">
+    <div class="container">
+      <h2 class="fade-in">Диаграмма Design Tokens</h2>
+      <p class="fade-in">Диаграмма демонстрирует, как токены связывают дизайн‑решения с реализацией: токены выступают в роли ключей, подставляющих конкретные значения цветов, размеров и типографики в компоненты.</p>
+      <img src="images/design_tokens_diagram.png" alt="Диаграмма Design Tokens" class="fade-in" style="max-width:100%; border-radius:8px; box-shadow:0 4px 8px var(--shadow-color);">
+    </div>
+  </section>
+
+  <!-- Testing and CI/CD -->
+  <section class="section" style="background-color: var(--bg-alt);">
+    <div class="container">
+      <h2 class="fade-in">Тестирование и автоматизация</h2>
+      <p class="fade-in">Каждый компонент и токен покрыт тестами, что обеспечивает стабильность пользовательского интерфейса. Автоматизированные сборки и проверки через CI/CD гарантируют, что изменения в дизайн‑системе не приводят к регрессиям.</p>
+    </div>
+  </section>
+
+  <!-- Back link -->
+  <section class="section">
+    <div class="container">
+      <a href="index.html#projects" class="btn">← Вернуться к проектам</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 Yurii. Все права защищены.</p>
+    </div>
+  </footer>
+</body>
+</html>

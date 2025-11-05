@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Yurii — Software Engineer & System Architect</title>
+    <meta name="description"
+          content="Portfolio of Yurii — complex mobile apps, frameworks, event-driven architecture, design systems, CI/CD, Gradle plugins."/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css"/>
+    <script defer src="app.js"></script>
+</head>
+<body>
+<!-- Navigation -->
+<header class="nav">
+    <div class="container nav__inner">
+        <a class="brand" href="#home">Yurii</a>
+        <nav class="nav__links">
+            <a href="#work">Work</a>
+            <a href="#expertise">Expertise</a>
+            <a href="#about">About</a>
+            <a href="#contact" class="btn btn--primary">Contact</a>
+        </nav>
+        <button id="themeToggle" aria-label="Toggle theme" class="theme">
+            <span class="theme__dot"></span>
+        </button>
+    </div>
+</header>
+
+<!-- Hero -->
+<section id="home" class="hero">
+    <div class="container hero__grid">
+        <div class="hero__copy">
+            <h1 class="glow">Software Engineer & System Architect</h1>
+            <p class="lead">
+                I design and ship <strong>complex mobile software</strong> and
+                <strong>production-grade frameworks</strong> for Android / Kotlin.
+                Event-driven systems, navigation engines, design systems. Built for
+                <em>low-end hardware</em>, high reliability, and clean extensibility.
+            </p>
+            <div class="hero__cta">
+                <a href="#work" class="btn btn--primary">See my work</a>
+                <a href="#contact" class="btn btn--ghost">Get in touch</a>
+            </div>
+            <div class="hero__badges">
+                <span>Event-Driven</span><span>Kotlin / KMP</span><span>Compose</span>
+                <span>Room / Persistable</span><span>CI/CD</span>
+            </div>
+        </div>
+        <div class="hero__art">
+            <!-- Decorative SVG rings -->
+            <svg viewBox="0 0 600 600" class="rings" aria-hidden="true">
+                <defs>
+                    <linearGradient id="g1" x1="0" x2="1">
+                        <stop offset="0" stop-color="#7dd3fc"/>
+                        <stop offset="1" stop-color="#a78bfa"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="300" cy="300" r="220" class="ring"></circle>
+                <circle cx="300" cy="300" r="150" class="ring ring--2"></circle>
+                <circle cx="300" cy="300" r="80" class="ring ring--3"></circle>
+            </svg>
+            <div class="card glass hero__stats">
+                <div><strong>8+</strong><span>Framework modules</span></div>
+                <div><strong>2×</strong><span>Perf vs baseline</span></div>
+                <div><strong>100%</strong><span>Unit-tested core</span></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Work (Bento grid) -->
+<section id="work" class="section">
+    <div class="container">
+        <h2 class="section__title">Selected Work</h2>
+        <p class="section__lead">Frameworks and systems shipped in production environments.</p>
+
+        <div class="bento">
+            <!-- FlowBus -->
+            <article class="tile tile--wide reveal">
+                <div class="tile__head">
+                    <h3>FlowBus</h3>
+                    <span class="pill">Event-Driven Framework</span>
+                </div>
+                <p class="tile__body">
+                    Central event bus with <strong>persistable events</strong> (Room),
+                    <strong>Active Objects</strong> (dedicated threads & queues),
+                    cancellation and graceful shutdown, and an elegant
+                    <strong>hierarchical state machine</strong>. Built for low-end devices:
+                    minimal overhead, deterministic behavior, and safe concurrency.
+                </p>
+                <ul class="bullets">
+                    <li>Persistable event log with automatic replay & recovery</li>
+                    <li>Partitioned / sticky channels, back-pressure aware delivery</li>
+                    <li>Permissioned publish/read/subscribe model (token-gated)</li>
+                    <li>Integration test harness and test scopes for actors</li>
+                </ul>
+                <div class="tile__footer">
+                    <a class="link" href="#contact">Discuss adoption →</a>
+                </div>
+            </article>
+
+            <!-- NavSymphony -->
+            <article class="tile reveal">
+                <div class="tile__head">
+                    <h3>NavSymphony</h3>
+                    <span class="pill">Navigation Engine</span>
+                </div>
+                <p class="tile__body">
+                    A Compose-first navigation framework with a true <strong>back stack</strong>,
+                    <strong>transaction chains</strong>, and <strong>Intents ↔ Commands</strong> bridge.
+                    Supports <em>navigation requirements</em>, custom actors, and multi-pane layouts.
+                </p>
+                <ul class="bullets">
+                    <li>List-based back stack (push/pop), scoped state retention</li>
+                    <li>Timeouts, guards, and requirement checks per destination</li>
+                    <li>Dialog/redirect commands without leaking navigation details to VM</li>
+                </ul>
+                <div class="tile__footer">
+                    <a class="link" href="https://github.com/yuriisurzhykov/NavSymphony" target="_blank"
+                       rel="noreferrer">View repo →</a>
+                </div>
+            </article>
+
+            <!-- Design Systems -->
+            <article class="tile reveal">
+                <div class="tile__head">
+                    <h3>Design Systems</h3>
+                    <span class="pill">Performance & Tokens</span>
+                </div>
+                <p class="tile__body">
+                    Custom layouts and components optimized for <strong>2 GB RAM devices</strong>.
+                    Tokenized color/typography/spacing for one-line theming. Minimal recompositions,
+                    Canvas-based controls, and strict profiling budgets.
+                </p>
+                <ul class="bullets">
+                    <li>Design tokens → app-wide theming in one place</li>
+                    <li>Stable keys, memoized nodes, measured layout costs</li>
+                    <li>Canvas widgets (progress, keyboards, toggles) with zero jank</li>
+                </ul>
+            </article>
+
+            <!-- Tooling / CI -->
+            <article class="tile tile--tall reveal">
+                <div class="tile__head">
+                    <h3>Tooling, CI/CD & Gradle</h3>
+                    <span class="pill">Automation</span>
+                </div>
+                <p class="tile__body">
+                    Convention plugins, KSP generators, and CI pipelines producing release artifacts on every commit.
+                    Strict checks, reproducible builds, and push-button delivery.
+                </p>
+                <ul class="bullets">
+                    <li>Gradle convention plugins — unified config across modules</li>
+                    <li>KSP codegen for entities, mappers, permissions</li>
+                    <li>Test matrices, coverage gates, signed artifacts</li>
+                </ul>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- Expertise (3 cols) -->
+<section id="expertise" class="section section--alt">
+    <div class="container">
+        <h2 class="section__title">Expertise</h2>
+        <div class="grid-3 reveal">
+            <div class="card glass">
+                <h4>Architecture</h4>
+                <p>Event-driven systems, state machines, resilient navigation, boundary-driven modules.</p>
+                <ul class="tags">
+                    <li>SOLID</li>
+                    <li>KISS</li>
+                    <li>DRY</li>
+                    <li>YAGNI</li>
+                </ul>
+            </div>
+            <div class="card glass">
+                <h4>Performance</h4>
+                <p>Low-end optimization: strict budgets, profiling, minimal allocations, zero-jank Compose.</p>
+                <ul class="tags">
+                    <li>2 GB devices</li>
+                    <li>Frame ≤16 ms</li>
+                    <li>Cold start</li>
+                </ul>
+            </div>
+            <div class="card glass">
+                <h4>Delivery</h4>
+                <p>Unit tests by default, CI/CD pipelines, artifact strategy, progressive rollout, fast rollback.</p>
+                <ul class="tags">
+                    <li>Unit-first</li>
+                    <li>CI gates</li>
+                    <li>Observability</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- About -->
+<section id="about" class="section">
+    <div class="container narrow">
+        <h2 class="section__title">About</h2>
+        <p class="center">
+            I build systems that businesses can trust: predictable, measurable, and easy to evolve.
+            Most work shipped inside OEM/enterprise environments — no App Store vanity,
+            only <strong>real production constraints</strong> and <strong>solid engineering</strong>.
+        </p>
+    </div>
+</section>
+
+<!-- Contact -->
+<section id="contact" class="section section--alt">
+    <div class="container narrow">
+        <h2 class="section__title">Let’s talk</h2>
+        <p class="center">Consulting, framework adoption, or full-stack mobile delivery.</p>
+        <form class="form" action="https://formspree.io/f/your-id" method="POST">
+            <input type="text" name="name" placeholder="Your name" required/>
+            <input type="email" name="email" placeholder="Email" required/>
+            <textarea name="message" rows="5" placeholder="Tell me about your project" required></textarea>
+            <button class="btn btn--primary" type="submit">Send</button>
+        </form>
+        <p class="center subtle">Prefer email? → <a class="link" href="mailto:contact@yurii.dev">contact@yurii.dev</a>
+        </p>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="container footer__inner">
+        <span>© <span id="year"></span> Yurii. All rights reserved.</span>
+        <span class="subtle">Built with vanilla HTML/CSS/JS. No trackers.</span>
+    </div>
+</footer>
+</body>
+</html>
