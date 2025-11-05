@@ -1,4 +1,4 @@
-name: Deploy static site (tag)
+name: Deploy static site
 
 on:
   push:
