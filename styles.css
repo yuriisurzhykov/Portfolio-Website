@@ -59,7 +59,7 @@ html, body {
 .section__title {
     font-size: 32px;
     margin: 0 0 16px;
-    letter-spacing: .2px
+    letter-spacing: 0
 }
 
 .section__lead {
@@ -94,7 +94,7 @@ html, body {
 
 .brand {
     font-weight: 800;
-    letter-spacing: .6px;
+    letter-spacing: 1px;
     color: var(--text);
     text-decoration: none
 }
