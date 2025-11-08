@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "flowbus",
+    "title": "FlowBus — Event-Driven Middleware",
+    "description": "Persistable, permissioned event bus with sticky partitions and test harness.",
+    "link": "https://github.com/yuriisurzhykov"
+  },
+  {
+    "slug": "navsymphony",
+    "title": "NavSymphony — Compose Navigation",
+    "description": "Intent-driven choreographer with dynamic requirements and timeouts.",
+    "link": "https://github.com/yuriisurzhykov/NavSymphony"
+  }
+]

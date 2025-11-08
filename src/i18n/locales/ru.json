@@ -1,0 +1,7 @@
+{
+  "boot.initFlowBus": "> инициализация FlowBus...",
+  "boot.loadNavSymphony": "> загрузка NavSymphony...",
+  "boot.systemReady": "> система готова.",
+  "boot.enter": "ВХОД В СИСТЕМУ",
+  "boot.skipHint": "Нажмите Enter для продолжения"
+}

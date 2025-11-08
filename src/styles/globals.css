@@ -1,0 +1,34 @@
+html, body, #root {
+    height: 100%;
+}
+
+html {
+    /* Весь текст по умолчанию — твой основной шрифт */
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    /* Без синтезированных наклонов/весов — чище рендер */
+    font-synthesis-weight: none;
+    font-synthesis-style: none;
+}
+
+.code, .terminal, pre, code {
+    font-family: var(--font-mono);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    color-scheme: dark;
+}
+
+/* The theme is defined in RootLayout using <style> */
+
+/* Utility classes for rhythm */
+.lead {
+    font-size: 1.125rem;
+    line-height: 1.5;
+}
