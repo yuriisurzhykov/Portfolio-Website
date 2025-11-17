@@ -3,5 +3,7 @@
   "boot.loadNavSymphony": "> loading NavSymphony...",
   "boot.systemReady": "> system ready.",
   "boot.enter": "ENTER SYSTEM",
-  "boot.skipHint": "Press Enter to continue"
+  "boot.skipHint": "Press Enter to continue",
+  "hero.title": "Hello from EN",
+  "hero.subtitle": "This is English version"
 }

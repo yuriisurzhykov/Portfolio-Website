@@ -1,26 +1,23 @@
-type Dict = Record<string, string>;
+import {type LocaleStore} from "./LocalStore.ts";
+import {LocaleRegistry} from "./LocaleRegistry.ts";
+import {WebLocaleStore} from "./impl/WebLocaleStore.ts";
 
-const locales: Record<string, Dict> = {};
-let currentLocaleCode: string = "en";
+const store: LocaleStore = new WebLocaleStore("/locales", "translation.json");
+const registry: LocaleRegistry = new LocaleRegistry(store);
 
-export function registerLocale(code: string, dict: Dict) {
-    locales[code] = dict;
+export async function initI18n() {
+    await registerLocale("en");
+    await registerLocale("ru");
+}
+
+export async function registerLocale(code: string) {
+    await registry.registerLocale(code);
 }
 
 export function setLocale(code: string) {
-    currentLocaleCode = code;
+    registry.setLocale(code);
 }
 
-export function ln(i18nKey: string, vars?: Record<string, string | number>) {
-    let string = locales[currentLocaleCode]?.[i18nKey] ?? i18nKey;
-    if (vars) {
-        for (const key in vars) {
-            string = string.replaceAll(`{${key}`, String(vars[key]));
-        }
-    }
-    return string;
-}
-
-export function getLocale() {
-    return currentLocaleCode;
+export function ln(i18key: string, vars?: Record<string, string | number>): string {
+    return registry.ln(i18key, vars);
 }

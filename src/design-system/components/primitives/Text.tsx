@@ -1,7 +1,7 @@
 import {type JSX} from "react";
 import * as React from "react";
-import {type TextVariant, typography} from "../../typography";
-import {cn} from "../../../utils/cn";
+import {type TextVariant, typography} from "../../design/typography.ts";
+import {classNames} from "../../../utils/classNames.ts";
 
 type Props = {
     as?: keyof JSX.IntrinsicElements;
@@ -15,7 +15,7 @@ export function Text({as = "p", variant = "body", className, children}: Props) {
     const t = typography[variant];
     return (
         <Comp
-            className={cn("text-[--color-text]", className)}
+            className={classNames("text-[--color-text]", className)}
             style={{
                 fontFamily: "var(--font-body)",
                 fontWeight: t.weightVar as any,

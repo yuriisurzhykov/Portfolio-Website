@@ -1,9 +1,9 @@
 import * as React from "react";
-import {Container} from "../design-system/components/primitives/Container";
-import {Text} from "../design-system/components/primitives/Text";
-import {Button} from "../design-system/components/primitives/Button";
-import {Icons} from "../design-system/icons";
-import {site} from "../lib/config";
+import {Container} from "../primitives/Container.tsx";
+import {Text} from "../primitives/Text.tsx";
+import {Button} from "../primitives/Button.tsx";
+import {Icons} from "../../design/icons.ts";
+import {site} from "../../../data/config.ts";
 
 export function Hero() {
     return (

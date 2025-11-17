@@ -1,6 +1,6 @@
 import * as React from "react";
-import {Section} from "../design-system/components/composite/Section";
-import {Text} from "../design-system/components/primitives/Text";
+import {Section} from "../composite/Section.tsx";
+import {Text} from "../primitives/Text.tsx";
 
 const PRINCIPLES = [
     "Every layer deserves clarity.",

@@ -1,7 +1,7 @@
 /**
  * Generation of CCS variables from tokens (tokens.ts) + dark theme.
  * */
-import {colors, fonts, fontWeights, radii, shadows, spacing} from "./tokens";
+import {colors, fonts, fontWeights, radii, shadows, spacing} from "./tokens.ts";
 
 export const themeVars = `
   :root {

@@ -1,6 +1,6 @@
 import * as React from "react";
-import {Container} from "../design-system/components/primitives/Container";
-import {Text} from "../design-system/components/primitives/Text";
+import {Container} from "../primitives/Container.tsx";
+import {Text} from "../primitives/Text.tsx";
 
 export function Footer() {
     return (

@@ -3,5 +3,7 @@
   "boot.loadNavSymphony": "> загрузка NavSymphony...",
   "boot.systemReady": "> система готова.",
   "boot.enter": "ВХОД В СИСТЕМУ",
-  "boot.skipHint": "Нажмите Enter для продолжения"
+  "boot.skipHint": "Нажмите Enter для продолжения",
+  "hero.title": "Привет из RU",
+  "hero.subtitle": "Это русская версия"
 }

@@ -1,8 +1,8 @@
 import * as React from "react";
-import {Section} from "../design-system/components/composite/Section";
-import {Card} from "../design-system/components/primitives/Card";
-import {Text} from "../design-system/components/primitives/Text";
-import projects from "../data/projects.json";
+import {Section} from "../composite/Section.tsx";
+import {Card} from "../primitives/Card.tsx";
+import {Text} from "../primitives/Text.tsx";
+import projects from "../../../data/projects.json";
 
 export function ProjectsGrid() {
     return (

@@ -3,12 +3,10 @@ html, body, #root {
 }
 
 html {
-    /* Весь текст по умолчанию — твой основной шрифт */
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 
-    /* Без синтезированных наклонов/весов — чище рендер */
     font-synthesis-weight: none;
     font-synthesis-style: none;
 }

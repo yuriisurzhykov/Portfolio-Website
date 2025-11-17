@@ -1,14 +1,25 @@
 import * as React from "react";
-import {cn} from "../../../utils/cn";
 
-export function Card({className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+type CardProps = React.HTMLAttributes<HTMLDivElement>;
+
+
+export function Card({className = "", ...props}: CardProps) {
     return (
         <div
-            className={cn(
-                "rounded-[--radius-xl] bg-[--color-surface] border border-[--color-border] shadow-[--shadow-soft]",
-                className
-            )}
+            className={`rounded-2xl bg-neutral-900/80 border-neutral-800 shadow-lg ${className}`}
             {...props}
-        />
+        ></div>
     );
+}
+
+export function CardHeader({className = "", ...props}: CardProps) {
+    return <div className={`px-5 pt-5 ${className}`} {...props} />;
+}
+
+export function CardTitle({className = "", ...props}: CardProps) {
+    return <h3 className={`text-xl font-semibold ${className}`} {...props} />;
+}
+
+export function CardContent({className = "", ...props}: CardProps) {
+    return <div className={`px-5 pb-5 pt-2 text-sm text-neutral-300 ${className}`} {...props} />;
 }
