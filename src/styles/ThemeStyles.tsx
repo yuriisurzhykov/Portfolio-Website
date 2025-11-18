@@ -1,5 +1,5 @@
 import * as React from "react";
-import {themeVars} from "../design/theme.css.ts";
+import {themeVars} from "../design-system/design/theme.css.ts";
 
 export function ThemeStyles() {
     React.useEffect(() => {

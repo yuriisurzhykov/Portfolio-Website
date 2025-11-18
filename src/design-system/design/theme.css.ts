@@ -41,8 +41,8 @@ export const themeVars = `
     --space-md: ${spacing.md};
     --space-lg: ${spacing.lg};
     --space-xl: ${spacing.xl};
-    --space-2xl: ${spacing['2xl']};
-    --space-3xl: ${spacing['3xl']};
+    --space-2xl: ${spacing["2xl"]};
+    --space-3xl: ${spacing["3xl"]};
   }
 
   /* Dark/Light themes (can be switched using class .theme-dark/.theme-light */

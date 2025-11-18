@@ -8,9 +8,9 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 const base = "inline-flex items-center justify-center rounded-lg font-medium transition";
 
 const variants = {
-    primary: "bg-[--accent-cyan] text-black hover:opacity-90",
-    secondary: "bg-[--color-elevated] text-[--color-text] hover:brightness-110 border border-[--color-border]",
-    ghost: "bg-transparent text-[--color-text] hover:bg-[--color-elevated]",
+    primary: "bg-(--accent-cyan) text-black hover:opacity-90",
+    secondary: "bg-(--color-elevated) text-(--color-text) hover:brightness-110 border border-(--color-border)",
+    ghost: "bg-transparent text-(--color-text) hover:bg-(--color-elevated)",
 };
 
 const sizes = {
