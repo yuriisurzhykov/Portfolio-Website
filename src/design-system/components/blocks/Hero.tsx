@@ -1,14 +1,14 @@
 import * as React from "react";
-import {Container} from "../primitives/Container.tsx";
-import {Text} from "../primitives/Text.tsx";
-import {Button} from "../primitives/Button.tsx";
+import {Text} from "../Text.tsx";
+import {Button} from "../Button.tsx";
 import {Icons} from "../../design/icons.ts";
 import {site} from "../../../data/config.ts";
+import {Surface} from "../Surface.tsx";
 
 export function Hero() {
     return (
         <header className="py-[--space-3xl]">
-            <Container>
+            <Surface>
                 <Text as="h1" variant="display" className="mb-[--space-md]">
                     {site.tagline}
                 </Text>
@@ -27,7 +27,7 @@ export function Hero() {
                     </a>
                     <Button>Download Resume</Button>
                 </div>
-            </Container>
+            </Surface>
         </header>
     );
 }

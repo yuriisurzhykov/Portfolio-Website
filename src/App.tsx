@@ -1,8 +1,8 @@
-import {Button} from "./design-system/components/primitives/Button";
+import {Button} from "./design-system/components/Button.tsx";
 import React from "react";
-import {Input} from "./design-system/components/primitives/Input.tsx";
-import {Section} from "./design-system/components/primitives/Section.tsx";
-import {Card, CardContent, CardHeader, CardTitle} from "./design-system/components/primitives/Card.tsx";
+import {Input} from "./design-system/components/Input.tsx";
+import {Section} from "./design-system/components/Section.tsx";
+import {Card, CardContent, CardHeader, CardTitle} from "./design-system/components/Card.tsx";
 
 type Project = { id: number; title: string; tag: string; };
 

@@ -12,6 +12,9 @@ export const themeVars = `
     --color-border: ${colors.neutral[400]};
     --color-text: ${colors.neutral[900]};
     --color-muted: ${colors.neutral[700]};
+    --color-success: ${colors.semantic.success};
+    --color-warning: ${colors.semantic.warning};
+    --color-danger: ${colors.semantic.danger};
 
     --accent-cyan: ${colors.accent.cyan};
     --accent-blue: ${colors.accent.blue};

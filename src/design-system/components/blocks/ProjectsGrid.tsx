@@ -1,7 +1,7 @@
 import * as React from "react";
 import {Section} from "../composite/Section.tsx";
-import {Card} from "../primitives/Card.tsx";
-import {Text} from "../primitives/Text.tsx";
+import {Card} from "../Card.tsx";
+import {Text} from "../Text.tsx";
 import projects from "../../../data/projects.json";
 
 export function ProjectsGrid() {

@@ -5,5 +5,8 @@
   "boot.enter": "ENTER SYSTEM",
   "boot.skipHint": "Press Enter to continue",
   "hero.title": "Hello from EN",
-  "hero.subtitle": "This is English version"
+  "hero.subtitle": "This is English version",
+  "label.language.toggle": "Toggle Language",
+  "label.language.english": "English",
+  "label.language.russian": "Russian"
 }

@@ -1,7 +1,7 @@
 import * as React from "react";
 import {useBoot} from "./BootProvider.tsx";
 import {useScrollLock} from "./useScrollLock.ts";
-import {Button} from "../design-system/components/primitives/Button.tsx";
+import {Button} from "../design-system/components/Button.tsx";
 import {ln} from "../i18n/i18n.ts";
 
 export function BootScreen({onDone}: { onDone: () => void }) {

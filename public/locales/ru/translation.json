@@ -5,5 +5,8 @@
   "boot.enter": "ВХОД В СИСТЕМУ",
   "boot.skipHint": "Нажмите Enter для продолжения",
   "hero.title": "Привет из RU",
-  "hero.subtitle": "Это русская версия"
+  "hero.subtitle": "Это русская версия",
+  "label.language.toggle": "Переключить язык",
+  "label.language.english": "English",
+  "label.language.russian": "Русский"
 }
