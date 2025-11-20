@@ -1,7 +1,7 @@
 /**
  * Generation of CCS variables from tokens (tokens.ts) + dark theme.
  * */
-import {colors, fonts, fontWeights, radii, shadows, spacing} from "./tokens.ts";
+import {colors, gradients, fonts, fontWeights, radii, shadows, spacing} from "./tokens.ts";
 
 export const themeVars = `
   :root {
@@ -19,6 +19,9 @@ export const themeVars = `
     --accent-cyan: ${colors.accent.cyan};
     --accent-blue: ${colors.accent.blue};
     --accent-violet: ${colors.accent.violet};
+    
+    /* Gradients */
+    --gradient-accent: ${gradients.accent};
 
     /* Typography */
     --font-body: ${fonts.body};

@@ -12,8 +12,8 @@ const base =
     "disabled:opacity-50 disabled:cursor-not-allowed";
 
 const variants = {
-    primary: "bg-(--accent-cyan) text-black hover:opacity-90 shadow-soft",
-    secondary: "bg-(--color-elevated) text-(--color-text) hover:brightness-110 border border-(--color-border) shadow-soft",
+    primary: "bg-[image:var(--gradient-accent)] text-white hover:opacity-85 shadow-soft",
+    secondary: "bg-(--color-elevated) text-(--color-text) hover:brightness-115 border border-(--color-border) shadow-soft",
     ghost: "bg-transparent text-(--color-text) hover:bg-(--color-elevated) border border-transparent",
 } as const;
 

@@ -37,6 +37,10 @@ export const colors = {
     },
 };
 
+export const gradients = {
+    accent: "linear-gradient(135deg, var(--accent-blue), var(--accent-violet))",
+};
+
 export const fonts = {
     body: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
     mono: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
