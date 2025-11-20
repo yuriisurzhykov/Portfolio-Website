@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@import "./src/app/styles/globals.css";
+
+@config "./tailwind.config.ts";
