@@ -57,8 +57,8 @@ jobs:
             # 1 argument is a tag name
             # 2 argument is a path to the archive
             # 3 argument is a path to the directory to deploy to
-            ${{ steps.ver.outputs.VERSION }} /tmp/.scripts/deploy.sh /tmp/yuriisoft.tar.gz /srv/apps/yuriisoft
+            /tmp/.scripts/deploy.sh "${{ steps.ver.outputs.VERSION }}" /tmp/yuriisoft.tar.gz /srv/apps/yuriisoft
             
             # Cleaning up unused files after deploy
-            rm /tmp/release.tar.gz
+            rm /tmp/yuriisoft.tar.gz
             rm -rf /tmp/.scripts
