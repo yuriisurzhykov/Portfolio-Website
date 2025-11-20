@@ -18,10 +18,6 @@ jobs:
         id: ver
         run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
 
-      - name: Get current date and time using shell
-        id: current_date
-        run: echo "date=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
-
       # Create an artifact with the root 'public/' folder.
       - name: Build artifact (wrap to public/)
         run: |
@@ -35,20 +31,34 @@ jobs:
           cd artifact
           tar -czf ../yuriisoft.tar.gz .
 
-      - name: Upload artifact to VPS
-        uses: appleboy/scp-action@v0.1.7
+      - name: Copy files to Server
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "yuriisoft.tar.gz"
+          # Копируем два файла: архив и скрипт деплоя
+          source: "yuriisoft.tar.gz, .scripts/deploy.sh"
           target: "/tmp/"
 
-      - name: Remote deploy
+      - name: Deploy on Server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            /srv/apps/yuriisoft/deploy_static.sh "${{steps.current_date.outputs.date}}__${{ steps.ver.outputs.VERSION }}" "/tmp/yuriisoft.tar.gz"
+            # Give permissions to execute the file (just in case)
+            chmod +x /tmp/.scripts/deploy.sh
+            
+            # Run the script, passing it parameters
+            # 1 argument is a tag name
+            # 2 argument is a path to the archive
+            # 3 argument is a path to the directory to deploy to
+            ${{ steps.ver.outputs.VERSION }} /tmp/.scripts/deploy.sh /tmp/yuriisoft.tar.gz /srv/apps/yuriisoft
+            
+            # Cleaning up unused files after deploy
+            rm /tmp/release.tar.gz
+            rm -rf /tmp/.scripts
