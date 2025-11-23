@@ -3,14 +3,14 @@ import ReactDOM from "react-dom/client";
 import "../index.css";
 import { Root } from "./Root.tsx";
 import { initI18n } from "./shared/i18n/engine";
-import { I18nProvider } from "@/shared/i18n";
+import { MainProviders } from "@/app/providers/MainProviders.tsx";
 
 await initI18n();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-        <I18nProvider>
+        <MainProviders>
             <Root />
-        </I18nProvider>
+        </MainProviders>
     </React.StrictMode>
 );

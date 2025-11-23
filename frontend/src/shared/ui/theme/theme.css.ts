@@ -1,7 +1,18 @@
 /**
  * Generation of CCS variables from tokens (tokens.ts) + dark theme.
  * */
-import {colors, gradients, fonts, fontWeights, radii, shadows, spacing} from "./tokens.ts";
+import {
+    colors,
+    durations,
+    easing,
+    fonts,
+    fontWeights,
+    gradients,
+    opacity,
+    radii,
+    shadows,
+    spacing
+} from "./tokens.ts";
 
 export const themeVars = `
   :root {
@@ -10,11 +21,17 @@ export const themeVars = `
     --color-surface: ${colors.neutral[100]};
     --color-elevated: ${colors.neutral[200]};
     --color-border: ${colors.neutral[400]};
-    --color-text: ${colors.neutral[900]};
     --color-muted: ${colors.neutral[700]};
     --color-success: ${colors.semantic.success};
     --color-warning: ${colors.semantic.warning};
     --color-danger: ${colors.semantic.danger};
+    
+    --color-text: ${colors.neutral[900]};
+    --color-text-soft: ${colors.neutral[800]};
+    
+    --color-input-bg: ${colors.neutral[100]};
+    --color-input-border: ${colors.neutral[400]};
+    --color-input-placeholder: ${colors.neutral[700]};
 
     --accent-cyan: ${colors.accent.cyan};
     --accent-blue: ${colors.accent.blue};
@@ -22,6 +39,14 @@ export const themeVars = `
     
     /* Gradients */
     --gradient-accent: ${gradients.accent};
+    --opacity-disabled: ${opacity.disabled};
+    
+    /* Animations */
+    --duration-fast: ${durations.fast};
+    --duration-normal: ${durations.normal};
+    --duration-slow: ${durations.slow};
+    --easing-standard: ${easing.standard};
+    --easing-soft: ${easing.soft};
 
     /* Typography */
     --font-body: ${fonts.body};

@@ -1,7 +1,7 @@
 import React, { forwardRef } from "react";
 import { cn } from "@/shared/lib/utils.ts";
 
-const defaultStyle = "bg-(--color-surface) border border-(--color-border) rounded-xl";
+const defaultStyle = "bg-surface border border-border rounded-xl";
 
 export type SurfaceProperties = React.HTMLAttributes<HTMLDivElement> & {
     elevated?: boolean;

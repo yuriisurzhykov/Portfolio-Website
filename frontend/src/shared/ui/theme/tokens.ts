@@ -37,6 +37,12 @@ export const colors = {
     },
 };
 
+export const surface = {
+    base: "var(--neutral-100)",     // главный фон внутри карточек main background for all surfaces
+    elevated: "var(--neutral-200)", // panels, card background
+    highest: "var(--neutral-300)",  // more accent backgrounds
+}
+
 export const gradients = {
     accent: "linear-gradient(135deg, var(--accent-blue), var(--accent-violet))",
 };
@@ -55,6 +61,7 @@ export const fontWeights = {
 };
 
 export const radii = {
+    xs: "0.25rem",
     sm: "0.5rem",
     md: "1rem",
     lg: "1.25rem",
@@ -65,6 +72,10 @@ export const radii = {
 export const shadows = {
     soft: "0 4px 20px rgba(0,0,0,0.25)",
     hard: "0 8px 40px rgba(0,0,0,0.35)",
+    low: "0 2px 10px rgba(0,0,0,0.25)",
+    medium: "0 4px 20px rgba(0,0,0,0.3)",
+    high: "0 8px 40px rgba(0,0,0,0.4)",
+    glow: "0 0 20px rgba(77,163,255,0.5)",
 };
 
 export const spacing = {
@@ -75,6 +86,22 @@ export const spacing = {
     xl: "1.5rem",
     '2xl': "2rem",
     '3xl': "3rem",
+};
+
+export const opacity = {
+    disabled: 0.4,
+    muted: 0.7,
+};
+
+export const durations = {
+    fast: "120ms",
+    normal: "180ms",
+    slow: "250ms",
+};
+
+export const easing = {
+    standard: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+    soft: "cubic-bezier(0.25, 0.8, 0.25, 1)",
 };
 
 export const zIndex = {

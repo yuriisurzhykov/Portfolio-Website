@@ -1,6 +1,6 @@
 import React from "react";
-import { Storybook } from "./Storybook.tsx";
 import { themeVars } from "@/shared/ui/theme";
+import { Storybook } from "@/pages/storybook";
 
 export function Root() {
     return (

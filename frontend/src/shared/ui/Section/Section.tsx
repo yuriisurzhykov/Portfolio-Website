@@ -28,7 +28,7 @@ export const Section = forwardRef<HTMLElement, SectionProps>(
                     {(title || eyebrow || subtitle) && (
                         <header className="mb-xl">
                             {eyebrow && (
-                                <p className="text-xs font-medium uppercase tracking-[0.2em] text-(--color-muted)">
+                                <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted">
                                     {eyebrow}
                                 </p>
                             )}
@@ -36,7 +36,7 @@ export const Section = forwardRef<HTMLElement, SectionProps>(
                                 <Heading level={1}>{title}</Heading>
                             )}
                             {subtitle && (
-                                <p className="mt-sm text-sm text-(--color-muted)">{subtitle}</p>
+                                <p className="mt-sm text-sm text-muted">{subtitle}</p>
                             )}
                         </header>
                     )}

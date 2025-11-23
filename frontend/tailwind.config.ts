@@ -15,6 +15,12 @@ export default {
                     blue: "var(--accent-blue)",
                     violet: "var(--accent-violet)",
                 },
+                textSoft: "var(--color-text-soft)",
+                input: {
+                    bg: "var(--color-input-bg)",
+                    border: "var(--color-input-border)",
+                    placeholder: "var(--color-input-placeholder)",
+                },
             },
             borderRadius: {
                 lg: "var(--radius-lg)",
@@ -33,9 +39,21 @@ export default {
                 '2xl': "var(--space-2xl)",
                 '3xl': "var(--space-3xl)",
             },
+            opacity: {
+                disabled: "var(--opacity-disabled)",
+            },
             fontFamily: {
                 sans: ["var(--font-body)"],
                 mono: ["var(--font-mono)"],
+            },
+            transitionDuration: {
+                fast: "var(--duration-fast)",
+                normal: "var(--duration-normal)",
+                slow: "var(--duration-slow)",
+            },
+            transitionTimingFunction: {
+                standard: "var(--easing-standard)",
+                soft: "var(--easing-soft)",
             },
         },
     },

@@ -3,7 +3,7 @@ import { forwardRef, type JSX } from "react";
 import { type TextVariant, typography } from "@/shared/ui/theme";
 import { cn } from "@/shared/lib/utils.ts";
 
-const defaultStyle = "text-(--color-text)";
+const defaultStyle = "text-text";
 
 export type TextProperties = {
     as?: keyof JSX.IntrinsicElements;

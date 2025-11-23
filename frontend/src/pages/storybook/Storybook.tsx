@@ -1,10 +1,10 @@
 import React from "react";
-import { useTranslation } from "./shared/i18n";
 import { Button } from "@/shared/ui/Button";
 import { Text } from "@/shared/ui/Text";
 import { Heading } from "@/shared/ui/Heading";
 import { Section } from "@/shared/ui/Section";
 import { Surface } from "@/shared/ui/Surface";
+import { useTranslation } from "@/shared/i18n";
 
 export function Storybook() {
     const { ln, setLanguage } = useTranslation();
