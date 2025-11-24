@@ -19,7 +19,7 @@ const baseStyles =
 const variants: Record<ButtonVariant, string> = {
     primary: "bg-[image:var(--gradient-accent)] text-white hover:opacity-85 shadow-soft",
     secondary: "bg-elevated text-text hover:brightness-115 border border-border shadow-soft",
-    ghost: "bg-transparent text-text hover:bg-elevated border border-transparent",
+    ghost: "bg-regal-blue text-text hover:bg-elevated border border-transparent hover:border-elevated",
 } as const;
 
 const sizes: Record<ButtonSize, string> = {
