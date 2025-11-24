@@ -6,7 +6,7 @@ export function Root() {
     return (
         <>
             <style dangerouslySetInnerHTML={{ __html: themeVars }} />
-            <div className="theme-dark min-h-screen bg-(--color-bg) text-(--color-text)">
+            <div className="min-h-screen bg-bg text-text">
                 <Storybook />
             </div>
         </>

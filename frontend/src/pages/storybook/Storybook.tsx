@@ -5,6 +5,7 @@ import { Heading } from "@/shared/ui/Heading";
 import { Section } from "@/shared/ui/Section";
 import { Surface } from "@/shared/ui/Surface";
 import { useTranslation } from "@/shared/i18n";
+import { ThemeToggle } from "@/feature/theme";
 
 export function Storybook() {
     const { ln, setLanguage } = useTranslation();
@@ -32,6 +33,8 @@ export function Storybook() {
                     <Button variant="secondary"
                             onClick={() => setLanguage("en")}>{ln("label.language.english")}</Button>
                     <Button variant="primary" onClick={() => setLanguage("ru")}>{ln("label.language.russian")}</Button>
+                    <div className="mt-sm" />
+                    <ThemeToggle />
                 </Surface>
             </Section>
         </main>
