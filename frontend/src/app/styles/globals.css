@@ -2,6 +2,26 @@ html, body, #root {
     height: 100%;
 }
 
+body {
+    background: radial-gradient(
+            circle at 20% 20%,
+            rgba(67, 0, 123, 0.32) 0%,
+            rgba(0, 0, 0, 0) 40%
+    ),
+    radial-gradient(
+            circle at 80% 65%,
+            rgba(255, 0, 110, 0.14) 0%,
+            rgba(0, 0, 0, 0) 40%
+    ),
+    radial-gradient(
+            circle at 45% 65%,
+            rgba(0, 4, 255, 0.14) 0%,
+            rgba(0, 0, 0, 0) 40%
+    ),
+    var(--color-bg-app);
+    background-attachment: fixed;
+}
+
 html {
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;

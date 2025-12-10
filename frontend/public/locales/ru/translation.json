@@ -6,7 +6,12 @@
   "boot.skipHint": "Нажмите Enter для продолжения",
   "hero.title": "Привет из RU",
   "hero.subtitle": "Это русская версия",
-  "label.language.toggle": "Переключить язык",
-  "label.language.english": "English",
-  "label.language.russian": "Русский"
+  "label.system.language.toggle": "Переключить язык",
+  "label.system.language.english": "English",
+  "label.system.language.russian": "Русский",
+  "label.system.theme.light": "Светлая",
+  "label.system.theme.dark": "Тёмная",
+  "label.system.theme.system": "Системная",
+  "label.button.copy": "Копировать",
+  "label.button.copied": "Скопировано"
 }

@@ -1,9 +1,6 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import type { ClassValue } from "clsx";
+import { clsx } from "clsx";
 
-/**
- * Resolves HTML class names by merging their names and values into a single string.
- * */
 export function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
+    return clsx(inputs); // или inputs.filter(Boolean).join(" ")
 }

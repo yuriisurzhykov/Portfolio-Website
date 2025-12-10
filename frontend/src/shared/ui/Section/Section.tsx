@@ -18,9 +18,10 @@ export const Section = forwardRef<HTMLElement, SectionProps>(
          id = "",
          children,
          ...props
-     }: SectionProps) => {
+     }: SectionProps, ref) => {
         return (
             <section
+                ref={ref}
                 id={id}
                 className={`w-full px-lg py-2xl flex justify-center ${className}`}
                 {...props}>

@@ -6,7 +6,12 @@
   "boot.skipHint": "Press Enter to continue",
   "hero.title": "Hello from EN",
   "hero.subtitle": "This is English version",
-  "label.language.toggle": "Toggle Language",
-  "label.language.english": "English",
-  "label.language.russian": "Russian"
+  "label.system.language.toggle": "Toggle Language",
+  "label.system.language.english": "English",
+  "label.system.language.russian": "Russian",
+  "label.system.theme.light": "Light",
+  "label.system.theme.dark": "Dark",
+  "label.system.theme.system": "System",
+  "label.button.copy": "Copy",
+  "label.button.copied": "Copied"
 }

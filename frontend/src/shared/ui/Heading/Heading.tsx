@@ -17,9 +17,12 @@ const styles: Record<HeaderLevel, string> = {
 };
 
 export const Heading = forwardRef<HTMLHeadingElement, HeadingProps>(
-    ({ level = 2, className = "", ...rest }: HeadingProps) => {
+    ({ level = 2, className = "", ...rest }, ref) => {
         const Tag = (`h${level}` as unknown) as "h1" | "h2" | "h3" | "h4" | "h5";
-        return <Tag className={cn(className, styles[level])} {...rest} />;
+        return <Tag
+            ref={ref}
+            className={cn(className, styles[level])}
+            {...rest} />;
     }
 );
 

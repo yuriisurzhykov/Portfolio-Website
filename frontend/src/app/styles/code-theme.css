@@ -1,0 +1,64 @@
+/* Base typography for code */
+code[class*="language-"],
+pre[class*="language-"] {
+    @apply text-text-primary;
+}
+
+/* Comments and low-importance noise */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+    @apply text-text-muted;
+}
+
+/* Keywords, control flow, operators */
+.token.keyword,
+.token.control-flow,
+.token.operator {
+    @apply text-accent-magenta;
+}
+
+/* Strings, chars, regex, inserted diff */
+.token.string,
+.token.char,
+.token.regex,
+.token.inserted {
+    @apply text-status-success;
+}
+
+/* Numbers, booleans, constants */
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol {
+    @apply text-status-warning;
+}
+
+/* Class names, types, builtins */
+.token.class-name,
+.token.builtin {
+    @apply text-accent-purple;
+}
+
+/* Functions and methods */
+.token.function,
+.token.method {
+    @apply text-accent-blue;
+}
+
+/* Punctuation, brackets, commas, etc. */
+.token.punctuation {
+    @apply text-text-secondary;
+}
+
+/* Properties and attributes */
+.token.property,
+.token.attr-name {
+    @apply text-accent-blue;
+}
+
+/* Deleted code (diff -) */
+.token.deleted {
+    @apply text-status-error;
+}

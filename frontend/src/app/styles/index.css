@@ -1,35 +1,44 @@
 @import "tailwindcss";
 @import "./globals.css";
+@import "./code-theme.css";
 
 /*noinspection ALL*/
 @theme {
-    /* --- COLORS --- */
-    /* Usage: bg-bg, text-surface, border-border */
-    --color-bg: var(--color-bg);
-    --color-surface: var(--color-surface);
-    --color-elevated: var(--color-elevated);
-    --color-border: var(--color-border);
-    --color-muted: var(--color-muted);
-    --color-text: var(--color-text);
-    --color-text-soft: var(--color-text-soft);
+    /* ------------------------------------------------------------------------
+     * COLORS
+     * ------------------------------------------------------------------------ */
+    --color-bg-app: var(--color-bg-app);
+    --color-bg-strip: var(--color-bg-strip);
 
-    /* Semantic */
-    --color-success: var(--color-success);
-    --color-warning: var(--color-warning);
-    --color-danger: var(--color-danger);
+    --color-surface-base: var(--color-surface-base);
+    --color-surface-raised: var(--color-surface-raised);
 
-    /* Accents - Usage: text-accent-cyan */
-    --color-accent-cyan: var(--accent-cyan);
-    --color-accent-blue: var(--accent-blue);
-    --color-accent-violet: var(--accent-violet);
+    --color-border-subtle: var(--color-border-subtle);
+    --color-border-default: var(--color-border-default);
+    --color-border-highlight: var(--color-border-highlight);
 
-    /* Inputs */
-    --color-input-bg: var(--color-input-bg);
-    --color-input-border: var(--color-input-border);
-    --color-input-placeholder: var(--color-input-placeholder);
+    --color-text-primary: var(--color-text-primary);
+    --color-text-secondary: var(--color-text-secondary);
+    --color-text-muted: var(--color-text-muted);
+    --color-text-inverse: var(--color-text-inverse);
 
-    /* --- SPACING --- */
-    /* Usage: p-xs, m-3xl */
+    --color-accent-aurora-text: var(--color-accent-aurora-text);
+    --color-accent-aurora-fill: var(--color-accent-aurora-fill);
+    --color-accent-magenta: var(--color-accent-magenta);
+    --color-accent-purple: var(--color-accent-purple);
+    --color-accent-blue: var(--color-accent-blue);
+
+    --color-status-success: var(--color-status-success);
+    --color-status-warning: var(--color-status-warning);
+    --color-status-error: var(--color-status-error);
+
+    --color-overlay-scrim: var(--color-overlay-scrim);
+
+    /* ------------------------------------------------------------------------
+     * SPACING
+     * ------------------------------------------------------------------------ */
+    --spacing-none: var(--space-none);
+    --spacing-xxs: var(--space-xxs);
     --spacing-xs: var(--space-xs);
     --spacing-sm: var(--space-sm);
     --spacing-md: var(--space-md);
@@ -37,33 +46,89 @@
     --spacing-xl: var(--space-xl);
     --spacing-2xl: var(--space-2xl);
     --spacing-3xl: var(--space-3xl);
+    --spacing-4xl: var(--space-4xl);
 
-    /* --- RADII --- */
-    /* Usage: rounded-md, rounded-pill */
+    /* ------------------------------------------------------------------------
+     * RADII
+     * ------------------------------------------------------------------------ */
+    --radius-xs: var(--radius-xs);
     --radius-sm: var(--radius-sm);
     --radius-md: var(--radius-md);
     --radius-lg: var(--radius-lg);
     --radius-xl: var(--radius-xl);
     --radius-pill: var(--radius-pill);
 
-    /* --- SHADOWS --- */
-    /* Usage: shadow-soft */
-    --shadow-soft: var(--shadow-soft);
-    --shadow-hard: var(--shadow-hard);
+    /* ------------------------------------------------------------------------
+     * SHADOWS
+     * ------------------------------------------------------------------------ */
+    --shadow-primary-btn: var(--shadow-primary-btn);
+    --shadow-soft-glow: var(--shadow-soft-glow);
+    --shadow-surface-deep: var(--shadow-surface-deep);
+    --shadow-focus-ring: var(--shadow-focus-ring);
 
-    /* --- FONTS --- */
-    /* Usage: font-sans, font-mono */
-    --font-sans: var(--font-body);
+    /* ------------------------------------------------------------------------
+     * BLUR
+     * ------------------------------------------------------------------------ */
+    --blur-aurora-strong: var(--blur-aurora-strong);
+    --blur-aurora-soft: var(--blur-aurora-soft);
+
+    /* ------------------------------------------------------------------------
+     * TYPOGRAPHY
+     * Usage: text-hero, text-display, text-body
+     * ------------------------------------------------------------------------ */
+    --font-body: var(--font-body);
     --font-mono: var(--font-mono);
 
-    /* --- ANIMATIONS --- */
-    /* Usage: transition-fast, ease-soft */
-    --default-transition-duration: var(--duration-normal);
+    /* Sizes */
+    --text-hero: var(--font-size-hero);
+    --text-display: var(--font-size-display);
+    --text-h1: var(--font-size-h1);
+    --text-h2: var(--font-size-h2);
+    --text-h3: var(--font-size-h3);
+    --text-body: var(--font-size-body);
+    --text-body-lg: var(--font-size-body-lg);
+    --text-caption: var(--font-size-caption);
+    --text-micro: var(--font-size-micro);
+
+    /* Leading */
+    --leading-tight: var(--line-height-tight);
+    --leading-normal: var(--line-height-normal);
+    --leading-relaxed: var(--line-height-relaxed);
+
+    /* Weights */
+    --font-weight-regular: var(--font-weight-regular);
+    --font-weight-medium: var(--font-weight-medium);
+    --font-weight-semibold: var(--font-weight-semibold);
+    --font-weight-bold: var(--font-weight-bold);
+
+    /* ------------------------------------------------------------------------
+     * MOTION
+     * ------------------------------------------------------------------------ */
+    --transition-duration-instant: var(--duration-instant);
     --transition-duration-fast: var(--duration-fast);
     --transition-duration-normal: var(--duration-normal);
     --transition-duration-slow: var(--duration-slow);
 
-    --default-transition-timing-function: var(--easing-standard);
     --transition-timing-function-standard: var(--easing-standard);
-    --transition-timing-function-soft: var(--easing-soft);
+    --transition-timing-function-entrance: var(--easing-entrance);
+    --transition-timing-function-exit: var(--easing-exit);
+
+    --scale-press: var(--scale-press);
+
+    /* ------------------------------------------------------------------------
+     * LAYOUT
+     * ------------------------------------------------------------------------ */
+    --layout-content-max-width: var(--layout-content-max-width);
+    --layout-content-max-width-wide: var(--layout-content-max-width-wide);
+    --layout-section-vertical-padding: var(--layout-section-vertical-padding);
+    --layout-navbar-height: var(--layout-navbar-height);
+
+    /* ------------------------------------------------------------------------
+     * Z-INDEX
+     * ------------------------------------------------------------------------ */
+    --z-background: var(--z-background);
+    --z-content: var(--z-content);
+    --z-snackbar: var(--z-snackbar);
+    --z-navbar: var(--z-navbar);
+    --z-overlay: var(--z-overlay);
 }
