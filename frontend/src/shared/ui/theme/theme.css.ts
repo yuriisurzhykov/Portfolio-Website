@@ -133,7 +133,7 @@ export const themeVars = `
     --color-surface-raised: #FFFFFF;
     
     --color-border-subtle: #E0E4F0;
-    --color-border-default: #D2D7E5;
+    --color-border-default: #a4abba;
     --color-border-highlight: #6B57FF;
 
     --color-text-primary: #0C1222;

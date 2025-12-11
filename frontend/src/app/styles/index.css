@@ -109,9 +109,9 @@
     --transition-duration-normal: var(--duration-normal);
     --transition-duration-slow: var(--duration-slow);
 
-    --transition-timing-function-standard: var(--easing-standard);
-    --transition-timing-function-entrance: var(--easing-entrance);
-    --transition-timing-function-exit: var(--easing-exit);
+    --transition-easing-standard: var(--easing-standard);
+    --transition-easing-entrance: var(--easing-entrance);
+    --transition-easing-exit: var(--easing-exit);
 
     --scale-press: var(--scale-press);
 

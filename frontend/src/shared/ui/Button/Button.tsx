@@ -21,9 +21,10 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 const baseStyles =
     [
         "inline-flex items-center justify-center",
-        "gap-xs", // из spacing-токенов
+        "gap-xs",
         "rounded-pill font-medium",
-        "transition-colors duration-fast ease-standard",
+        "transition-colors duration-normal ease-standard",
+        "transition-transform duration-fast ease-standard",
         "focus-visible:outline-none",
         "focus-visible:ring-2 focus-visible:ring-border-highlight",
         "focus-visible:ring-offset-2 focus-visible:ring-offset-bg-app",

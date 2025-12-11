@@ -6,6 +6,8 @@ import { Surface } from "@/shared/ui/Surface";
 import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/CodeBlock";
 import { useTranslation } from "@/shared/i18n";
 import { ThemeToggle } from "@/feature/theme-toggle";
+import { SkillCard } from "@/shared/ui/SkillCard";
+import { Cpu, Smartphone } from "lucide-react";
 
 export function ExampleCodeBlock() {
     const { ln } = useTranslation();
@@ -35,6 +37,31 @@ const unfold = (f, seed) => {
   return go(f, seed, [])
 }`}
         </CodeBlock>
+    );
+}
+
+export function SkillsSection() {
+    return (
+        <section className="py-24 relative">
+            <div className="max-w-7xl mx-auto px-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <SkillCard
+                        icon={Cpu}
+                        title="Event-driven architectures"
+                        desc="Designing robust systems with FlowBus, state machines and composable domain boundaries."
+                        variant="accent"
+                        tone="success"
+                    />
+                    <SkillCard
+                        icon={Smartphone}
+                        title="Mobile Design"
+                        desc="Designing robust mobile application with Jetpack Compose."
+                        variant="accent"
+                        tone="default"
+                    />
+                </div>
+            </div>
+        </section>
     );
 }
 
@@ -76,6 +103,7 @@ export function Storybook() {
                 </Surface>
                 <ExampleCodeBlock></ExampleCodeBlock>
             </Section>
+            <SkillsSection />
         </main>
     );
 }

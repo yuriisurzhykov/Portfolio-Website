@@ -80,7 +80,7 @@ const THEME_SWITCHER_STYLES: Record<VariantKey, ThemeToggleStyles> = {
                 "font-medium",
                 "text-text-secondary",
                 "transition-[background,box-shadow,color,transform]",
-                "duration-fast",
+                "duration-normal",
                 "ease-standard",
                 "cursor-pointer",
                 "outline-none",
@@ -99,8 +99,8 @@ const THEME_SWITCHER_STYLES: Record<VariantKey, ThemeToggleStyles> = {
             ].join(" "),
         optionIcon:
             [
-                "w-sm",
-                "h-sm",
+                "w-md",
+                "h-md",
                 "shrink-0",
                 "stroke-current",
                 "fill-none",
