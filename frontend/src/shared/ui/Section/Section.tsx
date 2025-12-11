@@ -1,6 +1,6 @@
 import * as React from "react";
 import { forwardRef } from "react";
-import { Heading } from "@/shared/ui/Heading";
+import { Text } from "@/shared/ui/Text";
 
 export type SectionProps = React.HTMLAttributes<HTMLElement> & {
     title?: string;
@@ -29,15 +29,13 @@ export const Section = forwardRef<HTMLElement, SectionProps>(
                     {(title || eyebrow || subtitle) && (
                         <header className="mb-xl">
                             {eyebrow && (
-                                <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted">
-                                    {eyebrow}
-                                </p>
+                                <Text variant="caption" tone="muted">{eyebrow}</Text>
                             )}
                             {title && (
-                                <Heading level={1}>{title}</Heading>
+                                <Text variant="h1">{title}</Text>
                             )}
                             {subtitle && (
-                                <p className="mt-sm text-sm text-muted">{subtitle}</p>
+                                <Text variant="caption" tone="muted">{subtitle}</Text>
                             )}
                         </header>
                     )}

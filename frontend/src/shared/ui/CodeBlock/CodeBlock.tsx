@@ -32,10 +32,10 @@ export const CodeBlock = forwardRef<HTMLPreElement, CodeBlockProps>(
     ) => {
         const [copied, setCopied] = useState(false);
 
-        // Внутренний ref на <pre>
+        // Inner ref that points to <pre>
         const innerRef = useRef<HTMLPreElement>(null);
 
-        // Прокидываем наружу именно innerRef.current
+        // Throw out exactly innerRef.current
         useImperativeHandle(ref, () => {
             if (!innerRef.current) {
                 throw new Error("CodeBlock: <pre> element is not mounted yet");

@@ -12,6 +12,8 @@ export type TextVariant =
     | "h1"         // 3rem / 48px
     | "h2"         // 2.25rem / 36px
     | "h3"         // 1.5rem / 24px
+    | "h4"         // 1.5rem / 24px
+    | "h5"         // 1.5rem / 24px
     | "body-lg"    // 1.25rem / 20px
     | "body"       // 1rem / 16px
     | "caption"    // 0.875rem / 14px
@@ -63,6 +65,8 @@ const variantClasses: Record<TextVariant, string> = {
     h1: "text-h1 font-bold tracking-tight leading-tight",
     h2: "text-h2 font-semibold tracking-tight leading-normal",
     h3: "text-h3 font-semibold leading-normal",
+    h4: "text-2xl font-semibold leading-normal",
+    h5: "text-xl font-semibold leading-normal",
     "body-lg": "text-body-lg font-regular leading-relaxed",
     body: "text-body font-regular leading-normal",
     caption: "text-caption font-medium leading-normal",
@@ -85,6 +89,8 @@ const defaultTags: Record<TextVariant, React.ElementType> = {
     h1: "h1",
     h2: "h2",
     h3: "h3",
+    h4: "h4",
+    h5: "h5",
     "body-lg": "p",
     body: "p",
     caption: "span",

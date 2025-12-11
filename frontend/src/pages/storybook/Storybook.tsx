@@ -1,7 +1,6 @@
 import React from "react";
 import { Button } from "@/shared/ui/Button";
 import { Text } from "@/shared/ui/Text";
-import { Heading } from "@/shared/ui/Heading";
 import { Section } from "@/shared/ui/Section";
 import { Surface } from "@/shared/ui/Surface";
 import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/CodeBlock";
@@ -49,7 +48,7 @@ export function Storybook() {
                 subtitle="Tailwind + tokens.ts + design-system components"
             >
                 <Surface className="p-xl flex flex-col gap-md">
-                    <Heading level={3}>Welcome screen</Heading>
+                    <Text variant="h3">Welcome screen</Text>
                     <Text variant="body">
                         This block is fully styled via tokens → CSS variables → Tailwind →
                         components.
@@ -61,7 +60,7 @@ export function Storybook() {
                     </div>
                 </Surface>
                 <Surface className="p-xl flex flex-col gap-md mt-4">
-                    <Heading level={5}>{ln("label.system.language.toggle")}</Heading>
+                    <Text variant="h3">{ln("label.system.language.toggle")}</Text>
                     <Button variant="secondary"
                             onClick={() => setLanguage("en")}>{ln("label.system.language.english")}</Button>
                     <Button variant="primary"
