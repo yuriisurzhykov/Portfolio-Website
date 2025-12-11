@@ -4,9 +4,9 @@ import { Text } from "@/shared/ui/Text";
 import { Heading } from "@/shared/ui/Heading";
 import { Section } from "@/shared/ui/Section";
 import { Surface } from "@/shared/ui/Surface";
-import { ThemeToggle } from "@/feature/theme";
 import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/CodeBlock";
 import { useTranslation } from "@/shared/i18n";
+import { ThemeToggle } from "@/feature/theme-toggle";
 
 export function ExampleCodeBlock() {
     const { ln } = useTranslation();
@@ -67,19 +67,16 @@ export function Storybook() {
                     <Button variant="primary"
                             onClick={() => setLanguage("ru")}>{ln("label.system.language.russian")}</Button>
                     <div className="mt-sm" />
-                    <ThemeToggle />
                 </Surface>
+                <ThemeToggle />
                 <Surface className="p-xl gap-md mt-lg">
                     <Text variant="mono">
                         suspend fun something(status: (Boolean) -&gt; Unit) = status.invoke(true)
                     </Text>
-                    <Text tone="aurora" variant="hero">What's make sense?</Text>
+                    <Text tone="aurora" variant="hero">Let's talk about you!</Text>
                 </Surface>
                 <ExampleCodeBlock></ExampleCodeBlock>
             </Section>
-            <div className="text-hero text-transparent bg-clip-text bg-gradient-to-r from-accent-blue to-accent-magenta">
-                Debug HERO
-            </div>
         </main>
     );
 }
