@@ -89,11 +89,11 @@ export const SkillCard = React.forwardRef<HTMLDivElement, SkillCardProps>(
                 className={cn(
                     // Layout
                     "group relative flex flex-col gap-sm",
-                    // Surface / border / spacing – driven by variant
+                    // surface / border / spacing – driven by variant
                     VARIANT_STYLES[variant],
                     // Radius & typography defaults
                     "rounded-xl", // radius.xl
-                    // Text defaults
+                    // text defaults
                     "text-text-primary",
                     // Motion
                     "transition-[background-color,border-color,box-shadow,transform]",

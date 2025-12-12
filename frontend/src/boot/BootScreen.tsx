@@ -2,7 +2,7 @@ import * as React from "react";
 import { useBoot } from "./BootProvider.tsx";
 import { useScrollLock } from "./useScrollLock.ts";
 import { useTranslation } from "@/shared/i18n";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/shared/ui/button";
 
 export function BootScreen({ onDone }: { onDone: () => void }) {
     const { state, skip } = useBoot();

@@ -36,16 +36,16 @@ export type TextTone =
 export type TextAlign = "left" | "center" | "right" | "justify";
 
 /**
- * PROPS
+ * Properties
  */
-export interface TextProps extends React.HTMLAttributes<HTMLElement> {
+export interface TextProperties extends React.HTMLAttributes<HTMLElement> {
     /** The HTML tag to render (p, h1, span, etc.) */
     as?: React.ElementType;
     /** The typography style variant */
     variant?: TextVariant;
     /** The color/texture of the text */
     tone?: TextTone;
-    /** Text alignment */
+    /** text alignment */
     align?: TextAlign;
     /** Prevent text wrapping */
     noWrap?: boolean;
@@ -101,7 +101,7 @@ const defaultTags: Record<TextVariant, React.ElementType> = {
 /**
  * COMPONENT
  */
-export const Text = React.forwardRef<HTMLElement, TextProps>(
+export const Text = React.forwardRef<HTMLElement, TextProperties>(
     (
         {
             as,
@@ -113,7 +113,7 @@ export const Text = React.forwardRef<HTMLElement, TextProps>(
             className,
             children,
             ...props
-        }: TextProps,
+        }: TextProperties,
         ref: ForwardedRef<HTMLElement>
     ) => {
         // 1. Resolve the tag. If 'as' is missing, fallback to the default tag for the variant.

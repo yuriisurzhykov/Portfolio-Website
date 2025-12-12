@@ -1,4 +1,3 @@
-// src/shared/ui/code/CodeBlock.tsx
 import * as React from "react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { CodeBlockSurface } from "./CodeBlockSurface";

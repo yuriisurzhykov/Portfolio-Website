@@ -1,4 +1,3 @@
-// src/shared/ui/code/CodeBlockContent.tsx
 import * as React from "react";
 import { type HTMLAttributes, type RefObject, useMemo } from "react";
 import { cn } from "@/shared/lib";

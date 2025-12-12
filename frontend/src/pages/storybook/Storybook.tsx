@@ -1,13 +1,14 @@
 import React from "react";
-import { Button } from "@/shared/ui/Button";
-import { Text } from "@/shared/ui/Text";
-import { Section } from "@/shared/ui/Section";
-import { Surface } from "@/shared/ui/Surface";
-import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/CodeBlock";
+import { Button } from "@/shared/ui/button";
+import { Text } from "@/shared/ui/text";
+import { Section } from "@/shared/ui/section";
+import { Surface } from "@/shared/ui/surface";
+import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/code-block";
 import { useTranslation } from "@/shared/i18n";
 import { ThemeToggle } from "@/feature/theme-toggle";
 import { SkillCard } from "@/shared/ui/SkillCard";
 import { Cpu, Smartphone } from "lucide-react";
+import { DesignSystemPlayground } from "@/feature/design-system/DesignSystemPlayground.tsx";
 
 export function ExampleCodeBlock() {
     const { ln } = useTranslation();
@@ -104,6 +105,7 @@ export function Storybook() {
                 <ExampleCodeBlock></ExampleCodeBlock>
             </Section>
             <SkillsSection />
+            <DesignSystemPlayground />
         </main>
     );
 }

@@ -127,7 +127,7 @@ export const CodeBlockToolbar: React.FC<CodeBlockToolbarProps> = ({
                     </span>
                 </button>
             ) : (
-                // Балансируем layout справа, когда копирование выключено
+                // Balancing layout right, when copying is disabled
                 <div className="w-sm" aria-hidden="true" />
             )}
         </div>

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { forwardRef } from "react";
-import { Text } from "@/shared/ui/Text";
+import { Text } from "@/shared/ui/text";
 
 export type SectionProps = React.HTMLAttributes<HTMLElement> & {
     title?: string;

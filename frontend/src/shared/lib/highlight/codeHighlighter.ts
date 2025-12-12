@@ -1,4 +1,3 @@
-// src/shared/lib/highlight/codeHighlighter.ts
 import Prism from "prismjs";
 
 import "prismjs/components/prism-javascript";

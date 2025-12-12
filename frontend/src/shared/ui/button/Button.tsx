@@ -24,7 +24,7 @@ const baseStyles =
         "gap-xs",
         "rounded-pill font-medium",
         "transition-colors duration-normal ease-standard",
-        "transition-transform duration-fast ease-standard",
+        "transition-transform duration-normal ease-standard",
         "focus-visible:outline-none",
         "focus-visible:ring-2 focus-visible:ring-border-highlight",
         "focus-visible:ring-offset-2 focus-visible:ring-offset-bg-app",
@@ -97,19 +97,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                 aria-disabled={isDisabled}
                 {...rest}
             >
-                {iconLeft && (
-                    <span className="inline-flex items-center">
-            {iconLeft}
-          </span>
-                )}
+                {iconLeft && (<span className="inline-flex items-center">{iconLeft}</span>)}
 
                 <span className="inline-flex items-center">{children}</span>
 
-                {iconRight && (
-                    <span className="inline-flex items-center">
-            {iconRight}
-          </span>
-                )}
+                {iconRight && (<span className="inline-flex items-center">{iconRight}</span>)}
             </button>
         );
     }

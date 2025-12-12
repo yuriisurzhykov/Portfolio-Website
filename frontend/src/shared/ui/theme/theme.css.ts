@@ -142,7 +142,8 @@ export const themeVars = `
     --color-text-inverse: ${palette.neutral50};
 
     --color-accent-aurora-text: linear-gradient(135deg, #EF1C5C 0%, #765AF8 100%);
-    --shadow-primary-btn: 0 4px 14px rgba(0,0,0,0.1);
+    --shadow-surface-deep: 0 5px 20px rgba(0,0,0,0.1);
+    --shadow-primary-btn: 0 4px 20px rgba(0,0,0,0.3);
     --shadow-soft-glow: 0 4px 20px rgba(0,0,0,0.05);
   }
 `;
