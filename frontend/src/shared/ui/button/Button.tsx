@@ -1,30 +1,14 @@
 import * as React from "react";
-import { forwardRef, type ReactNode } from "react";
+import { forwardRef } from "react";
 import { cn } from "@/shared/lib";
-
-export type ButtonVariant = "primary" | "secondary" | "ghost";
-export type ButtonSize = "sm" | "md" | "lg";
-
-export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    variant?: ButtonVariant;
-    size?: ButtonSize;
-    /** Icon to the left of text */
-    iconLeft?: ReactNode;
-    /** Icon to the right from text */
-    iconRight?: ReactNode;
-    /** Stretches the button to the full available width */
-    fullWidth?: boolean;
-    /** Whether system loader should be enabled for the button on hover */
-    loading?: boolean;
-};
+import type { ButtonProps, ButtonSize, ButtonVariant } from "@/shared/ui/button/Button.types.ts";
 
 const baseStyles =
     [
         "inline-flex items-center justify-center",
         "gap-xs",
         "rounded-pill font-medium",
-        "transition-colors duration-normal ease-standard",
-        "transition-transform duration-normal ease-standard",
+        "transition-all duration-normal ease-standard",
         "focus-visible:outline-none",
         "focus-visible:ring-2 focus-visible:ring-border-highlight",
         "focus-visible:ring-offset-2 focus-visible:ring-offset-bg-app",
