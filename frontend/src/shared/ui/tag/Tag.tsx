@@ -17,25 +17,27 @@ export const Tag = React.forwardRef<HTMLSpanElement, TagProps>(
         ref: ForwardedRef<HTMLSpanElement>,
     ) {
         const sizeClasses: Record<TagSize, string> = {
-            sm: "px-xs py-2xs text-caption rounded-md",
-            md: "px-sm py-2xs text-body rounded-lg",
+            sm: "px-sm py-xs font-mono text-micro rounded-sm",
+            md: "px-md py-xs font-mono text-caption rounded-md",
         };
 
         const variantClasses: Record<TagVariant, string> = {
+            // Solid surface chip — matches the landing "STACK" pill row.
             neutral: cn(
-                "bg-surface-subtle",
-                "text-text-muted",
+                "bg-surface-base",
+                "text-text-chip",
                 "border border-border-subtle",
             ),
+            // Translucent chip — matches the hero's "shipped / in progress" badges.
             outline: cn(
-                "bg-transparent",
-                "text-text-secondary",
+                "bg-surface-raised",
+                "text-text-chip",
                 "border border-border-default",
             ),
             accent: cn(
-                "bg-surface-raised",
-                "text-accent-magenta",
-                "border border-border-highlight",
+                "bg-accent-tint-bg",
+                "text-accent-solid",
+                "border border-transparent",
             ),
         };
 

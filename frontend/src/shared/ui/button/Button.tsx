@@ -3,11 +3,11 @@ import { forwardRef } from "react";
 import { cn } from "@/shared/lib";
 import type { ButtonProps, ButtonSize, ButtonVariant } from "@/shared/ui/button/Button.types.ts";
 
-const baseStyles =
+export const buttonBaseStyles =
     [
         "inline-flex items-center justify-center",
         "gap-xs",
-        "rounded-pill font-medium",
+        "rounded-md font-semibold",
         "transition-all duration-normal ease-standard",
         "focus-visible:outline-none",
         "focus-visible:ring-2 focus-visible:ring-border-highlight",
@@ -16,18 +16,17 @@ const baseStyles =
         "data-[loading=true]:cursor-wait",
     ].join(" ");
 
-const variants: Record<ButtonVariant, string> = {
+export const buttonVariantClasses: Record<ButtonVariant, string> = {
     primary: [
-        "bg-[image:var(--color-accent-aurora-fill)]",
-        "text-primary",
-        "shadow-soft-glow",
-        "hover:opacity-90",
-        "active:opacity-80 active:scale-press",
+        "bg-accent-solid",
+        "text-text-inverse",
+        "hover:bg-accent-solid-hover",
+        "active:scale-press",
     ].join(" "),
     secondary: [
         "text-text-primary",
-        "border border-border-default",
-        "shadow-soft-glow",
+        "bg-transparent",
+        "border border-border-strong",
         "hover:bg-surface-raised",
         "active:scale-press",
     ].join(" "),
@@ -40,10 +39,10 @@ const variants: Record<ButtonVariant, string> = {
     ].join(" "),
 };
 
-const sizes: Record<ButtonSize, string> = {
+export const buttonSizeClasses: Record<ButtonSize, string> = {
     sm: "h-10 px-sm text-caption",
     md: "h-12 px-lg text-body",
-    lg: "h-14 px-xlg text-body-lg",
+    lg: "h-14 px-xl text-body-lg",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -70,9 +69,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                 ref={ref}
                 type={type ?? "button"}
                 className={cn(
-                    baseStyles,
-                    sizes[size],
-                    variants[variant],
+                    buttonBaseStyles,
+                    buttonSizeClasses[size],
+                    buttonVariantClasses[variant],
                     fullWidth && "w-full",
                     className
                 )}

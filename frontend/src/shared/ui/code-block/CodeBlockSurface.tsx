@@ -13,15 +13,19 @@ export type CodeBlockSurfaceProps = {
  * ----------------
  * Surface wrapper for the code block: background, border, shadow, typography.
  */
+// Code panels stay dark regardless of the active site theme, matching the
+// approved design (FlowBus.kt keeps its dark "terminal" look on both the
+// light and dark page) — pinned to the fixed `codePanel` tokens, never the
+// theme-reactive `surface-*`/`text-*` ones.
 const surfaceBaseStyles =
     [
         "flex flex-col",
-        "bg-surface-base",
-        "border border-border-default",
+        "bg-code-panel-bg",
+        "border border-code-panel-border",
         "rounded-md",
         "shadow-surface-deep",
         "overflow-hidden",
-        "font-mono text-body text-text-primary",
+        "font-mono text-body text-code-panel-code",
     ].join(" ");
 
 export const CodeBlockSurface: React.FC<CodeBlockSurfaceProps> = ({

@@ -8,7 +8,7 @@ const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
 function getInitialPreference(): ThemePreference {
     if (typeof window === "undefined") {
-        return "system";
+        return "dark";
     }
 
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -17,7 +17,9 @@ function getInitialPreference(): ThemePreference {
         return stored;
     }
 
-    return "system";
+    // The public site ships dark-only; "system" is only reachable via the
+    // dev-only ThemeToggle in Storybook.
+    return "dark";
 }
 
 function resolveTheme(preference: ThemePreference): ThemeId {

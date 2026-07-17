@@ -49,7 +49,7 @@ export function DesignSystemPlayground() {
                     </Text>
 
                     <div className="space-y-xs">
-                        <Text variant="hero">Hero — engineering OS boot sequence</Text>
+                        <Text variant="hero">Hero — Yurii Surzhykov</Text>
                         <Text variant="display">
                             Display — Yurii Surzhykov — Software Engineer
                         </Text>

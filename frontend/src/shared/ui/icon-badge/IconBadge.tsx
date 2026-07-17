@@ -18,17 +18,17 @@ export const IconBadge = React.forwardRef<HTMLDivElement, IconBadgeProps>(
         ref: ForwardedRef<HTMLDivElement>,
     ) {
         const sizeClasses: Record<IconBadgeSize, string> = {
-            sm: "p-2xs rounded-sm text-caption",
+            sm: "p-xxs rounded-sm text-caption",
             md: "p-xs rounded-md text-body",
             lg: "p-sm rounded-lg text-body-lg",
         };
 
         const toneClasses: Record<IconBadgeTone, string> = {
             default: cn("bg-surface-raised", "border-border-default", "text-text-primary"),
-            accent: cn("bg-surface-raised", "border-border-highlight", "text-accent-magenta"),
-            success: cn("bg-surface-raised", "border-border-success", "text-status-success"),
-            warning: cn("bg-surface-raised", "border-border-warning", "text-status-warning"),
-            error: cn("bg-surface-raised", "border-border-error", "text-status-error"),
+            accent: cn("bg-surface-raised", "border-border-highlight", "text-accent-solid"),
+            success: cn("bg-surface-raised", "border-border-default", "text-status-success"),
+            warning: cn("bg-surface-raised", "border-border-default", "text-status-warning"),
+            error: cn("bg-surface-raised", "border-border-default", "text-status-error"),
         };
 
         return (

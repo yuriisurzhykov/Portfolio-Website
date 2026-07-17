@@ -32,15 +32,15 @@ export const ProgressBar = React.forwardRef<HTMLDivElement, ProgressBarProps>(
 
         const indicatorVariantClasses: Record<ProgressVariant, string> = {
             neutral: "bg-border-default",
-            accent: "bg-accent-magenta",
-            "accent-inverse": "bg-accent-blue",
+            accent: "bg-accent-solid",
+            "accent-inverse": "bg-accent-solid-hover",
         };
 
         return (
             <div
                 ref={ref}
                 className={cn(
-                    "w-full rounded-full bg-surface-subtle overflow-hidden",
+                    "w-full rounded-full bg-surface-raised overflow-hidden",
                     "h-[var(--progress-thickness,0.25rem)]", // thickness via token fallback
                     className,
                 )}

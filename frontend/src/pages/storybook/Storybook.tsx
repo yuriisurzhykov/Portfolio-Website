@@ -69,10 +69,10 @@ export function SkillsSection() {
 export function Storybook() {
     const { ln, setLanguage } = useTranslation();
     return (
-        <main className="min-h-screen bg-color-bg-app text-text">
+        <main className="min-h-screen bg-bg-app text-text-primary">
             <Section
                 eyebrow="Portfolio shell"
-                title={ln("hero.title")}
+                title="Design system playground"
                 subtitle="Tailwind + tokens.ts + design-system components"
             >
                 <Surface className="p-xl flex flex-col gap-md">

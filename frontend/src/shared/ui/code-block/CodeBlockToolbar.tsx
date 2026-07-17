@@ -16,8 +16,8 @@ const toolbarBaseStyles =
     [
         "flex items-center justify-between",
         "px-md py-xs",
-        "bg-bg-strip",
-        "border-b border-border-subtle",
+        "bg-code-panel-bg",
+        "border-b border-code-panel-border",
     ].join(" ");
 
 const trafficLightDotStyles =
@@ -31,13 +31,13 @@ const copyButtonStyles =
     [
         "inline-flex items-center gap-xxs",
         "rounded-pill px-xs py-xxs",
-        "text-caption text-text-secondary",
+        "text-caption text-code-panel-copy-text",
         "transition-colors",
         "duration-fast ease-standard",
-        "hover:bg-surface-raised hover:text-text-primary",
+        "hover:bg-code-panel-hover-bg hover:text-code-panel-copy-text-hover",
         "focus-visible:outline-none",
         "focus-visible:ring-2 focus-visible:ring-border-highlight",
-        "focus-visible:ring-offset-2 focus-visible:ring-offset-bg-strip",
+        "focus-visible:ring-offset-2 focus-visible:ring-offset-code-panel-bg",
     ].join(" ");
 
 type CopyIconProps = {
@@ -105,7 +105,7 @@ export const CodeBlockToolbar: React.FC<CodeBlockToolbarProps> = ({
             </div>
 
             {title && (
-                <div className="flex-1 px-sm text-center text-caption text-text-secondary truncate">
+                <div className="flex-1 px-sm text-center text-caption text-code-panel-title truncate">
                     {title}
                 </div>
             )}

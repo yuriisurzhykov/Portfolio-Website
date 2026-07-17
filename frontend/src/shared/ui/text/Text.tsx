@@ -29,6 +29,7 @@ export type TextTone =
     | "primary"
     | "secondary"
     | "muted"
+    | "faint"
     | "inverse"
     | "aurora"
     | "inherit";
@@ -78,8 +79,9 @@ const toneClasses: Record<TextTone, string> = {
     primary: "text-text-primary",
     secondary: "text-text-secondary",
     muted: "text-text-muted",
+    faint: "text-text-faint",
     inverse: "text-text-inverse",
-    aurora: "text-transparent bg-clip-text bg-gradient-to-r from-accent-blue to-accent-magenta",
+    aurora: "text-accent-solid",
     inherit: "",
 };
 

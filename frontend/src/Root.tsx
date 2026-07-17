@@ -1,14 +1,15 @@
 import React from "react";
+import { BrowserRouter } from "react-router-dom";
 import { themeVars } from "@/shared/ui/theme";
-import { Storybook } from "@/pages/storybook";
+import { AppRoutes } from "@/app/router/routes";
 
 export function Root() {
     return (
         <>
             <style dangerouslySetInnerHTML={{ __html: themeVars }} />
-            <div className="min-h-screen text-text">
-                <Storybook />
-            </div>
+            <BrowserRouter>
+                <AppRoutes />
+            </BrowserRouter>
         </>
     );
 }

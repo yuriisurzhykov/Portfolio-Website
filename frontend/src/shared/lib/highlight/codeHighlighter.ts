@@ -4,17 +4,19 @@ import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
 import "prismjs/components/prism-jsx";
 import "prismjs/components/prism-tsx";
+import "prismjs/components/prism-kotlin";
 
 /**
  * Supported languages for syntax highlighting.
  */
-export type CodeLanguage = "ts" | "tsx" | "js" | "jsx";
+export type CodeLanguage = "ts" | "tsx" | "js" | "jsx" | "kotlin";
 
 const languageMap: Record<CodeLanguage, string> = {
     ts: "typescript",
     tsx: "tsx",
     js: "javascript",
     jsx: "jsx",
+    kotlin: "kotlin",
 };
 
 /**

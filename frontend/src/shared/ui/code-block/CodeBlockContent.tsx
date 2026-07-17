@@ -65,7 +65,7 @@ export const CodeBlockContent: React.FC<CodeBlockContentProps> = ({
                     <code className="table w-full border-collapse">
                         {htmlLines.map((line, index) => (
                             <span key={index} className="table-row align-top">
-                                <span className="table-cell pr-md text-right select-none text-caption text-text-muted">
+                                <span className="table-cell pr-md text-right select-none text-caption text-code-panel-line-number">
                                     {startLine + index}
                                 </span>
                                 <span
@@ -80,16 +80,10 @@ export const CodeBlockContent: React.FC<CodeBlockContentProps> = ({
                             </span>
                         ))}
                     </code>
+                ) : typeof highlightedHtml === "string" ? (
+                    <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
                 ) : (
-                    <code
-                        dangerouslySetInnerHTML={
-                            typeof highlightedHtml === "string"
-                                ? { __html: highlightedHtml }
-                                : undefined
-                        }
-                    >
-                        {typeof highlightedHtml !== "string" && children}
-                    </code>
+                    <code>{children}</code>
                 )}
             </pre>
         </div>
