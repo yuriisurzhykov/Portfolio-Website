@@ -531,6 +531,31 @@ conditional on `!isPublished`), excerpt now uses `tone="faint"` instead of `tone
 unpublished. Both tones are already independently AA-compliant at full opacity, so this can't
 regress the same way again.
 
+### [RESOLVED] The "upcoming" entry title stopped visually de-emphasizing after the `opacity-45` fix
+
+Caught by the user reviewing an actual screenshot, not by any test: after the `opacity-45` fix
+above, the unpublished entry's title ("Notes from the Camera Pipeline — draft") rendered at full
+brightness — visually indistinguishable from a real published post's title, defeating the entire
+point of "upcoming" looking de-emphasized (this was the original UX intent the `opacity-45` hack
+existed for in the first place).
+
+Root cause, pre-existing (not introduced by the `opacity-45` removal, just exposed by it): the
+title was `<Text variant="h3" className={cn("...", !isPublished && "text-text-muted")}>` — no
+`tone` prop, so `Text` defaults to `tone="primary"`, which adds `text-text-primary` via its own
+internal `toneClasses` lookup. That class and the manually-appended `text-text-muted` both landed
+in the className string at the same specificity — **which one visually wins depends on the order
+Tailwind emits them in the generated stylesheet, not on their order in the className string.**
+This is a fragile pattern in general (any time you override a component's own tone/variant output
+by appending a same-specificity utility class rather than using the prop the component exposes for
+that exact purpose), and it silently flipped outcomes at some point after other, unrelated `@theme`
+color variables were added earlier in this same implementation.
+
+Fix: use the `tone` prop the `Text` component already provides instead of fighting its output —
+`<Text variant="h3" tone={isPublished ? "primary" : "muted"} className="...">`. Only one tone class
+is ever emitted now, so there's no ordering ambiguity to regress on. **Takeaway:** never override a
+design-system component's color via a raw same-specificity utility class in `className` when the
+component exposes a prop for that; it may work by accident today and silently flip later.
+
 ## 12. Implementation log
 
 _(Living, append-only. One entry per small implementation step: date, what was done, which files
@@ -614,3 +639,16 @@ before wiping and regenerating all 30 baselines via the same Docker command as b
 layout: 5 folders (one per page), 6 files each (2 themes × 3 viewports) — see section 4. Re-ran
 the full suite in the same container afterward: 40/40 passed again, no regressions from the
 restructure.
+
+### 2026-07-17 — Real UX bug caught from a screenshot: "upcoming" entry not visually de-emphasized
+
+User spotted this from an actual rendered screenshot (not from a failing test — this doesn't
+violate any WCAG rule, it's a design intent regression): the unpublished journal entry's title
+should look clearly grayed-out/de-emphasized so it doesn't blend in with real posts, and after the
+`opacity-45` removal (previous log entry) it no longer did. Root cause and fix: see the
+`[RESOLVED]` entry in section 11 — a `Text` component tone/className specificity conflict that
+had likely been silently broken (or silently working "by luck" of generation order) for a while.
+Fixed `JournalListPage.tsx` to pass `tone={isPublished ? "primary" : "muted"}` instead of a
+manual `className` override. Regenerated the `journal-list/` baselines (only) via Docker,
+confirmed visually against the same screenshot the user flagged, then re-ran the full suite:
+40/40 passed.

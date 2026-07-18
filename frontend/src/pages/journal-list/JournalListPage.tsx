@@ -38,7 +38,7 @@ function LogEntry({ post }: { post: JournalPost }) {
                     </Text>
                 )}
             </div>
-            <Text as="div" variant="h3" className={cn("mb-[6px] !text-[21px]", !isPublished && "text-text-muted")}>
+            <Text as="div" variant="h3" tone={isPublished ? "primary" : "muted"} className="mb-[6px] !text-[21px]">
                 {post.title}
             </Text>
             <Text as="div" variant="caption" tone={isPublished ? "muted" : "faint"} className="max-w-[60ch] leading-[1.6]">
