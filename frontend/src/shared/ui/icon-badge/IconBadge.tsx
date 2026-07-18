@@ -25,7 +25,7 @@ export const IconBadge = React.forwardRef<HTMLDivElement, IconBadgeProps>(
 
         const toneClasses: Record<IconBadgeTone, string> = {
             default: cn("bg-surface-raised", "border-border-default", "text-text-primary"),
-            accent: cn("bg-surface-raised", "border-border-highlight", "text-accent-solid"),
+            accent: cn("bg-surface-raised", "border-border-highlight", "text-accent-text"),
             success: cn("bg-surface-raised", "border-border-default", "text-status-success"),
             warning: cn("bg-surface-raised", "border-border-default", "text-status-warning"),
             error: cn("bg-surface-raised", "border-border-default", "text-status-error"),

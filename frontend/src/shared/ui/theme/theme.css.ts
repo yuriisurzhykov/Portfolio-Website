@@ -42,6 +42,8 @@ function colorVars(c: Colors): string {
 
     --color-accent-solid: ${ c.accent.solid };
     --color-accent-solid-hover: ${ c.accent.solidHover };
+    --color-accent-on-solid: ${ c.accent.onSolid };
+    --color-accent-text: ${ c.accent.text };
     --color-accent-glow: ${ c.accent.glow };
     --color-accent-glow-opacity: ${ c.accent.glowOpacity };
     --color-accent-tint-bg: ${ c.accent.tintBg };
@@ -55,6 +57,7 @@ function colorVars(c: Colors): string {
     --color-status-warning: ${ c.status.warning };
     --color-status-warning-tint-bg: ${ c.status.warningTintBg };
     --color-status-error: ${ c.status.error };
+    --color-status-on-solid: ${ c.status.onSolid };
 
     --color-code-keyword: ${ c.code.keyword };
     --color-code-string: ${ c.code.string };

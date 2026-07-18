@@ -1,0 +1,92 @@
+name: Visual & Accessibility Tests
+
+# Runs the Playwright visual-regression + accessibility suite (see VISUAL_TESTING_GUIDE.md) on
+# every pull request and on every push to master. PRs compare against the baselines already
+# committed in tests/visual-snapshots/; master re-generates those baselines and commits any
+# changes back (see the "Update baselines" step below), so the next PR always diffs against the
+# latest merged state.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: visual-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Needed so the auto-commit step (master only) has a real branch ref to push to.
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run tests (compare against committed baselines)
+        if: github.event_name == 'pull_request'
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: Run tests and refresh baselines
+        if: github.event_name == 'push'
+        working-directory: frontend
+        run: npx playwright test --update-snapshots
+
+      - name: Determine report destination path
+        id: report-dest
+        if: always()
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "dir=reports/pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=reports/master" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit updated baselines
+        if: always() && github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update visual regression baselines [skip ci]"
+          file_pattern: "frontend/tests/visual-snapshots/**"
+
+      - name: Publish report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: frontend/playwright-report
+          destination_dir: ${{ steps.report-dest.outputs.dir }}
+          keep_files: true
+
+      - name: Build PR comment
+        if: always() && github.event_name == 'pull_request'
+        run: node .github/scripts/format-summary.mjs frontend/test-results/summary.json "${{ steps.report-dest.outputs.dir }}" "${{ github.repository }}"
+
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: frontend/pr-comment.md

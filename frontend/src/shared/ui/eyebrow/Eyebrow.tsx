@@ -9,7 +9,7 @@ export interface EyebrowProps extends HTMLAttributes<HTMLParagraphElement> {
 }
 
 const toneClasses: Record<EyebrowTone, string> = {
-    accent: "text-accent-solid",
+    accent: "text-accent-text",
     muted: "text-text-muted",
 };
 

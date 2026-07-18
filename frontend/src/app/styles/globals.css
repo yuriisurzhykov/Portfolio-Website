@@ -30,7 +30,7 @@
     }
 
     a {
-        color: var(--color-accent-solid);
+        color: var(--color-accent-text);
         text-decoration: none;
     }
 

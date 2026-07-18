@@ -36,7 +36,7 @@ export const Tag = React.forwardRef<HTMLSpanElement, TagProps>(
             ),
             accent: cn(
                 "bg-accent-tint-bg",
-                "text-accent-solid",
+                "text-accent-text",
                 "border border-transparent",
             ),
         };
