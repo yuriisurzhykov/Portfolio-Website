@@ -6,11 +6,11 @@ type ProviderProperties = {
     children: ReactNode;
 }
 
-export const MainProviders = ({ children }: ProviderProperties) => {
+export const MainProviders = ({children}: ProviderProperties) => {
     return (
         <ThemeProvider>
             <I18nProvider>
-                {children}
+                { children }
             </I18nProvider>
         </ThemeProvider>
     );

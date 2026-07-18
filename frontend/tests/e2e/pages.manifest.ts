@@ -30,20 +30,20 @@ export interface PageManifestEntry {
 }
 
 const staticPages: PageManifestEntry[] = [
-    { name: "home", path: "/" },
-    { name: "work-list", path: "/work" },
-    { name: "journal-list", path: "/journal" },
+    {name: "home", path: "/"},
+    {name: "work-list", path: "/work"},
+    {name: "journal-list", path: "/journal"},
 ];
 
 // Mirrors the guard in WorkDetailPage.tsx: no `caseStudy` means the route just redirects to
 // `/work`, so there is no distinct page to test there.
 const workDetailPages: PageManifestEntry[] = work
     .filter((item) => Boolean(item.caseStudy))
-    .map((item) => ({ name: `work-${item.slug}`, path: `/work/${item.slug}` }));
+    .map((item) => ({name: `work-${ item.slug }`, path: `/work/${ item.slug }`}));
 
 // Mirrors the guard in JournalDetailPage.tsx: no `body` means the route redirects to `/journal`.
 const journalDetailPages: PageManifestEntry[] = journal
     .filter((post) => Boolean(post.body))
-    .map((post) => ({ name: `journal-${post.slug}`, path: `/journal/${post.slug}` }));
+    .map((post) => ({name: `journal-${ post.slug }`, path: `/journal/${ post.slug }`}));
 
 export const pagesManifest: PageManifestEntry[] = [...staticPages, ...workDetailPages, ...journalDetailPages];

@@ -9,12 +9,12 @@ import { ContactCta } from "./sections/ContactCta";
 export function LandingPage() {
     return (
         <main>
-            <Hero />
-            <TechStack />
-            <Principles />
-            <SelectedWork />
-            <JournalPreview />
-            <ContactCta />
+            <Hero/>
+            <TechStack/>
+            <Principles/>
+            <SelectedWork/>
+            <JournalPreview/>
+            <ContactCta/>
         </main>
     );
 }

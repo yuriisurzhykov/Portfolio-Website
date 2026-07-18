@@ -33,8 +33,8 @@ export const CodeBlockSurface: React.FC<CodeBlockSurfaceProps> = ({
                                                                       children,
                                                                   }) => {
     return (
-        <figure className={cn(surfaceBaseStyles, className)}>
-            {children}
+        <figure className={ cn(surfaceBaseStyles, className) }>
+            { children }
         </figure>
     );
 };

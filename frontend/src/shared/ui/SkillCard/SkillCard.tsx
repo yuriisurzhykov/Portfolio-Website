@@ -85,8 +85,8 @@ export const SkillCard = React.forwardRef<HTMLDivElement, SkillCardProps>(
 
         return (
             <div
-                ref={ref}
-                className={cn(
+                ref={ ref }
+                className={ cn(
                     // Layout
                     "group relative flex flex-col gap-sm",
                     // surface / border / spacing – driven by variant
@@ -103,13 +103,13 @@ export const SkillCard = React.forwardRef<HTMLDivElement, SkillCardProps>(
                     "cursor-default",
                     "focus-visible:outline-none focus-visible:shadow-focus-ring",
                     className,
-                )}
-                {...rest}
+                ) }
+                { ...rest }
             >
-                {/* Icon */}
-                {Icon && (
+                {/* Icon */ }
+                { Icon && (
                     <div
-                        className={cn(
+                        className={ cn(
                             "w-12 h-12 flex items-center justify-center",
                             "rounded-md",
                             "border border-border-default",
@@ -121,42 +121,42 @@ export const SkillCard = React.forwardRef<HTMLDivElement, SkillCardProps>(
                             "group-hover:bg-surface-raised",
                             "group-hover:border-border-highlight",
                             "group-hover:shadow-surface-deep",
-                        )}
+                        ) }
                     >
                         <Icon
-                            className={cn(
+                            className={ cn(
                                 "w-xl",
                                 "h-xl",
                                 "block",
                                 iconToneClass,
-                            )}
+                            ) }
                         />
                     </div>
-                )}
+                ) }
 
-                {/* Title */}
+                {/* Title */ }
                 <h3
-                    className={cn(
+                    className={ cn(
                         "mt-sm",
                         "text-h3",
                         "leading-tight",
                         "font-semibold",
                         "text-text-primary",
-                    )}
+                    ) }
                 >
-                    {title}
+                    { title }
                 </h3>
 
-                {/* Description */}
+                {/* Description */ }
                 <p
-                    className={cn(
+                    className={ cn(
                         "mt-xs",
                         "text-body",
                         "leading-relaxed",
                         "text-text-secondary",
-                    )}
+                    ) }
                 >
-                    {desc}
+                    { desc }
                 </p>
             </div>
         );

@@ -23,20 +23,20 @@ const toneClasses: Record<EyebrowTone, string> = {
  */
 export const Eyebrow = React.forwardRef<HTMLParagraphElement, EyebrowProps>(
     function Eyebrow(
-        { tone = "muted", className, children, ...rest }: EyebrowProps,
+        {tone = "muted", className, children, ...rest}: EyebrowProps,
         ref: ForwardedRef<HTMLParagraphElement>,
     ) {
         return (
             <p
-                ref={ref}
-                className={cn(
+                ref={ ref }
+                className={ cn(
                     "font-mono font-bold text-micro uppercase tracking-[0.12em]",
                     toneClasses[tone],
                     className,
-                )}
-                {...rest}
+                ) }
+                { ...rest }
             >
-                {children}
+                { children }
             </p>
         );
     },

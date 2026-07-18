@@ -2,14 +2,12 @@
   "nav.work": "Work",
   "nav.journal": "Journal",
   "nav.contact": "Contact",
-
   "status.available": "AVAILABLE FOR PROJECTS",
   "status.engaged": "CURRENTLY ENGAGED",
   "status.limited": "LIMITED AVAILABILITY",
   "status.shipped": "SHIPPED",
   "status.inProgress": "IN PROGRESS",
   "status.upcoming": "{date} · upcoming",
-
   "eyebrow.stack": "STACK",
   "eyebrow.howIWork": "HOW I WORK",
   "eyebrow.selectedWork": "SELECTED WORK",
@@ -19,7 +17,6 @@
   "eyebrow.caseStudy": "CASE STUDY",
   "eyebrow.relatedProject": "RELATED PROJECT",
   "eyebrow.relatedJournalEntry": "RELATED JOURNAL ENTRY",
-
   "button.viewArchitecture": "View the architecture",
   "button.readJournal": "Read the journal",
   "button.getInTouch": "Get in touch",
@@ -30,7 +27,6 @@
   "button.backHome": "back home",
   "button.backToWork": "back to work",
   "button.backToJournal": "back to journal",
-
   "work.ledger.year": "YEAR",
   "work.ledger.system": "SYSTEM",
   "work.ledger.stack": "STACK",
@@ -40,14 +36,11 @@
   "work.caseStudy.shipped": "Shipped: {date}",
   "work.caseStudy.target": "Target: {date}",
   "work.caseStudy.role": "Role: {role}",
-
   "journal.readMins": "{count} min read",
-
   "footer.copyright": "© {year} {name}",
   "footer.github": "GitHub",
   "footer.linkedin": "LinkedIn",
   "footer.email": "Email",
-
   "label.system.language.toggle": "Toggle Language",
   "label.system.language.english": "English",
   "label.system.language.russian": "Russian",

@@ -36,7 +36,7 @@ const flowBusBody: ContentBlock[] = [
             ru: "Каждый модуль в приложении хотел общаться с каждым другим модулем. Я устал писать один и тот же listener-интерфейс в двадцатый раз — и построил то, что мне действительно было нужно.",
         },
     },
-    { type: "heading", text: { en: "The problem", ru: "Проблема" } },
+    {type: "heading", text: {en: "The problem", ru: "Проблема"}},
     {
         type: "paragraph",
         text: {
@@ -51,7 +51,7 @@ const flowBusBody: ContentBlock[] = [
             ru: "Обычное решение — event bus. Обычный event bus — это куча boilerplate'а: listener-интерфейс на каждый тип события, ручная регистрация и отписка, и тонкая утечка памяти, которая ждёт того единственного экрана, где вы забудете отписаться.",
         },
     },
-    { type: "heading", text: { en: "The idea", ru: "Идея" } },
+    {type: "heading", text: {en: "The idea", ru: "Идея"}},
     {
         type: "paragraph",
         text: {
@@ -81,7 +81,7 @@ scope.launch {
     }
 }`,
     },
-    { type: "heading", text: { en: "Sticky and persistable events", ru: "Sticky- и персистентные события" } },
+    {type: "heading", text: {en: "Sticky and persistable events", ru: "Sticky- и персистентные события"}},
     {
         type: "paragraph",
         text: {
@@ -89,7 +89,10 @@ scope.launch {
             ru: "Не каждое событие подходит под модель fire-and-forget. Некоторым нужно быть воспроизведёнными для опоздавшего подписчика (sticky-события), некоторым — полностью переживать смерть процесса. Для последних достаточно одной аннотации — KSP-плагин генерирует Room-сущность, DAO и код сериализации за кулисами, так что персистентность события никогда не требует ручного написания схемы.",
         },
     },
-    { type: "heading", text: { en: "Permissions, caught at compile time", ru: "Права доступа, пойманные на этапе компиляции" } },
+    {
+        type: "heading",
+        text: {en: "Permissions, caught at compile time", ru: "Права доступа, пойманные на этапе компиляции"}
+    },
     {
         type: "paragraph",
         text: {
@@ -97,7 +100,7 @@ scope.launch {
             ru: "Один класс багов повторялся снова и снова — модуль подписывался на событие, к которому у него в принципе не должно было быть доступа. Система прав доступа, проверяемая компилятором, закрыла это полностью — правила лежат рядом с определением события, и компилятор отклоняет подписку ещё до сборки кода.",
         },
     },
-    { type: "heading", text: { en: "What it changed", ru: "Что это изменило" } },
+    {type: "heading", text: {en: "What it changed", ru: "Что это изменило"}},
     {
         type: "paragraph",
         text: {
@@ -122,7 +125,7 @@ const navigationEngineBody: ContentBlock[] = [
             ru: "Navigation Component создан для приложений, где у всех экранов примерно одинаковые правила. У нас было не так — и притворяться иначе не вариант.",
         },
     },
-    { type: "heading", text: { en: "The mismatch", ru: "Несоответствие" } },
+    {type: "heading", text: {en: "The mismatch", ru: "Несоответствие"}},
     {
         type: "paragraph",
         text: {
@@ -130,7 +133,10 @@ const navigationEngineBody: ContentBlock[] = [
             ru: "Некоторым экранам нужен был таймаут сессии. Некоторые не могли отрендериться без принятой privacy policy. Некоторые были закрыты по уровню доступа. У Navigation Component нет понятия ни об одном из этих правил — каждое из них пришлось бы держать снаружи графа навигации, проверять вручную на каждой точке входа и перепроверять при добавлении каждого нового экрана.",
         },
     },
-    { type: "heading", text: { en: "A requirements graph, not a route table", ru: "Граф требований, а не таблица маршрутов" } },
+    {
+        type: "heading",
+        text: {en: "A requirements graph, not a route table", ru: "Граф требований, а не таблица маршрутов"}
+    },
     {
         type: "paragraph",
         text: {
@@ -138,7 +144,7 @@ const navigationEngineBody: ContentBlock[] = [
             ru: "Граф навигации движка несёт больше, чем маршруты — каждый экран объявляет собственные требования по таймауту, сессии, privacy и доступу прямо в графе, и движок проверяет всё это до показа экрана. Тот же граф одновременно описывает и меню: каждый пункт получает правила appearance и visibility через классы-расширения, так что меню собираются автоматически, а не вручную под каждый экран.",
         },
     },
-    { type: "heading", text: { en: "Intents instead of direct calls", ru: "Intent'ы вместо прямых вызовов" } },
+    {type: "heading", text: {en: "Intents instead of direct calls", ru: "Intent'ы вместо прямых вызовов"}},
     {
         type: "paragraph",
         text: {
@@ -146,7 +152,7 @@ const navigationEngineBody: ContentBlock[] = [
             ru: "Навигация происходит через отдельный pipeline intent'ов, который умеет дедуплицировать, применять debounce и выстраивать очередь — свойства, которых прямые вызовы навигации не получают бесплатно, и которые становятся важны, когда навигацию может инициировать сразу несколько модулей.",
         },
     },
-    { type: "heading", text: { en: "Where it stands now", ru: "Где всё это сейчас" } },
+    {type: "heading", text: {en: "Where it stands now", ru: "Где всё это сейчас"}},
     {
         type: "paragraph",
         text: {
@@ -164,7 +170,7 @@ const architectureNotShippedBody: ContentBlock[] = [
             ru: "Не каждая хорошая идея доходит до реализации. Эта не дошла — и я думаю, что это было правильным решением.",
         },
     },
-    { type: "heading", text: { en: "The problem", ru: "Проблема" } },
+    {type: "heading", text: {en: "The problem", ru: "Проблема"}},
     {
         type: "paragraph",
         text: {
@@ -172,7 +178,7 @@ const architectureNotShippedBody: ContentBlock[] = [
             ru: "Платформа зависела от hidden API Android для нескольких системных операций — того, до чего обычное приложение вообще не должно дотягиваться. Каждый такой вызов приходил с трениями по правам доступа, а способ, которым мы это делали, делал весь подход хрупким к обновлениям платформы.",
         },
     },
-    { type: "heading", text: { en: "The idea", ru: "Идея" } },
+    {type: "heading", text: {en: "The idea", ru: "Идея"}},
     {
         type: "paragraph",
         text: {
@@ -180,7 +186,7 @@ const architectureNotShippedBody: ContentBlock[] = [
             ru: "Разделить приложение на два: system-service компонент, собираемый вместе с BSP и имеющий реальный доступ к hidden API, и собственно приложение, которое обращается к нему через AIDL/IPC за всем, что требует привилегий. Приложению больше не пришлось бы напрямую трогать hidden API — оно просто просило бы сервис сделать это.",
         },
     },
-    { type: "heading", text: { en: "Why it didn't ship", ru: "Почему это не пошло в релиз" } },
+    {type: "heading", text: {en: "Why it didn't ship", ru: "Почему это не пошло в релиз"}},
     {
         type: "paragraph",
         text: {
@@ -188,7 +194,7 @@ const architectureNotShippedBody: ContentBlock[] = [
             ru: "На бумаге это была правильная архитектура. Но это был реальный кусок инженерного времени, которого у команды не было в запасе — для проблемы, у которой уже было более дешёвое, хоть и менее элегантное решение: vendor предоставлял stub jar для компиляции, а настоящая реализация лежала в отдельном jar на устройстве во время выполнения. В релиз пошло именно это.",
         },
     },
-    { type: "heading", text: { en: "The lesson", ru: "Вывод" } },
+    {type: "heading", text: {en: "The lesson", ru: "Вывод"}},
     {
         type: "paragraph",
         text: {
@@ -206,7 +212,7 @@ const testingCultureBody: ContentBlock[] = [
             ru: "Отсутствующую культуру тестирования не исправить служебной запиской. Её исправляют, тихо делая нужное каждый раз — до тех пор, пока это не становится нормой.",
         },
     },
-    { type: "heading", text: { en: "The starting point", ru: "Точка отсчёта" } },
+    {type: "heading", text: {en: "The starting point", ru: "Точка отсчёта"}},
     {
         type: "paragraph",
         text: {
@@ -214,7 +220,7 @@ const testingCultureBody: ContentBlock[] = [
             ru: "До FlowBus команда не писала unit-тесты. Не из-за несогласия с практикой — это просто не было частью того, как строилась работа, и никто не сделал это частью стандартного PR.",
         },
     },
-    { type: "heading", text: { en: "What changed", ru: "Что изменилось" } },
+    {type: "heading", text: {en: "What changed", ru: "Что изменилось"}},
     {
         type: "paragraph",
         text: {
@@ -222,7 +228,7 @@ const testingCultureBody: ContentBlock[] = [
             ru: "Я начал прикреплять unit-тесты к каждому pull request по FlowBus, покрывая тот функционал, который затрагивал конкретный PR. Без объявлений, без директив — просто последовательный пример того, как выглядит завершённый PR.",
         },
     },
-    { type: "heading", text: { en: "The adoption curve", ru: "Кривая принятия" } },
+    {type: "heading", text: {en: "The adoption curve", ru: "Кривая принятия"}},
     {
         type: "paragraph",
         text: {
@@ -230,7 +236,7 @@ const testingCultureBody: ContentBlock[] = [
             ru: "Спустя примерно полгода команда сама писала тесты под каждую фичу, без каких-либо просьб. Привычка перешла из PR одного человека в стандартный рабочий процесс команды.",
         },
     },
-    { type: "heading", text: { en: "Where it stands now", ru: "Где это сейчас" } },
+    {type: "heading", text: {en: "Where it stands now", ru: "Где это сейчас"}},
     {
         type: "paragraph",
         text: {
@@ -248,7 +254,7 @@ export const journal: JournalPost[] = [
             en: "Why I Built FlowBus: An Event Bus Without the Boilerplate",
             ru: "Почему я написал FlowBus: шина событий без boilerplate'а",
         },
-        category: { en: "Architecture", ru: "Архитектура" },
+        category: {en: "Architecture", ru: "Архитектура"},
         readMins: 6,
         excerpt: {
             en: "Every module wanted to talk to every other module, and I was tired of writing the same listener interfaces. Here's the system I built instead — persistent events, generated code, and a permissions model that catches mistakes at compile time.",
@@ -265,7 +271,7 @@ export const journal: JournalPost[] = [
             en: "An Architecture I Chose Not to Ship",
             ru: "Архитектура, которую я решил не выпускать в релиз",
         },
-        category: { en: "Platform", ru: "Платформа" },
+        category: {en: "Platform", ru: "Платформа"},
         readMins: 5,
         excerpt: {
             en: "We had a real problem with hidden APIs and permissions. I designed a clean fix for it — and then didn't build it, because the honest cost didn't match what the team could actually spend.",
@@ -281,7 +287,7 @@ export const journal: JournalPost[] = [
             en: "Why I Replaced the Navigation Component Entirely",
             ru: "Почему я полностью заменил Navigation Component",
         },
-        category: { en: "Architecture", ru: "Архитектура" },
+        category: {en: "Architecture", ru: "Архитектура"},
         readMins: 7,
         excerpt: {
             en: "Off-the-shelf navigation didn't understand session timeouts, privacy gating, or per-screen access rules. So I built a navigation engine that does — and there's no Google navigation library left in the app.",
@@ -298,7 +304,7 @@ export const journal: JournalPost[] = [
             en: "From Zero Unit Tests to 3,000+",
             ru: "От нуля unit-тестов до 3000+",
         },
-        category: { en: "Process", ru: "Процесс" },
+        category: {en: "Process", ru: "Процесс"},
         readMins: 4,
         excerpt: {
             en: "The team had never written a unit test before I started on FlowBus. Attaching tests to every PR, without making an announcement out of it, was enough to change that.",
@@ -316,7 +322,7 @@ export const journal: JournalPost[] = [
             en: "Notes from the ONVIF Camera Library — draft",
             ru: "Заметки о библиотеке ONVIF-камер — черновик",
         },
-        category: { en: "Camera", ru: "Камера" },
+        category: {en: "Camera", ru: "Камера"},
         readMins: 0,
         excerpt: {
             en: "Currently in progress. Check back soon.",

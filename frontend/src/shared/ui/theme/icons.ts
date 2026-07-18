@@ -1,4 +1,4 @@
-import {Code2, Cpu, FolderGit2, Github, Linkedin, Mail, Menu, Rocket} from "lucide-react";
+import { Code2, Cpu, FolderGit2, Github, Linkedin, Mail, Menu, Rocket } from "lucide-react";
 import React from "react";
 
 export type IconName =

@@ -21,7 +21,7 @@ export type LinkButtonProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
  * react-router <Link> so navigating between pages doesn't reload the app.
  */
 export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(
-    ({ className, variant = "primary", size = "md", fullWidth, href, children, ...rest }, ref) => {
+    ({className, variant = "primary", size = "md", fullWidth, href, children, ...rest}, ref) => {
         const classes = cn(
             buttonBaseStyles,
             buttonSizeClasses[size],
@@ -34,15 +34,15 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(
 
         if (isInternalRoute) {
             return (
-                <Link ref={ref} to={href} className={classes} {...rest}>
-                    {children}
+                <Link ref={ ref } to={ href } className={ classes } { ...rest }>
+                    { children }
                 </Link>
             );
         }
 
         return (
-            <a ref={ref} href={href} className={classes} {...rest}>
-                {children}
+            <a ref={ ref } href={ href } className={ classes } { ...rest }>
+                { children }
             </a>
         );
     },

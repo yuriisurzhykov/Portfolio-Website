@@ -79,12 +79,12 @@ export default class SummaryReporter implements Reporter {
         const summary: Summary = {
             generatedAt: new Date().toISOString(),
             overallStatus: result.status,
-            counts: { passed, failed, skipped, total: this.entries.length },
+            counts: {passed, failed, skipped, total: this.entries.length},
             a11yViolationCount,
             tests: this.entries,
         };
 
-        fs.mkdirSync(path.dirname(this.outputFile), { recursive: true });
+        fs.mkdirSync(path.dirname(this.outputFile), {recursive: true});
         fs.writeFileSync(this.outputFile, JSON.stringify(summary, null, 2), "utf-8");
     }
 }

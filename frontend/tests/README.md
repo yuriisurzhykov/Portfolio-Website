@@ -280,6 +280,7 @@ GitHub Pages (section 9), and — on PRs — post/update a sticky summary commen
 `frontend/test-results/summary.json` (the file our custom `summary-reporter.ts` writes).
 
 Where to look:
+
 - **PR check status** — the "Visual & Accessibility Tests" check on the PR itself.
 - **PR comment** — a single sticky comment (edited in place on every push, not duplicated) with
   pass/fail counts and any accessibility violations found, plus a link to the full report.
@@ -444,7 +445,20 @@ pins the Chromium engine) and override just the `viewport`/`isMobile`/`hasTouch`
 tablet/mobile-shaped viewports while staying on Chromium:
 
 ```ts
-use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+use: { ...
+    devices["Desktop Chrome"], viewport
+:
+    {
+        width: 390, height
+    :
+        844
+    }
+,
+    isMobile: true, hasTouch
+:
+    true
+}
+,
 ```
 
 **Takeaway for later:** if multi-browser (WebKit/Firefox) support is ever added, remember to run
@@ -490,6 +504,7 @@ the contrast-ratio math.**
 **Attempt 2 — accepted, partial: `accent.onSolid` / `status.onSolid` (dark ink on solid fill).**
 The actual root cause was that a single token (`accent.solid` / `status.success` / `status.warning`)
 was being reused for two incompatible roles:
+
 - as a **background fill** (buttons, `StatusBadge` pills, dots, `ProgressBar`) — must stay vibrant,
 - as the **foreground text color** drawn on a pale ~12%-opacity tint of the same color (the old
   `StatusBadge` style) — this is what actually failed contrast (ratio 1.5-2.6 against light-theme
@@ -502,6 +517,7 @@ colored text" to "solid fill + dark ink text", reusing the site's own dark-theme
 / `text-status-on-solid`). Dark ink clears **7.5:1** on the orange, **10.4:1** on amber, **11.3:1**
 on green — huge margins, and it's the *same* ink color in both site themes since the fill itself
 is theme-invariant. Applied to:
+
 - `Button.tsx` primary variant (`text-text-inverse` → `text-accent-on-solid`) — fixes the
   `.h-14` CTA-button violation.
 - `StatusBadge.tsx` — all three colored tones (`success`/`warning`/`accent`) switched from
@@ -681,7 +697,8 @@ comment) rather than caught during review:
    `Checkout` step whose `uses:` pointed at `actions/setup-node@v4` (with Node version/cache
    inputs) instead of `actions/checkout@v4` — and the separate `Checkout PR branch` (`gh pr
    checkout ...`) and `Setup Node` steps had vanished entirely, apparently swallowed by the same
-   bad merge-conflict resolution. Confirmed by diffing `git show origin/master:.github/workflows/accept-visual-baselines.yml`
+   bad merge-conflict resolution. Confirmed by diffing
+   `git show origin/master:.github/workflows/accept-visual-baselines.yml`
    against what this file should contain — the job never actually checked out the repository
    before trying to `npm ci` inside `frontend/`, which doesn't exist without a checkout. Fixed by
    restoring the three steps as distinct entries: `Checkout` (`actions/checkout@v4`, no inputs),
@@ -819,23 +836,23 @@ confirmed visually against the same screenshot the user flagged, then re-ran the
   404'd right after the check finished — confirmed via a live re-fetch minutes later that it was
   just GitHub Pages' normal build/propagation lag for a brand-new path, not a broken publish.
 - **Master's baseline auto-commit was actually failing** (see the `[RESOLVED]` entry in section
-  11) — found via the GitHub API (`.../actions/runs/<id>/jobs`), which showed the "Commit updated
-  baselines" step with `conclusion: "failure"` even though the overall run "looked" mostly fine.
-  Root cause: a repository ruleset on `master` (PR required, status checks required, CodeQL
-  required) blocks direct pushes from anything, including a bot with `contents: write`.
+    11) — found via the GitHub API (`.../actions/runs/<id>/jobs`), which showed the "Commit updated
+        baselines" step with `conclusion: "failure"` even though the overall run "looked" mostly fine.
+        Root cause: a repository ruleset on `master` (PR required, status checks required, CodeQL
+        required) blocks direct pushes from anything, including a bot with `contents: write`.
 - Discussed the actual workflow the user wants: open a PR, see a visual check fail because page
   content changed (not a bug), explicitly accept that, and have it land without a second
   master-side build. Redesigned around that instead of patching the master auto-commit:
-  - Simplified `visual-tests.yml`: removed `--update-snapshots`/the auto-commit step entirely;
-    `master` now runs the exact same compare-only check as `pull_request`.
-  - Added `.github/workflows/accept-visual-baselines.yml`, a new `issue_comment`-triggered
-    workflow: `/update-snapshots` on a PR checks out that PR's branch (`gh pr checkout`),
-    regenerates baselines, and pushes straight to it — never touching `master` — restricted to
-    `OWNER`/`MEMBER`/`COLLABORATOR` commenters only.
-  - Considered masking the dynamic content areas of `home`/`work-list`/`journal-list` first (a
-    stray, incomplete `data-visual-mask` attribute briefly landed in `WorkListPage.tsx` from this
-    exploration) — dropped in favor of `/update-snapshots`, which solves the same friction more
-    generally; reverted that attribute.
+    - Simplified `visual-tests.yml`: removed `--update-snapshots`/the auto-commit step entirely;
+      `master` now runs the exact same compare-only check as `pull_request`.
+    - Added `.github/workflows/accept-visual-baselines.yml`, a new `issue_comment`-triggered
+      workflow: `/update-snapshots` on a PR checks out that PR's branch (`gh pr checkout`),
+      regenerates baselines, and pushes straight to it — never touching `master` — restricted to
+      `OWNER`/`MEMBER`/`COLLABORATOR` commenters only.
+    - Considered masking the dynamic content areas of `home`/`work-list`/`journal-list` first (a
+      stray, incomplete `data-visual-mask` attribute briefly landed in `WorkListPage.tsx` from this
+      exploration) — dropped in favor of `/update-snapshots`, which solves the same friction more
+      generally; reverted that attribute.
 - Also fixed the permanent (non-transient) bare-Pages-root 404 — see the `[RESOLVED]` entry in
   section 11 — by publishing a small landing page via `.github/scripts/generate-pages-index.mjs`.
 - **File relocated:** this document moved from `VISUAL_TESTING_GUIDE.md` at the repo root to

@@ -1,5 +1,5 @@
-import * as React from "react";
 import type { ReactNode } from "react";
+import * as React from "react";
 import { cn } from "@/shared/lib";
 import type { CodeBlockLabels } from "./CodeBlock.types";
 
@@ -44,11 +44,11 @@ type CopyIconProps = {
     className?: string;
 };
 
-const CopyIcon: React.FC<CopyIconProps> = ({ className }) => (
+const CopyIcon: React.FC<CopyIconProps> = ({className}) => (
     <svg
         viewBox="0 0 24 24"
         aria-hidden="true"
-        className={cn("inline-block align-middle", className)}
+        className={ cn("inline-block align-middle", className) }
     >
         <rect
             x="9"
@@ -59,7 +59,7 @@ const CopyIcon: React.FC<CopyIconProps> = ({ className }) => (
             ry="2"
             fill="none"
             stroke="currentColor"
-            strokeWidth={1.5}
+            strokeWidth={ 1.5 }
         />
         <rect
             x="4"
@@ -70,7 +70,7 @@ const CopyIcon: React.FC<CopyIconProps> = ({ className }) => (
             ry="2"
             fill="none"
             stroke="currentColor"
-            strokeWidth={1.5}
+            strokeWidth={ 1.5 }
         />
     </svg>
 );
@@ -91,45 +91,45 @@ export const CodeBlockToolbar: React.FC<CodeBlockToolbarProps> = ({
     const showCopyButton = copyable && canCopy;
 
     return (
-        <div className={toolbarBaseStyles}>
+        <div className={ toolbarBaseStyles }>
             <div className="flex items-center gap-xxs">
                 <span
-                    className={cn(trafficLightDotStyles, "bg-status-error")}
+                    className={ cn(trafficLightDotStyles, "bg-status-error") }
                 />
                 <span
-                    className={cn(trafficLightDotStyles, "bg-status-warning")}
+                    className={ cn(trafficLightDotStyles, "bg-status-warning") }
                 />
                 <span
-                    className={cn(trafficLightDotStyles, "bg-status-success")}
+                    className={ cn(trafficLightDotStyles, "bg-status-success") }
                 />
             </div>
 
-            {title && (
+            { title && (
                 <div className="flex-1 px-sm text-center text-caption text-code-panel-title truncate">
-                    {title}
+                    { title }
                 </div>
-            )}
+            ) }
 
-            {showCopyButton ? (
+            { showCopyButton ? (
                 <button
                     type="button"
-                    className={copyButtonStyles}
-                    onClick={onCopy}
+                    className={ copyButtonStyles }
+                    onClick={ onCopy }
                     aria-label={
                         copied ? labels.copiedButton : labels.copyButton
                     }
                 >
                     <span className="inline-flex items-center">
-                        <CopyIcon />
+                        <CopyIcon/>
                     </span>
                     <span className="hidden sm:inline">
-                        {copied ? labels.copiedButton : labels.copyButton}
+                        { copied ? labels.copiedButton : labels.copyButton }
                     </span>
                 </button>
             ) : (
                 // Balancing layout right, when copying is disabled
-                <div className="w-sm" aria-hidden="true" />
-            )}
+                <div className="w-sm" aria-hidden="true"/>
+            ) }
         </div>
     );
 };

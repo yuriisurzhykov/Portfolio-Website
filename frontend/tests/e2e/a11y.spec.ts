@@ -16,12 +16,12 @@ const BLOCKING_IMPACTS = new Set(["critical", "serious"]);
 
 for (const entry of pagesManifest) {
     for (const theme of THEMES) {
-        test(`${entry.name} @ ${theme} - a11y`, async ({ page }, testInfo) => {
+        test(`${ entry.name } @ ${ theme } - a11y`, async ({page}, testInfo) => {
             await seedTheme(page, theme);
             await page.goto(entry.path);
             await page.waitForLoadState("networkidle");
 
-            const results = await new AxeBuilder({ page })
+            const results = await new AxeBuilder({page})
                 .withTags(["wcag2a", "wcag2aa", "wcag21aa", "best-practice"])
                 .analyze();
 
@@ -42,8 +42,8 @@ function formatViolations(violations: AxeViolation[]): string {
 
     const lines = violations.map((violation) => {
         const selectors = violation.nodes.map((node) => node.target.join(" ")).join(", ");
-        return `- [${violation.impact}] ${violation.id}: ${violation.help} (${selectors})`;
+        return `- [${ violation.impact }] ${ violation.id }: ${ violation.help } (${ selectors })`;
     });
 
-    return `Accessibility violations found:\n${lines.join("\n")}`;
+    return `Accessibility violations found:\n${ lines.join("\n") }`;
 }

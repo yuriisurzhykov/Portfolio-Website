@@ -55,44 +55,45 @@ export const CodeBlockContent: React.FC<CodeBlockContentProps> = ({
         // operable via keyboard (arrow keys once focused) — axe-core's `scrollable-region-focusable`
         // rule flags scrollable containers that can only be scrolled with a mouse/touch.
         <div
-            className={cn("relative overflow-x-auto", variantStyles[variant])}
-            tabIndex={0}
+            className={ cn("relative overflow-x-auto", variantStyles[variant]) }
+            tabIndex={ 0 }
             role="region"
-            aria-label={`Code sample${language ? `, ${language}` : ""}`}
+            aria-label={ `Code sample${ language ? `, ${ language }` : "" }` }
         >
             <pre
-                ref={innerRef}
-                className={cn(
+                ref={ innerRef }
+                className={ cn(
                     "min-w-full whitespace-pre text-left",
-                    `language-${language}`,
+                    `language-${ language }`,
                     className
-                )}
-                {...rest}
+                ) }
+                { ...rest }
             >
-                {hasStructuredLines && htmlLines ? (
+                { hasStructuredLines && htmlLines ? (
                     <code className="table w-full border-collapse">
-                        {htmlLines.map((line, index) => (
-                            <span key={index} className="table-row align-top">
-                                <span className="table-cell pr-md text-right select-none text-caption text-code-panel-line-number">
-                                    {startLine + index}
+                        { htmlLines.map((line, index) => (
+                            <span key={ index } className="table-row align-top">
+                                <span
+                                    className="table-cell pr-md text-right select-none text-caption text-code-panel-line-number">
+                                    { startLine + index }
                                 </span>
                                 <span
                                     className="table-cell pl-sm"
-                                    dangerouslySetInnerHTML={{
+                                    dangerouslySetInnerHTML={ {
                                         __html:
                                             line.length === 0
                                                 ? "&nbsp;"
                                                 : line,
-                                    }}
+                                    } }
                                 />
                             </span>
-                        ))}
+                        )) }
                     </code>
                 ) : typeof highlightedHtml === "string" ? (
-                    <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+                    <code dangerouslySetInnerHTML={ {__html: highlightedHtml} }/>
                 ) : (
-                    <code>{children}</code>
-                )}
+                    <code>{ children }</code>
+                ) }
             </pre>
         </div>
     );
