@@ -1,6 +1,6 @@
 name: Visual & Accessibility Tests
 
-# Runs the Playwright visual-regression + accessibility suite (see VISUAL_TESTING_GUIDE.md) on
+# Runs the Playwright visual-regression + accessibility suite (see frontend/tests/README.md) on
 # every pull request and on every push to master. PRs compare against the baselines already
 # committed in tests/visual-snapshots/; master re-generates those baselines and commits any
 # changes back (see the "Update baselines" step below), so the next PR always diffs against the

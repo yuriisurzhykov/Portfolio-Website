@@ -252,7 +252,7 @@ baseline yourself instead of waiting for the master-branch auto-commit (section 
 
 ## 7. How this works in CI
 
-Workflow file: [`.github/workflows/visual-tests.yml`](.github/workflows/visual-tests.yml). One
+Workflow file: [`.github/workflows/visual-tests.yml`](../../.github/workflows/visual-tests.yml). One
 job, `test`, runs on two triggers with slightly different behavior:
 
 - **`pull_request`** (opened/synchronize/reopened, any branch): `npx playwright test` — compares
@@ -268,7 +268,7 @@ job, `test`, runs on two triggers with slightly different behavior:
 Regardless of outcome, the job always (`if: always()`) goes on to: commit any changed baseline
 PNGs (master only, section 8), publish the HTML report to GitHub Pages (section 9), and — on PRs
 — post/update a sticky summary comment built by
-[`.github/scripts/format-summary.mjs`](.github/scripts/format-summary.mjs) from
+[`.github/scripts/format-summary.mjs`](../../.github/scripts/format-summary.mjs) from
 `frontend/test-results/summary.json` (the file our custom `summary-reporter.ts` writes).
 
 Where to look:

@@ -12,7 +12,7 @@ import { work } from "@/data/work";
 const monthYearFormatter = new Intl.DateTimeFormat("en-US", {month: "long", year: "numeric"});
 
 export function JournalDetailPage() {
-    const {ln} = useTranslation();
+    const {ln, pick} = useTranslation();
     const {slug} = useParams<{ slug: string }>();
     const post = journal.find((entry) => entry.slug === slug);
 
@@ -31,14 +31,14 @@ export function JournalDetailPage() {
                 </Link>
 
                 <div className="flex gap-sm items-center mt-7 mb-[18px] flex-wrap">
-                    <StatusBadge tone="accent">{ post.category }</StatusBadge>
+                    <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge>
                     <Text variant="caption" tone="faint" className="font-mono">
                         { monthYearFormatter.format(new Date(post.date)) } · { ln("journal.readMins", {count: post.readMins}) }
                     </Text>
                 </div>
 
                 <h1 className="m-0 mb-5 font-extrabold text-[clamp(30px,4.2vw,44px)] leading-[1.15] tracking-tight text-text-primary">
-                    { post.title }
+                    { pick(post.title) }
                 </h1>
 
                 <ContentBlocks blocks={ post.body }/>
@@ -52,7 +52,7 @@ export function JournalDetailPage() {
                                 { relatedWork.title }
                             </Text>
                             <Text as="div" variant="caption" tone="muted">
-                                { relatedWork.summary }
+                                { pick(relatedWork.summary) }
                             </Text>
                         </div>
                         <LinkButton href={ `/work/${ relatedWork.slug }` } variant="primary">

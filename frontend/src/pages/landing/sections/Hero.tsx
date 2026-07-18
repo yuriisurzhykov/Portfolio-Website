@@ -9,7 +9,7 @@ import { hero } from "@/data/hero";
 import { cn } from "@/shared/lib/utils";
 
 export function Hero() {
-    const { ln } = useTranslation();
+    const { ln, pick } = useTranslation();
 
     return (
         <section
@@ -33,7 +33,7 @@ export function Hero() {
             <div className="relative grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-[48px] items-center">
                 <div>
                     <Eyebrow tone="accent" className="mb-[18px]">
-                        {site.role}
+                        {pick(site.role)}
                     </Eyebrow>
 
                     <h1 className="m-0 mb-[22px] font-extrabold text-[clamp(40px,5.5vw,64px)] leading-[1.02] tracking-tight text-text-primary">
@@ -46,11 +46,11 @@ export function Hero() {
                     </h1>
 
                     <Text as="p" variant="body-lg" tone="secondary" className="mb-[30px] max-w-[46ch]">
-                        {hero.subhead}
+                        {pick(hero.subhead)}
                     </Text>
 
                     <div className="flex flex-wrap gap-[10px] mb-[36px]">
-                        {hero.chips.map((chip) => (
+                        {pick(hero.chips).map((chip) => (
                             <Tag key={chip} variant="outline">
                                 {chip}
                             </Tag>
@@ -88,7 +88,7 @@ export function Hero() {
                             {node.label}
                             <br />
                             <span className="font-mono font-normal text-[10.5px] text-text-muted">
-                                {node.sublabel}
+                                {pick(node.sublabel)}
                             </span>
                         </div>
                     ))}

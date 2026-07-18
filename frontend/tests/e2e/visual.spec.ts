@@ -10,7 +10,7 @@ for (const entry of visualFixturesManifest) {
             await page.waitForLoadState("networkidle");
 
             // Array name -> nested folder: tests/visual-snapshots/<page>/<theme>-<viewport>.png,
-            // one folder per page instead of 30 flat files (see VISUAL_TESTING_GUIDE.md, section 4).
+            // one folder per page instead of 30 flat files (see frontend/tests/README.md, section 4).
             await expect(page).toHaveScreenshot([entry.name, `${theme}.png`], {
                 fullPage: true,
             });

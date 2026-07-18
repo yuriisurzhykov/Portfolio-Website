@@ -20,7 +20,7 @@ import { pagesManifest, type PageManifestEntry } from "./pages.manifest";
  * When the template gains a new visual variant worth guarding (e.g. a case study with no
  * `heroImage`, or a post with an image gallery block), add its path below — do NOT add a flag to
  * `WorkItem`/`JournalPost` for this; those types stay unaware of testing on principle (see
- * VISUAL_TESTING_GUIDE.md, section 4).
+ * frontend/tests/README.md, section 4).
  */
 
 const FIXTURE_PATHS: string[] = ["/", "/work", "/work/navigation-engine", "/journal", "/journal/flowbus"];

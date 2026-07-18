@@ -38,6 +38,7 @@
   "work.caseStudy.stackHeading": "Стек",
   "work.caseStudy.started": "Начато: {date}",
   "work.caseStudy.shipped": "Готово: {date}",
+  "work.caseStudy.target": "Цель: {date}",
   "work.caseStudy.role": "Роль: {role}",
 
   "journal.readMins": "{count} мин чтения",
@@ -50,6 +51,8 @@
   "label.system.language.toggle": "Переключить язык",
   "label.system.language.english": "English",
   "label.system.language.russian": "Русский",
+  "label.button.language.en": "EN",
+  "label.button.language.ru": "RU",
   "label.aria.theme.toggle.section.description": "Настройка темы",
   "label.theme.toggle.caption": "Тема",
   "label.button.theme.switch.light": "Светлая",

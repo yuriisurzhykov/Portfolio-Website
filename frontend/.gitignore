@@ -5,7 +5,7 @@
 *.tsbuildinfo
 
 # Playwright — generated on every run, never commit. tests/visual-snapshots/ is NOT listed here
-# on purpose: those PNGs are the committed baseline "references" (see VISUAL_TESTING_GUIDE.md).
+# on purpose: those PNGs are the committed baseline "references" (see tests/README.md).
 /test-results/
 /playwright-report/
 /blob-report/

@@ -1,5 +1,5 @@
 import React, { createContext, useEffect, useState } from "react";
-import type { I18nContextType, Language, LanguageProps } from "./types.ts";
+import type { I18nContextType, Language, LanguageProps, Localized } from "./types.ts";
 import { ln as lnEngine, setLocale } from "./engine";
 
 export const I18nContext = createContext<I18nContextType | undefined>(undefined);
@@ -21,10 +21,15 @@ export const I18nProvider = ({children}: LanguageProps) => {
         setLocale(language);
     };
 
+    function pick<T>(value: Localized<T>): T {
+        return value[language] ?? value.en;
+    }
+
     const contextValue: I18nContextType = {
         language: language,
         setLanguage: changeLanguage,
-        ln: lnEngine
+        ln: lnEngine,
+        pick
     };
 
     return (

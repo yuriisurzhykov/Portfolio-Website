@@ -11,7 +11,7 @@ import { work } from "@/data/work";
 import { journal } from "@/data/journal";
 
 export function WorkDetailPage() {
-    const {ln} = useTranslation();
+    const {ln, pick} = useTranslation();
     const {slug} = useParams<{ slug: string }>();
     const item = work.find((entry) => entry.slug === slug);
 
@@ -46,9 +46,9 @@ export function WorkDetailPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-6 mb-8 font-mono text-caption text-text-muted">
-                    <span>{ ln("work.caseStudy.started", {date: caseStudy.startedLabel}) }</span>
-                    <span>{ ln("work.caseStudy.shipped", {date: caseStudy.shippedLabel}) }</span>
-                    <span>{ ln("work.caseStudy.role", {role: caseStudy.role}) }</span>
+                    <span>{ ln("work.caseStudy.started", {date: pick(caseStudy.startedLabel)}) }</span>
+                    <span>{ ln(isShipped ? "work.caseStudy.shipped" : "work.caseStudy.target", {date: pick(caseStudy.shippedLabel)}) }</span>
+                    <span>{ ln("work.caseStudy.role", {role: pick(caseStudy.role)}) }</span>
                 </div>
 
                 <PlaceholderCover
@@ -59,12 +59,12 @@ export function WorkDetailPage() {
                 />
 
                 { caseStudy.sections.map((section) => (
-                    <React.Fragment key={ section.heading }>
+                    <React.Fragment key={ pick(section.heading) }>
                         <Text as="h2" variant="h2" className="mb-3.5">
-                            { section.heading }
+                            { pick(section.heading) }
                         </Text>
                         <Text variant="body" tone="muted" className="mb-7 max-w-[70ch] leading-[1.75]">
-                            { section.body }
+                            { pick(section.body) }
                         </Text>
                     </React.Fragment>
                 )) }
@@ -75,14 +75,14 @@ export function WorkDetailPage() {
                         style={ {gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"} }
                     >
                         { caseStudy.approach.map((step) => (
-                            <div key={ step.title }
+                            <div key={ pick(step.title) }
                                  className="bg-surface-base border border-border-subtle rounded-lg p-5">
                                 <Text as="div" variant="caption"
                                       className="font-mono font-semibold text-accent-text mb-2">
-                                    { step.title }
+                                    { pick(step.title) }
                                 </Text>
                                 <Text as="div" variant="caption" tone="muted" className="leading-[1.6]">
-                                    { step.description }
+                                    { pick(step.description) }
                                 </Text>
                             </div>
                         )) }
@@ -106,10 +106,10 @@ export function WorkDetailPage() {
                         <div>
                             <Eyebrow className="mb-1.5">{ ln("eyebrow.relatedJournalEntry") }</Eyebrow>
                             <Text as="div" variant="h3" className="text-[17px]!">
-                                { relatedPost.title }
+                                { pick(relatedPost.title) }
                             </Text>
                             <Text as="div" variant="caption" tone="muted">
-                                { relatedPost.excerpt }
+                                { pick(relatedPost.excerpt) }
                             </Text>
                         </div>
                         <LinkButton href={ `/journal/${ relatedPost.slug }` } variant="primary">

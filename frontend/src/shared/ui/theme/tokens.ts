@@ -62,7 +62,7 @@ export const darkPalette = {
     text2: "#b3b0ab",
     muted: "#8a877f",
     // WCAG AA fix: the original #57544d only hit a ~2.6:1 contrast ratio against `bg`/`card`
-    // (needs >=4.5:1 for normal-size text) — see VISUAL_TESTING_GUIDE.md section 11. Lightened
+    // (needs >=4.5:1 for normal-size text) — see README.md section 11. Lightened
     // while keeping the same warm-gray hue; now ~6:1 against `bg` and ~5.3:1 even against the
     // lightest nested surface (`tagBg` composited over `card`).
     dim: "#938e83",
@@ -105,12 +105,12 @@ export const lightPalette = {
     text2: "#4a4744",
     muted: "#6b6862",
     // WCAG AA fix: the original #948f86 only hit a ~3.0:1 contrast ratio against `bg` (needs
-    // >=4.5:1) — see VISUAL_TESTING_GUIDE.md section 11. Darkened while keeping the same
+    // >=4.5:1) — see README.md section 11. Darkened while keeping the same
     // warm-gray hue; now ~5.2:1 against `bg` (and higher still against the white `card` surface).
     dim: "#6b6760",
     // REVERTED: an earlier version of this fix darkened these to #ab5327/#40724a/#806230 to
     // satisfy WCAG AA contrast on this theme's near-white background (see the color-contrast
-    // findings logged in VISUAL_TESTING_GUIDE.md, section 11) — but the result looked muddy/wrong
+    // findings logged in README.md, section 11) — but the result looked muddy/wrong
     // and was rejected on visual grounds. Reverted to the original vibrant brand colors (same as
     // dark theme) until a fix that's both accessible AND visually acceptable is agreed on. The 6
     // related axe violations are intentionally left failing for now — see section 11.
@@ -120,7 +120,7 @@ export const lightPalette = {
     // on the page/card background) — the button/badge fix (dark ink ON TOP of a vibrant solid
     // fill) doesn't apply here, there's simply no fill to put dark text on. Darkened to the same
     // hue family; ratio ~4.7-5.7 against every background this text actually appears on (page bg,
-    // white cards, the accent tint). See VISUAL_TESTING_GUIDE.md, section 11, for the numbers and
+    // white cards, the accent tint). See README.md, section 11, for the numbers and
     // the two rejected alternatives (global darken, "onSolid"-style token) that came before this.
     accentText: "#be3500",
     statusGreen: palette.codeStatusGreen,
@@ -180,7 +180,7 @@ function buildColors(neutral: typeof darkPalette) {
             solidHover: palette.accentHover,
             // Text drawn ON TOP of `accent.solid` (buttons, solid-fill badges) — deliberately
             // NOT a lighter/darker shade of the accent itself (that path is what produced the
-            // rejected "muddy" fix, see VISUAL_TESTING_GUIDE.md section 11). Instead reuses the
+            // rejected "muddy" fix, see README.md section 11). Instead reuses the
             // site's own near-black dark-theme background as an "ink" color: ~7.5:1 contrast
             // against the vibrant orange in both themes, and the accent itself stays untouched.
             onSolid: darkPalette.bg,
