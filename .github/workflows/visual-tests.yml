@@ -1,10 +1,13 @@
 name: Visual & Accessibility Tests
 
 # Runs the Playwright visual-regression + accessibility suite (see frontend/tests/README.md) on
-# every pull request and on every push to master. PRs compare against the baselines already
-# committed in tests/visual-snapshots/; master re-generates those baselines and commits any
-# changes back (see the "Update baselines" step below), so the next PR always diffs against the
-# latest merged state.
+# every pull request and on every push to master. Both events run in the exact same
+# compare-only mode (never --update-snapshots here) — master has a repository ruleset that
+# blocks direct pushes even from Actions, so this workflow never tries to commit updated
+# baselines itself. Instead, baselines are accepted BEFORE merging, from the PR itself, via the
+# `/update-snapshots` comment command handled by accept-visual-baselines.yml. By the time a PR
+# is merged its baselines are already correct, so this job's run on master is just a
+# confirmation, not a place that ever needs to write back to the repo.
 
 on:
   pull_request:
@@ -13,6 +16,8 @@ on:
     branches: [master]
 
 permissions:
+  # Still "write", not "read": the GitHub Pages publish steps below push to the (unprotected)
+  # gh-pages branch. This job never touches master/tests/visual-snapshots, only gh-pages.
   contents: write
   pull-requests: write
 
@@ -26,16 +31,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # Needed so the auto-commit step (master only) has a real branch ref to push to.
-          ref: ${{ github.head_ref || github.ref }}
-          # master has a repository ruleset that blocks direct pushes (PR required, status
-          # checks required, CodeQL required) for the default GITHUB_TOKEN. BASELINE_COMMIT_PAT
-          # is a PAT from an account listed in that ruleset's bypass list, so the baseline
-          # auto-commit below can still land directly. Falls back to GITHUB_TOKEN when the
-          # secret isn't set (e.g. on forks), which is fine for the pull_request path since it
-          # never pushes.
-          token: ${{ secrets.BASELINE_COMMIT_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -52,15 +47,9 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Run tests (compare against committed baselines)
-        if: github.event_name == 'pull_request'
+      - name: Run tests
         working-directory: frontend
         run: npx playwright test
-
-      - name: Run tests and refresh baselines
-        if: github.event_name == 'push'
-        working-directory: frontend
-        run: npx playwright test --update-snapshots
 
       - name: Determine report destination path
         id: report-dest
@@ -72,13 +61,6 @@ jobs:
             echo "dir=reports/master" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Commit updated baselines
-        if: always() && github.event_name == 'push'
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update visual regression baselines [skip ci]"
-          file_pattern: "frontend/tests/visual-snapshots/**"
-
       - name: Publish report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
@@ -86,6 +68,21 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: frontend/playwright-report
           destination_dir: ${{ steps.report-dest.outputs.dir }}
+          keep_files: true
+
+      # gh-pages branch root only ever gets reports/** written to it (destination_dir above) —
+      # nothing publishes an index.html at the actual root, so the bare Pages URL would 404
+      # forever without this (not a propagation delay, it never resolves on its own).
+      - name: Generate GitHub Pages root landing page
+        if: always()
+        run: node .github/scripts/generate-pages-index.mjs gh-pages-root "${{ github.repository }}"
+
+      - name: Publish landing page to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages-root
           keep_files: true
 
       - name: Build PR comment

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Writes a tiny static landing page for the GitHub Pages root (the gh-pages branch otherwise
 // only ever has reports/<dest>/ written to it via destination_dir, so the bare Pages URL would
-// 404 forever without this). See VISUAL_TESTING_GUIDE.md, section 9.
+// 404 forever without this). See frontend/tests/README.md, section 9.
 //
 // Usage: node generate-pages-index.mjs <outputDir> <owner/repo>
 

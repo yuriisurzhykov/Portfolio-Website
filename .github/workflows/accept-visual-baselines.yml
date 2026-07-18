@@ -1,0 +1,100 @@
+name: Accept Visual Baselines
+
+# Lets you comment `/update-snapshots` on a PR to accept new baseline screenshots — for when
+# visual-tests.yml fails not because of a real regression, but because the PAGE'S OWN CONTENT
+# changed (a new work item, a new journal post, ...). This pushes the regenerated PNGs straight
+# to the PR's own branch (never to master, which has a ruleset blocking direct pushes anyway),
+# which then re-triggers the normal visual-tests.yml check via `synchronize` — no manual local
+# Docker run needed. See frontend/tests/README.md, section 8.
+
+on:
+  issue_comment:
+    types: [ created ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  update-snapshots:
+    if: >
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/update-snapshots') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge the command
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: "+1",
+            });
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr checkout ${{ github.event.issue.number }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Regenerate baselines
+        working-directory: frontend
+        run: npx playwright test tests/e2e/visual.spec.ts --update-snapshots
+
+      - name: Commit and push to the PR branch
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/tests/visual-snapshots
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "chore: accept visual regression baselines (via /update-snapshots)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment with the result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const outcome = "${{ job.status }}";
+            const changed = "${{ steps.commit.outputs.changed }}";
+            let body;
+            if (outcome !== "success") {
+              body = "❌ `/update-snapshots` failed — check the [workflow run](" +
+                "${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.";
+            } else if (changed === "true") {
+              body = "✅ Baselines updated and pushed to this PR's branch. The visual check will re-run automatically.";
+            } else {
+              body = "ℹ️ No baseline differences found — nothing to update.";
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
