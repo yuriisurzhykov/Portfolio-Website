@@ -35,14 +35,34 @@ jobs:
               content: "+1",
             });
 
-      - name: Checkout PR branch at reviewed commit
-        uses: actions/checkout@v4
+      # SECURITY: author_association above only vets who posted the comment, not whose CODE is
+      # about to be checked out and executed. Without this guard, a trusted maintainer commenting
+      # /update-snapshots on a malicious fork PR would cause that fork's code (npm postinstall
+      # scripts, playwright.config.ts, test files, ...) to run with this job's contents: write
+      # token still live — a classic "pwn request". Fail closed, before any PR content is
+      # fetched, if the PR's branch isn't actually in this repository.
+      - name: Verify the PR branch is not from a fork
+        id: guard
+        uses: actions/github-script@v7
         with:
-          repository: ${{ github.event.issue.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.issue.pull_request.head.ref }}
-          sha: ${{ github.event.issue.pull_request.head.sha }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const expectedFullName = `${context.repo.owner}/${context.repo.repo}`;
+            const sameRepo = Boolean(pr.head.repo) && pr.head.repo.full_name === expectedFullName;
+            core.setOutput("is_fork", String(!sameRepo));
+            if (!sameRepo) {
+              core.setFailed(
+                "Refusing to run: this PR's branch is not in this repository (looks like a fork). " +
+                "/update-snapshots only supports same-repo PR branches, specifically to avoid " +
+                "checking out and executing untrusted code while holding write-scoped credentials."
+              );
+            }
 
-      - name: Setup Node
+      - name: Checkout
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -81,9 +101,16 @@ jobs:
         with:
           script: |
             const outcome = "${{ job.status }}";
+            const isFork = "${{ steps.guard.outputs.is_fork }}" === "true";
             const changed = "${{ steps.commit.outputs.changed }}";
             let body;
-            if (outcome !== "success") {
+            if (isFork) {
+              body = "🚫 `/update-snapshots` was ignored — this PR's branch isn't in this " +
+                "repository (looks like a fork). For security, this command only runs against " +
+                "same-repo PR branches: running it here would mean checking out and executing " +
+                "the fork's own code (install scripts, test config, ...) while this job still " +
+                "holds write-scoped credentials.";
+            } else if (outcome !== "success") {
               body = "❌ `/update-snapshots` failed — check the [workflow run](" +
                 "${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.";
             } else if (changed === "true") {
