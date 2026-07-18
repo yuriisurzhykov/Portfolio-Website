@@ -33,8 +33,8 @@ export const I18nProvider = ({children}: LanguageProps) => {
     };
 
     return (
-        <I18nContext.Provider value={contextValue}>
-            {children}
+        <I18nContext.Provider value={ contextValue }>
+            { children }
         </I18nContext.Provider>
     );
 }

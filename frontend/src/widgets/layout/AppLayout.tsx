@@ -10,18 +10,18 @@ import { Footer } from "@/widgets/footer";
  * scroll to the top of the new page.
  */
 function useScrollToLocation() {
-    const { pathname, hash } = useLocation();
+    const {pathname, hash} = useLocation();
 
     useEffect(() => {
         if (hash) {
             const id = hash.slice(1);
             const target = document.getElementById(id);
             if (target) {
-                target.scrollIntoView({ behavior: "smooth" });
+                target.scrollIntoView({behavior: "smooth"});
                 return;
             }
         }
-        window.scrollTo({ top: 0 });
+        window.scrollTo({top: 0});
     }, [pathname, hash]);
 }
 
@@ -30,11 +30,11 @@ export function AppLayout() {
 
     return (
         <div className="min-h-screen bg-bg-app text-text-primary flex flex-col">
-            <Nav />
+            <Nav/>
             <div className="flex-1">
-                <Outlet />
+                <Outlet/>
             </div>
-            <Footer />
+            <Footer/>
         </div>
     );
 }

@@ -1,4 +1,4 @@
-import type {Dict, LocaleStore} from "./LocaleStore.ts";
+import type { Dict, LocaleStore } from "./LocaleStore.ts";
 
 export class LocaleRegistry {
 
@@ -19,7 +19,7 @@ export class LocaleRegistry {
 
     setLocale(code: string): void {
         if (!this.locales[code]) {
-            throw new Error(`No locales registered with the code ${code}. You must register locale before using it.`)
+            throw new Error(`No locales registered with the code ${ code }. You must register locale before using it.`)
         }
         this.currentLocale = code;
     }
@@ -28,7 +28,7 @@ export class LocaleRegistry {
         let string = this.locales[this.currentLocale]?.[i18key] ?? i18key;
         if (vars) {
             for (const key in vars) {
-                string = string.replaceAll(`{${key}}`, String(vars[key]))
+                string = string.replaceAll(`{${ key }}`, String(vars[key]))
             }
         }
         return string;

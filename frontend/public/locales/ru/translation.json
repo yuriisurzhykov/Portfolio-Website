@@ -2,14 +2,12 @@
   "nav.work": "Работы",
   "nav.journal": "Журнал",
   "nav.contact": "Контакты",
-
   "status.available": "ОТКРЫТ ДЛЯ ПРОЕКТОВ",
   "status.engaged": "СЕЙЧАС ЗАНЯТ",
   "status.limited": "ОГРАНИЧЕННАЯ ДОСТУПНОСТЬ",
   "status.shipped": "ГОТОВО",
   "status.inProgress": "В РАБОТЕ",
   "status.upcoming": "{date} · скоро",
-
   "eyebrow.stack": "СТЕК",
   "eyebrow.howIWork": "КАК Я РАБОТАЮ",
   "eyebrow.selectedWork": "ИЗБРАННЫЕ РАБОТЫ",
@@ -19,7 +17,6 @@
   "eyebrow.caseStudy": "КЕЙС",
   "eyebrow.relatedProject": "СВЯЗАННЫЙ ПРОЕКТ",
   "eyebrow.relatedJournalEntry": "СВЯЗАННАЯ ЗАПИСЬ",
-
   "button.viewArchitecture": "Смотреть архитектуру",
   "button.readJournal": "Читать журнал",
   "button.getInTouch": "Связаться",
@@ -30,7 +27,6 @@
   "button.backHome": "на главную",
   "button.backToWork": "к работам",
   "button.backToJournal": "к журналу",
-
   "work.ledger.year": "ГОД",
   "work.ledger.system": "СИСТЕМА",
   "work.ledger.stack": "СТЕК",
@@ -40,14 +36,11 @@
   "work.caseStudy.shipped": "Готово: {date}",
   "work.caseStudy.target": "Цель: {date}",
   "work.caseStudy.role": "Роль: {role}",
-
   "journal.readMins": "{count} мин чтения",
-
   "footer.copyright": "© {year} {name}",
   "footer.github": "GitHub",
   "footer.linkedin": "LinkedIn",
   "footer.email": "Email",
-
   "label.system.language.toggle": "Переключить язык",
   "label.system.language.english": "English",
   "label.system.language.russian": "Русский",

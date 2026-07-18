@@ -14,7 +14,7 @@ export interface TechStackItem {
 export const techStack: TechStackItem[] = [
     {
         name: "Kotlin",
-        note: { en: "Primary language for over 6 years", ru: "Основной язык последние 6+ лет" },
+        note: {en: "Primary language for over 6 years", ru: "Основной язык последние 6+ лет"},
     },
     {
         name: "Coroutines & Flow",
@@ -25,7 +25,7 @@ export const techStack: TechStackItem[] = [
     },
     {
         name: "Jetpack Compose",
-        note: { en: "Declarative UI layer", ru: "Декларативный UI-слой" },
+        note: {en: "Declarative UI layer", ru: "Декларативный UI-слой"},
     },
     {
         name: "Navigation",
@@ -36,27 +36,27 @@ export const techStack: TechStackItem[] = [
     },
     {
         name: "Android Open Source",
-        note: { en: "AOSP customization for an OEM device", ru: "Кастомизация AOSP для OEM-устройства" },
+        note: {en: "AOSP customization for an OEM device", ru: "Кастомизация AOSP для OEM-устройства"},
     },
     {
         name: "Dagger2",
-        note: { en: "Dependency injection", ru: "Внедрение зависимостей" },
+        note: {en: "Dependency injection", ru: "Внедрение зависимостей"},
     },
     {
         name: "Camera2",
-        note: { en: "Camera pipeline & capture", ru: "Камера-пайплайн и захват кадров" },
+        note: {en: "Camera pipeline & capture", ru: "Камера-пайплайн и захват кадров"},
     },
     {
         name: "JUnit",
-        note: { en: "Unit & integration testing", ru: "Unit- и интеграционное тестирование" },
+        note: {en: "Unit & integration testing", ru: "Unit- и интеграционное тестирование"},
     },
     {
         name: "Java",
-        note: { en: "Legacy screens & JNI interop", ru: "Legacy-экраны и интеграция с JNI" },
+        note: {en: "Legacy screens & JNI interop", ru: "Legacy-экраны и интеграция с JNI"},
     },
     {
         name: "JNI & C++",
-        note: { en: "Native interop for platform-level code", ru: "Native-прослойка для платформенного кода" },
+        note: {en: "Native interop for platform-level code", ru: "Native-прослойка для платформенного кода"},
     },
     {
         name: "Gradle Plugin Development",
@@ -67,7 +67,7 @@ export const techStack: TechStackItem[] = [
     },
     {
         name: "KSP",
-        note: { en: "Annotation-driven code generation", ru: "Кодогенерация на основе аннотаций" },
+        note: {en: "Annotation-driven code generation", ru: "Кодогенерация на основе аннотаций"},
     },
     {
         name: "Python & Jinja2",

@@ -49,7 +49,7 @@ function applyThemeClass(theme: ThemeId): void {
  * Applies .theme-dark / .theme-light на <html>.
  */
 export function ThemeProvider(props: { children: React.ReactNode }): JSX.Element {
-    const { children } = props;
+    const {children} = props;
 
     const [preference, setPreferenceState] = React.useState<ThemePreference>(() => getInitialPreference());
     const [theme, setTheme] = React.useState<ThemeId>(() => resolveTheme(getInitialPreference()));
@@ -97,7 +97,7 @@ export function ThemeProvider(props: { children: React.ReactNode }): JSX.Element
         [theme, preference, setPreference],
     );
 
-    return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+    return <ThemeContext.Provider value={ value }>{ children }</ThemeContext.Provider>;
 }
 
 export { ThemeContext };

@@ -39,25 +39,25 @@ const dotClasses: Record<StatusTone, string> = {
  */
 export const StatusBadge = React.forwardRef<HTMLSpanElement, StatusBadgeProps>(
     function StatusBadge(
-        { tone = "neutral", withDot = false, className, children, ...rest }: StatusBadgeProps,
+        {tone = "neutral", withDot = false, className, children, ...rest}: StatusBadgeProps,
         ref: ForwardedRef<HTMLSpanElement>,
     ) {
         return (
             <span
-                ref={ref}
-                className={cn(
+                ref={ ref }
+                className={ cn(
                     "inline-flex items-center gap-xs",
                     "rounded-pill font-mono font-semibold text-micro uppercase tracking-wide",
                     withDot ? "py-xs pl-xs pr-sm" : "px-sm py-xs",
                     toneClasses[tone],
                     className,
-                )}
-                {...rest}
+                ) }
+                { ...rest }
             >
-                {withDot && (
-                    <span className={cn("h-1.5 w-1.5 rounded-full inline-block", dotClasses[tone])} />
-                )}
-                {children}
+                { withDot && (
+                    <span className={ cn("h-1.5 w-1.5 rounded-full inline-block", dotClasses[tone]) }/>
+                ) }
+                { children }
             </span>
         );
     },

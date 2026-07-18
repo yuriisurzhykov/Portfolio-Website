@@ -21,25 +21,25 @@ export const Section = forwardRef<HTMLElement, SectionProps>(
      }: SectionProps, ref) => {
         return (
             <section
-                ref={ref}
-                id={id}
-                className={`w-full px-lg py-2xl flex justify-center ${className}`}
-                {...props}>
+                ref={ ref }
+                id={ id }
+                className={ `w-full px-lg py-2xl flex justify-center ${ className }` }
+                { ...props }>
                 <div className="w-full max-w-[1160px]">
-                    {(title || eyebrow || subtitle) && (
+                    { (title || eyebrow || subtitle) && (
                         <header className="mb-xl">
-                            {eyebrow && (
-                                <Text variant="caption" tone="muted">{eyebrow}</Text>
-                            )}
-                            {title && (
-                                <Text variant="h1">{title}</Text>
-                            )}
-                            {subtitle && (
-                                <Text variant="caption" tone="muted">{subtitle}</Text>
-                            )}
+                            { eyebrow && (
+                                <Text variant="caption" tone="muted">{ eyebrow }</Text>
+                            ) }
+                            { title && (
+                                <Text variant="h1">{ title }</Text>
+                            ) }
+                            { subtitle && (
+                                <Text variant="caption" tone="muted">{ subtitle }</Text>
+                            ) }
                         </header>
-                    )}
-                    {children}
+                    ) }
+                    { children }
                 </div>
             </section>
         );

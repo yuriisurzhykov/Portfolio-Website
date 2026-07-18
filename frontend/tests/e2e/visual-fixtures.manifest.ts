@@ -1,4 +1,4 @@
-import { pagesManifest, type PageManifestEntry } from "./pages.manifest";
+import { type PageManifestEntry, pagesManifest } from "./pages.manifest";
 
 /**
  * VISUAL FIXTURES — the small, hand-picked subset of pages that get pixel-diffed.
@@ -31,10 +31,10 @@ export const visualFixturesManifest: PageManifestEntry[] = FIXTURE_PATHS.map((pa
     const entry = pagesByPath.get(path);
     if (!entry) {
         throw new Error(
-            `visual-fixtures.manifest.ts references "${path}", but it no longer exists in ` +
-                `pages.manifest.ts. The content behind this fixture was probably renamed, removed, ` +
-                `or no longer qualifies (missing caseStudy/body) — update FIXTURE_PATHS above to point ` +
-                `at a page that still exists.`,
+            `visual-fixtures.manifest.ts references "${ path }", but it no longer exists in ` +
+            `pages.manifest.ts. The content behind this fixture was probably renamed, removed, ` +
+            `or no longer qualifies (missing caseStudy/body) — update FIXTURE_PATHS above to point ` +
+            `at a page that still exists.`,
         );
     }
     return entry;

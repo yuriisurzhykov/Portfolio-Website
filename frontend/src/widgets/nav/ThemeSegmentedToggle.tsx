@@ -1,8 +1,8 @@
 import * as React from "react";
+import type { ThemeId } from "@/shared/theme";
 import { useTheme } from "@/shared/theme";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
-import type { ThemeId } from "@/shared/theme";
 
 const OPTIONS: ThemeId[] = ["dark", "light"];
 
@@ -16,8 +16,8 @@ const OPTIONS: ThemeId[] = ["dark", "light"];
  * the export's `background:var(--text);color:var(--bg)`.
  */
 export function ThemeSegmentedToggle() {
-    const { theme, setPreference } = useTheme();
-    const { ln } = useTranslation();
+    const {theme, setPreference} = useTheme();
+    const {ln} = useTranslation();
 
     const labels: Record<ThemeId, string> = {
         dark: ln("label.button.theme.switch.dark"),
@@ -26,25 +26,25 @@ export function ThemeSegmentedToggle() {
 
     return (
         <div className="flex items-center gap-[2px] bg-surface-icon border border-border-subtle rounded-pill p-[3px]">
-            {OPTIONS.map((option) => {
+            { OPTIONS.map((option) => {
                 const isActive = theme === option;
                 return (
                     <button
-                        key={option}
+                        key={ option }
                         type="button"
-                        onClick={() => setPreference(option)}
-                        aria-pressed={isActive}
-                        className={cn(
+                        onClick={ () => setPreference(option) }
+                        aria-pressed={ isActive }
+                        className={ cn(
                             "rounded-pill px-[10px] py-[5px]",
                             "font-mono font-semibold text-[10.5px] uppercase",
                             "transition-colors duration-fast",
                             isActive ? "bg-text-primary text-bg-app" : "text-text-muted hover:text-text-primary",
-                        )}
+                        ) }
                     >
-                        {labels[option]}
+                        { labels[option] }
                     </button>
                 );
-            })}
+            }) }
         </div>
     );
 }

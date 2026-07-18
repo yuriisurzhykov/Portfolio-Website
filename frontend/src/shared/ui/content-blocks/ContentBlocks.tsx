@@ -15,56 +15,56 @@ export interface ContentBlocksProps {
  * long-form content (journal posts, case studies) means appending to a
  * `ContentBlock[]` array in `data/` — no JSX is ever written for it.
  */
-export function ContentBlocks({ blocks }: ContentBlocksProps) {
-    const { ln, pick } = useTranslation();
+export function ContentBlocks({blocks}: ContentBlocksProps) {
+    const {ln, pick} = useTranslation();
 
     return (
         <div className="flex flex-col gap-md">
-            {blocks.map((block, index) => {
+            { blocks.map((block, index) => {
                 switch (block.type) {
                     case "lead":
                         return (
-                            <React.Fragment key={index}>
+                            <React.Fragment key={ index }>
                                 <Text variant="body-lg" tone="secondary">
-                                    {pick(block.text)}
+                                    { pick(block.text) }
                                 </Text>
-                                <hr className="border-t border-border-subtle my-sm" />
+                                <hr className="border-t border-border-subtle my-sm"/>
                             </React.Fragment>
                         );
                     case "heading":
                         return (
-                            <Text key={index} as="h2" variant="h2" className="mt-lg">
-                                {pick(block.text)}
+                            <Text key={ index } as="h2" variant="h2" className="mt-lg">
+                                { pick(block.text) }
                             </Text>
                         );
                     case "code":
                         return (
                             <CodeBlock
-                                key={index}
-                                title={block.filename}
-                                language={block.language ?? "ts"}
+                                key={ index }
+                                title={ block.filename }
+                                language={ block.language ?? "ts" }
                                 highlightEnabled
-                                showLineNumbers={false}
+                                showLineNumbers={ false }
                                 variant="default"
                                 className="my-sm"
-                                labels={{
+                                labels={ {
                                     copyButton: ln("label.button.copy"),
                                     copiedButton: ln("label.button.copied"),
                                     liveRegionCopied: ln("ui.codeBlock.liveRegion.copied"),
-                                }}
+                                } }
                             >
-                                {block.code}
+                                { block.code }
                             </CodeBlock>
                         );
                     case "paragraph":
                     default:
                         return (
-                            <Text key={index} variant="body" tone="secondary">
-                                {pick(block.text)}
+                            <Text key={ index } variant="body" tone="secondary">
+                                { pick(block.text) }
                             </Text>
                         );
                 }
-            })}
+            }) }
         </div>
     );
 }

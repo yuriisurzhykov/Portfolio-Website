@@ -6,9 +6,9 @@ import { AppRoutes } from "@/app/router/routes";
 export function Root() {
     return (
         <>
-            <style dangerouslySetInnerHTML={{ __html: themeVars }} />
+            <style dangerouslySetInnerHTML={ {__html: themeVars} }/>
             <BrowserRouter>
-                <AppRoutes />
+                <AppRoutes/>
             </BrowserRouter>
         </>
     );
