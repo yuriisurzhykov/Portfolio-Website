@@ -305,6 +305,25 @@ an exception or a PAT with bypass rights for this action — or (b) the checkout
 fetched with enough permissions (`contents: write` is already declared at the workflow level;
 don't remove it).
 
+**This actually happened** once a repository ruleset was added to `master` requiring PRs, a
+passing `test` status check, and CodeQL results. The default `GITHUB_TOKEN` can never bypass a
+ruleset — only actors explicitly added to that ruleset's **Bypass list** can — so the auto-commit
+started failing with `GH013: Repository rule violations`. Fixed by using a PAT from an account
+with bypass rights instead of `GITHUB_TOKEN` for this job's checkout (see the `token:` input on
+the Checkout step, which reads `secrets.BASELINE_COMMIT_PAT`). One-time setup, done in the GitHub
+UI (not via a commit):
+
+1. **Settings → Developer settings → Personal access tokens** — create a token (fine-grained,
+   scoped to just this repo, with **Contents: Read and write**) for your own account.
+2. **Settings → Secrets and variables → Actions** — add it as a repository secret named
+   `BASELINE_COMMIT_PAT`.
+3. **Settings → Rules → Rulesets** — open the ruleset covering `master`, and in **Bypass list**
+   add **Repository admin**, set to **Always allow**. This is what actually lets the push through;
+   the PAT just authenticates the push as an account holding that role.
+
+Without step 3, the PAT push still gets rejected the same way `GITHUB_TOKEN` did — the bypass
+permission is what matters, the PAT is just how the workflow proves it's that account.
+
 ## 9. GitHub Pages
 
 Reports are published via

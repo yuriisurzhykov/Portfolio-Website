@@ -29,6 +29,13 @@ jobs:
         with:
           # Needed so the auto-commit step (master only) has a real branch ref to push to.
           ref: ${{ github.head_ref || github.ref }}
+          # master has a repository ruleset that blocks direct pushes (PR required, status
+          # checks required, CodeQL required) for the default GITHUB_TOKEN. BASELINE_COMMIT_PAT
+          # is a PAT from an account listed in that ruleset's bypass list, so the baseline
+          # auto-commit below can still land directly. Falls back to GITHUB_TOKEN when the
+          # secret isn't set (e.g. on forks), which is fine for the pull_request path since it
+          # never pushes.
+          token: ${{ secrets.BASELINE_COMMIT_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
