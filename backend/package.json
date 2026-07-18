@@ -1,0 +1,14 @@
+{
+  "name": "@portfolio/backend",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Server-only code for the portfolio site: Prisma schema/client, auth, business-logic services. Consumed by web/ (Next.js) as an npm workspace package — not a separate deployable process, see web/README.md for the single-process decision.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

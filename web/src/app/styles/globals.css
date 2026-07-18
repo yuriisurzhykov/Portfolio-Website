@@ -1,0 +1,46 @@
+@layer base {
+    html, body, #root {
+        height: 100%;
+    }
+
+    body {
+        background: var(--color-bg-app);
+    }
+
+    html {
+        font-family: var(--font-body);
+        scroll-behavior: smooth;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+
+        font-synthesis-weight: none;
+        font-synthesis-style: none;
+    }
+
+    .code, .terminal, pre, code {
+        font-family: var(--font-mono);
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    :root {
+        color-scheme: dark;
+    }
+
+    a {
+        color: var(--color-accent-text);
+        text-decoration: none;
+    }
+
+    a:hover {
+        color: var(--color-accent-solid-hover);
+    }
+
+    /* Utility classes for rhythm */
+    .lead {
+        font-size: 1.125rem;
+        line-height: 1.5;
+    }
+}
