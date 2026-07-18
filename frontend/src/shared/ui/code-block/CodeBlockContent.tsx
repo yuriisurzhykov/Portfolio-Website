@@ -51,7 +51,15 @@ export const CodeBlockContent: React.FC<CodeBlockContentProps> = ({
             : null;
 
     return (
-        <div className={cn("relative overflow-x-auto", variantStyles[variant])}>
+        // `tabIndex`/`role`/`aria-label` make this horizontally-scrollable region reachable and
+        // operable via keyboard (arrow keys once focused) — axe-core's `scrollable-region-focusable`
+        // rule flags scrollable containers that can only be scrolled with a mouse/touch.
+        <div
+            className={cn("relative overflow-x-auto", variantStyles[variant])}
+            tabIndex={0}
+            role="region"
+            aria-label={`Code sample${language ? `, ${language}` : ""}`}
+        >
             <pre
                 ref={innerRef}
                 className={cn(

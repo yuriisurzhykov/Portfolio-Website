@@ -32,6 +32,8 @@
 
     --color-accent-solid: var(--color-accent-solid);
     --color-accent-solid-hover: var(--color-accent-solid-hover);
+    --color-accent-on-solid: var(--color-accent-on-solid);
+    --color-accent-text: var(--color-accent-text);
     --color-accent-glow: var(--color-accent-glow);
     --color-accent-glow-opacity: var(--color-accent-glow-opacity);
     --color-accent-tint-bg: var(--color-accent-tint-bg);
@@ -44,6 +46,7 @@
     --color-status-warning: var(--color-status-warning);
     --color-status-warning-tint-bg: var(--color-status-warning-tint-bg);
     --color-status-error: var(--color-status-error);
+    --color-status-on-solid: var(--color-status-on-solid);
 
     --color-code-keyword: var(--color-code-keyword);
     --color-code-string: var(--color-code-string);

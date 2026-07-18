@@ -19,7 +19,7 @@ export const buttonBaseStyles =
 export const buttonVariantClasses: Record<ButtonVariant, string> = {
     primary: [
         "bg-accent-solid",
-        "text-text-inverse",
+        "text-accent-on-solid",
         "hover:bg-accent-solid-hover",
         "active:scale-press",
     ].join(" "),

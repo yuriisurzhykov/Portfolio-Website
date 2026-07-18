@@ -10,17 +10,22 @@ export interface StatusBadgeProps extends HTMLAttributes<HTMLSpanElement> {
     withDot?: boolean;
 }
 
+// Solid fill + dark "ink" text/dot, not the earlier pale-tint + colored-text pill: the tint
+// version failed WCAG AA contrast on the light theme (colored text too close in luminance to a
+// near-white tint background — see VISUAL_TESTING_GUIDE.md, section 11). Dark ink on top of these
+// (light/pastel) brand colors clears AA with a large margin in both themes, so this one style
+// works everywhere instead of needing a per-theme exception.
 const toneClasses: Record<StatusTone, string> = {
-    success: cn("text-status-success", "bg-status-success-tint-bg"),
-    warning: cn("text-status-warning", "bg-status-warning-tint-bg"),
-    accent: cn("text-accent-solid", "bg-accent-tint-bg"),
+    success: cn("text-status-on-solid", "bg-status-success"),
+    warning: cn("text-status-on-solid", "bg-status-warning"),
+    accent: cn("text-accent-on-solid", "bg-accent-solid"),
     neutral: cn("text-text-muted", "bg-surface-raised"),
 };
 
 const dotClasses: Record<StatusTone, string> = {
-    success: "bg-status-success",
-    warning: "bg-status-warning",
-    accent: "bg-accent-solid",
+    success: "bg-status-on-solid",
+    warning: "bg-status-on-solid",
+    accent: "bg-accent-on-solid",
     neutral: "bg-text-muted",
 };
 
