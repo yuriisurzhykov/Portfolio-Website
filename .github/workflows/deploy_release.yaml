@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']   # v1.0.0, v1.2.3
 
+permissions:
+  contents: read
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
