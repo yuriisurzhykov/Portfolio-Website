@@ -63,6 +63,14 @@ jobs:
             }
 
       - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr checkout ${{ github.event.issue.number }}
+
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -111,8 +119,8 @@ jobs:
                 "the fork's own code (install scripts, test config, ...) while this job still " +
                 "holds write-scoped credentials.";
             } else if (outcome !== "success") {
-              body = "❌ `/update-snapshots` failed — check the [workflow run](" +
-                "${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.";
+              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+              body = `❌ \`/update-snapshots\` failed — check the [workflow run](${runUrl}) for details.`;
             } else if (changed === "true") {
               body = "✅ Baselines updated and pushed to this PR's branch. The visual check will re-run automatically.";
             } else {
