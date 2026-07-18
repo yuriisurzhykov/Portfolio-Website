@@ -322,14 +322,25 @@ That push automatically re-triggers the normal `pull_request: synchronize` event
 hand, and no second build on `master` either, since the PR's branch already has the correct
 baselines by the time you merge.
 
-**Restricted to trusted commenters:** the job only runs if `github.event.comment.author_association`
-is `OWNER`, `MEMBER`, or `COLLABORATOR` — anyone else's `/update-snapshots` comment is ignored.
-This matters because the job can push code; without this check, anyone able to comment on a PR
-(including on a fork PR, in a public repo) could trigger a code-pushing workflow.
+**Restricted to trusted commenters — but that alone is not enough:**
+`github.event.comment.author_association` (`OWNER`/`MEMBER`/`COLLABORATOR`) vets *who posted the
+comment*, not *whose code is about to run*. That distinction matters: without a second check, a
+trusted maintainer commenting `/update-snapshots` on a malicious fork PR would still cause the
+job to `gh pr checkout` that fork's branch and then `npm ci` (runs the fork's own `postinstall`
+scripts) / `npx playwright test` (runs the fork's own `playwright.config.ts` and test files) —
+all while the job still holds a `contents: write` token. That's the "pwn request" pattern: a
+trusted action approving untrusted code that then runs with privileged credentials. Fixed with an
+explicit **"Verify the PR branch is not from a fork"** step, *before* any checkout of PR content:
+it fetches the PR via the API and compares `head.repo.full_name` to this repository; if they
+don't match, the job fails closed (`core.setFailed`) before fetching or running a single line of
+the PR's code, and the final comment reports "ignored — this PR is from a fork" instead of a
+generic failure. See the `[RESOLVED]` entry in section 11 for how this was found.
 
 **Known limitation:** only works for PRs whose branch lives in this repository (not a fork) —
 `gh pr checkout` plus a push needs write access to the branch, which a fork's branch doesn't grant
-the base repo's `GITHUB_TOKEN`. Not a concern today (personal, single-maintainer repo).
+the base repo's `GITHUB_TOKEN`, and the guard above now also refuses to try. Not a concern today
+(personal, single-maintainer repo) but this was a real, exploitable gap, not just a theoretical
+one, given the repo is public.
 
 ## 9. GitHub Pages
 
@@ -636,6 +647,61 @@ to `reports/master/` and explaining where PR reports live) straight to the branc
 `destination_dir`), with `keep_files: true` so it doesn't wipe the `reports/` folder written by
 the other publish step in the same job.
 
+### [RESOLVED] `/update-snapshots` had a "pwn request" vulnerability — trusted commenter, untrusted code
+
+Flagged by an automated code-review comment on the PR (not caught during initial implementation
+or manual testing) — a genuinely serious finding, not a nitpick. The workflow's only guard was
+`github.event.comment.author_association` (who posted the comment), which says nothing about
+whose code is checked out and executed. Concretely: `gh pr checkout` fetches the PR's own branch,
+then `npm ci` and `npx playwright test --update-snapshots` execute that branch's own
+`postinstall` scripts / `playwright.config.ts` / test files — all while the job still holds a
+`contents: write` token (needed for the later `git push`). A trusted maintainer commenting
+`/update-snapshots` on what looks like an innocent content-only PR from a malicious fork would
+unknowingly hand that fork's code push-capable credentials. This is a well-documented class of
+GitHub Actions vulnerability (often called a "pwn request"), not something specific to this repo
+— but it was a real, exploitable gap here given the repo is public, not just a theoretical one.
+
+Fixed with a `head.repo.full_name` check against the PR via the API, run *before* any checkout of
+PR content, that fails the job closed if the PR's branch isn't in this repository (i.e. is a
+fork) — see the updated section 8 above for the exact mechanics. Deliberately did **not** go with
+the reviewer's other suggested option (run the untrusted code in a separate job stripped of
+write-scoped credentials, then use a second, privileged job only to commit the already-produced
+output) — that's a more elaborate defense-in-depth pattern worth reconsidering if this repo ever
+accepts external contributions, but the fork guard alone fully closes the specific attack
+described here, and is far simpler to reason about for a personal, single-maintainer repo.
+
+### [RESOLVED] First real `/update-snapshots` run failed — mangled `Checkout` step + a template-literal bug
+
+Two separate, unrelated bugs, both found from a single real run (triggered from an actual PR
+comment) rather than caught during review:
+
+1. **The `Checkout` step got mangled during a merge.** After the fork-guard security fix landed
+   on its own branch and was later merged together with an unrelated large PR (the Next.js
+   migration) that had *also* touched this same file, the merged result on `master` had a
+   `Checkout` step whose `uses:` pointed at `actions/setup-node@v4` (with Node version/cache
+   inputs) instead of `actions/checkout@v4` — and the separate `Checkout PR branch` (`gh pr
+   checkout ...`) and `Setup Node` steps had vanished entirely, apparently swallowed by the same
+   bad merge-conflict resolution. Confirmed by diffing `git show origin/master:.github/workflows/accept-visual-baselines.yml`
+   against what this file should contain — the job never actually checked out the repository
+   before trying to `npm ci` inside `frontend/`, which doesn't exist without a checkout. Fixed by
+   restoring the three steps as distinct entries: `Checkout` (`actions/checkout@v4`, no inputs),
+   `Checkout PR branch` (`gh pr checkout`), `Setup Node` (`actions/setup-node@v4`).
+2. **The failure-comment URL was a JS template-literal bug, not a GitHub issue.** The failure
+   branch built the workflow-run link with `"${context.serverUrl}/${context.repo.owner}/..."` —
+   **double-quoted**, not backtick-delimited. `${...}` interpolation only happens inside
+   backtick template literals in JavaScript; inside a regular string it's inserted completely
+   literally. The posted PR comment therefore linked to the literal text
+   `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+   which GitHub tried to parse as a repo-relative path and rendered as a nonsensical branch-compare
+   page ("There isn't anything to compare"). Fixed by switching that branch to an actual template
+   literal (`` `${context.serverUrl}/...` ``) and building the URL as its own variable first.
+
+**Takeaway:** embedded `script: |` blocks in a workflow YAML are opaque strings to the YAML
+parser — `js-yaml`/YAML validation (used throughout this implementation to sanity-check syntax)
+catches YAML structure problems, but says nothing about the JavaScript *inside* those blocks.
+Neither bug here was a YAML problem; both were JS logic bugs that only surfaced by actually
+triggering the workflow for real.
+
 ### Design change: content-driven visual diffs are accepted via PR comment, not avoided
 
 Initially considered (and asked about explicitly): masking the "living" content areas of
@@ -776,3 +842,25 @@ confirmed visually against the same screenshot the user flagged, then re-ran the
   `frontend/tests/README.md` (user's call — keeps it next to the tests it documents rather than
   competing with the repo's own top-level README). Updated every cross-reference in
   `.github/workflows/*.yml` and `.github/scripts/*.mjs` to the new path/relative depth.
+
+### 2026-07-18 — Security review caught a real "pwn request" gap; first live run then caught two more bugs
+
+- An automated code-review comment on the CI-fix PR correctly flagged that the workflow's
+  `author_association` check only vets the *commenter*, not the *code about to run* — see the
+  `[RESOLVED]` entry in section 11 for the full explanation. Added a "Verify the PR branch is not
+  from a fork" step (`actions/github-script`, checks `head.repo.full_name` via the API) that runs
+  *before* any PR content is checked out, failing the job closed for fork PRs.
+- First real trigger of `/update-snapshots` on an actual PR comment failed. Root-caused via
+  `git show origin/master:.github/workflows/accept-visual-baselines.yml` (comparing what's
+  actually deployed against what the file should contain) rather than guessing: (1) the
+  `Checkout` step had been mangled into `actions/setup-node@v4` during a merge with an unrelated
+  PR that touched the same file, losing the real `Checkout`/`Checkout PR branch`/`Setup Node`
+  steps entirely — restored them as three distinct steps; (2) the failure-comment's workflow-run
+  link used double-quoted string concatenation instead of a template literal, so `${...}` never
+  interpolated and the literal placeholder text got posted as a broken link — fixed by using an
+  actual backtick template literal. Neither bug was catchable by YAML validation (`js-yaml`),
+  since embedded `script: |` blocks are opaque strings to a YAML parser — both only surfaced by
+  triggering the workflow for real. See section 11 for the full writeup of both.
+- Did not commit or push any of this — all fixes in this entry were applied as local file edits
+  only, at the user's explicit request after an earlier boundary-crossing (branches/commits were
+  pushed without asking first, which should not have happened).
