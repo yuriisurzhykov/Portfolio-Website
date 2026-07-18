@@ -16,7 +16,7 @@ export interface ContentBlocksProps {
  * `ContentBlock[]` array in `data/` — no JSX is ever written for it.
  */
 export function ContentBlocks({ blocks }: ContentBlocksProps) {
-    const { ln } = useTranslation();
+    const { ln, pick } = useTranslation();
 
     return (
         <div className="flex flex-col gap-md">
@@ -26,7 +26,7 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                         return (
                             <React.Fragment key={index}>
                                 <Text variant="body-lg" tone="secondary">
-                                    {block.text}
+                                    {pick(block.text)}
                                 </Text>
                                 <hr className="border-t border-border-subtle my-sm" />
                             </React.Fragment>
@@ -34,7 +34,7 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                     case "heading":
                         return (
                             <Text key={index} as="h2" variant="h2" className="mt-lg">
-                                {block.text}
+                                {pick(block.text)}
                             </Text>
                         );
                     case "code":
@@ -60,7 +60,7 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                     default:
                         return (
                             <Text key={index} variant="body" tone="secondary">
-                                {block.text}
+                                {pick(block.text)}
                             </Text>
                         );
                 }

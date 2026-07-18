@@ -12,7 +12,7 @@ export interface StatusBadgeProps extends HTMLAttributes<HTMLSpanElement> {
 
 // Solid fill + dark "ink" text/dot, not the earlier pale-tint + colored-text pill: the tint
 // version failed WCAG AA contrast on the light theme (colored text too close in luminance to a
-// near-white tint background — see VISUAL_TESTING_GUIDE.md, section 11). Dark ink on top of these
+// near-white tint background — see README.md, section 11). Dark ink on top of these
 // (light/pastel) brand colors clears AA with a large margin in both themes, so this one style
 // works everywhere instead of needing a per-theme exception.
 const toneClasses: Record<StatusTone, string> = {

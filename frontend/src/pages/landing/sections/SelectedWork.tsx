@@ -9,7 +9,7 @@ import { useTranslation } from "@/shared/i18n";
 import { work, type WorkItem } from "@/data/work";
 
 function WorkCard({ item }: { item: WorkItem }) {
-    const { ln } = useTranslation();
+    const { ln, pick } = useTranslation();
     const isShipped = item.status === "shipped";
     const detailHref = item.caseStudy ? `/work/${item.slug}` : item.relatedPostSlug ? `/journal/${item.relatedPostSlug}` : undefined;
     const detailLabel = item.caseStudy ? ln("button.caseStudy") : ln("button.readTheStory");
@@ -27,7 +27,7 @@ function WorkCard({ item }: { item: WorkItem }) {
                     </StatusBadge>
                 </div>
                 <Text as="div" variant="caption" tone="muted" className="mb-[16px] leading-[1.6]">
-                    {item.summary}
+                    {pick(item.summary)}
                 </Text>
                 <div className="flex justify-between items-center gap-sm flex-wrap">
                     <div className="flex flex-wrap items-center gap-xs font-mono text-[11px] text-text-muted">

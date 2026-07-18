@@ -1,11 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 4173;
-const LOCAL_BASE_URL = `http://localhost:${PORT}`;
+const LOCAL_BASE_URL = `http://localhost:${ PORT }`;
 
 /**
  * Optional escape hatch: point the suite at an already-deployed URL instead of building +
- * previewing locally. See VISUAL_TESTING_GUIDE.md, section 3, for details. Unset by default.
+ * previewing locally. See tests/README.md, section 3, for details. Unset by default.
  */
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? LOCAL_BASE_URL;
 
@@ -32,15 +32,15 @@ export default defineConfig({
 
     reporter: process.env.CI
         ? [
-              ["html", { outputFolder: "playwright-report", open: "never" }],
-              ["./tests/e2e/reporters/summary-reporter.ts"],
-              ["github"],
-          ]
+            ["html", {outputFolder: "playwright-report", open: "never"}],
+            ["./tests/e2e/reporters/summary-reporter.ts"],
+            ["github"],
+        ]
         : [
-              ["list"],
-              ["html", { outputFolder: "playwright-report", open: "never" }],
-              ["./tests/e2e/reporters/summary-reporter.ts"],
-          ],
+            ["list"],
+            ["html", {outputFolder: "playwright-report", open: "never"}],
+            ["./tests/e2e/reporters/summary-reporter.ts"],
+        ],
 
     use: {
         baseURL,
@@ -65,7 +65,7 @@ export default defineConfig({
     projects: [
         {
             name: "Desktop",
-            use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+            use: {...devices["Desktop Chrome"], viewport: {width: 1440, height: 900}},
             // No testMatch restriction: this is the only project a11y.spec.ts runs under
             // (contrast/DOM checks don't depend on viewport size, so running them 3x would be
             // pure waste), and it also runs the full visual.spec.ts suite.
@@ -78,12 +78,12 @@ export default defineConfig({
             // installed, failing with "Executable doesn't exist". Instead, take the Chromium
             // engine from "Desktop Chrome" and just override the viewport/touch metrics.
             name: "Tablet",
-            use: { ...devices["Desktop Chrome"], viewport: { width: 834, height: 1194 }, isMobile: true, hasTouch: true },
+            use: {...devices["Desktop Chrome"], viewport: {width: 834, height: 1194}, isMobile: true, hasTouch: true},
             testMatch: /visual\.spec\.ts/,
         },
         {
             name: "Mobile",
-            use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+            use: {...devices["Desktop Chrome"], viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
             testMatch: /visual\.spec\.ts/,
         },
     ],
@@ -93,9 +93,9 @@ export default defineConfig({
     webServer: process.env.PLAYWRIGHT_BASE_URL
         ? undefined
         : {
-              command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,
-              url: LOCAL_BASE_URL,
-              reuseExistingServer: !process.env.CI,
-              timeout: 120_000,
-          },
+            command: `npm run build && npm run preview -- --port ${ PORT } --strictPort`,
+            url: LOCAL_BASE_URL,
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+        },
 });

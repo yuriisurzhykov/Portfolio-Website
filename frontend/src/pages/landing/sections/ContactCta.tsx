@@ -6,7 +6,7 @@ import { site } from "@/data/config";
 import { contact } from "@/data/contact";
 
 export function ContactCta() {
-    const { ln } = useTranslation();
+    const { ln, pick } = useTranslation();
 
     return (
         <section
@@ -23,10 +23,10 @@ export function ContactCta() {
                     }}
                 />
                 <h2 className="relative m-0 mb-[16px] font-extrabold text-[clamp(28px,3.5vw,40px)] leading-[1.15] text-text-primary">
-                    {contact.heading}
+                    {pick(contact.heading)}
                 </h2>
                 <Text variant="body" tone="muted" className="relative mb-[28px] max-w-[60ch] mx-auto">
-                    {contact.description}
+                    {pick(contact.description)}
                 </Text>
                 <LinkButton href={`mailto:${site.email}`} variant="primary" size="lg" className="relative">
                     {ln("button.getInTouch")}

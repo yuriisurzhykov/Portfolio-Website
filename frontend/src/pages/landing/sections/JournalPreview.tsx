@@ -7,7 +7,7 @@ import { useTranslation } from "@/shared/i18n";
 import { journal } from "@/data/journal";
 
 export function JournalPreview() {
-    const { ln } = useTranslation();
+    const { ln, pick } = useTranslation();
     const latest = journal.find((post) => post.status === "published");
 
     if (!latest) return null;
@@ -23,16 +23,16 @@ export function JournalPreview() {
                 className="block p-[32px] bg-surface-base border border-border-subtle rounded-xl hover:border-border-default transition-colors duration-normal"
             >
                 <div className="flex gap-sm items-center mb-[14px] flex-wrap">
-                    <StatusBadge tone="accent">{latest.category}</StatusBadge>
+                    <StatusBadge tone="accent">{pick(latest.category)}</StatusBadge>
                     <Text variant="caption" tone="faint" className="font-mono normal-case">
                         {ln("journal.readMins", { count: latest.readMins })}
                     </Text>
                 </div>
                 <Text as="h3" variant="h3" className="mb-[10px]">
-                    {latest.title}
+                    {pick(latest.title)}
                 </Text>
                 <Text variant="body" tone="muted" className="max-w-[70ch] leading-[1.6]">
-                    {latest.excerpt}
+                    {pick(latest.excerpt)}
                 </Text>
             </Link>
         </section>

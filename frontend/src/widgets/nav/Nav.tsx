@@ -5,6 +5,7 @@ import { useTranslation } from "@/shared/i18n";
 import { site } from "@/data/config";
 import { cn } from "@/shared/lib/utils";
 import { ThemeSegmentedToggle } from "./ThemeSegmentedToggle";
+import { LanguageSegmentedToggle } from "./LanguageSegmentedToggle";
 
 const navLinkClass = (isActive: boolean) =>
     cn(
@@ -43,6 +44,7 @@ export function Nav() {
             </nav>
 
             <div className="flex items-center gap-xs sm:gap-sm shrink-0">
+                <LanguageSegmentedToggle />
                 <ThemeSegmentedToggle />
                 <StatusBadge tone="success" withDot className="whitespace-nowrap">
                     <span className="hidden lg:inline">{ln(`status.${site.availability}`)}</span>

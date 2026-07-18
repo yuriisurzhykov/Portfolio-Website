@@ -16,7 +16,7 @@ function formatDate(post: JournalPost, ln: (key: string, vars?: Record<string, s
 }
 
 function LogEntry({ post }: { post: JournalPost }) {
-    const { ln } = useTranslation();
+    const { ln, pick } = useTranslation();
     const isPublished = post.status === "published";
 
     const inner = (
@@ -31,7 +31,7 @@ function LogEntry({ post }: { post: JournalPost }) {
                 <Text variant="caption" tone="faint" className="font-mono">
                     {formatDate(post, ln)}
                 </Text>
-                {isPublished && <StatusBadge tone="accent">{post.category}</StatusBadge>}
+                {isPublished && <StatusBadge tone="accent">{pick(post.category)}</StatusBadge>}
                 {isPublished && (
                     <Text variant="caption" tone="faint" className="font-mono">
                         {ln("journal.readMins", { count: post.readMins })}
@@ -39,10 +39,10 @@ function LogEntry({ post }: { post: JournalPost }) {
                 )}
             </div>
             <Text as="div" variant="h3" tone={isPublished ? "primary" : "muted"} className="mb-[6px] !text-[21px]">
-                {post.title}
+                {pick(post.title)}
             </Text>
             <Text as="div" variant="caption" tone={isPublished ? "muted" : "faint"} className="max-w-[60ch] leading-[1.6]">
-                {post.excerpt}
+                {pick(post.excerpt)}
             </Text>
         </>
     );
@@ -58,7 +58,7 @@ function LogEntry({ post }: { post: JournalPost }) {
     // De-emphasized via the muted/faint text tones above (already WCAG AA-compliant on their
     // own), not via `opacity` — applying opacity to the whole block would uniformly fade these
     // already-borderline colors toward the background and fail contrast again (see
-    // VISUAL_TESTING_GUIDE.md, section 11: to stay compliant, the opacity would need to go from
+    // README.md, section 11: to stay compliant, the opacity would need to go from
     // 0.45 to ~0.9, which defeats the purpose of dimming it at all).
     return (
         <div className="relative block py-[24px] pl-[34px]">
@@ -68,7 +68,7 @@ function LogEntry({ post }: { post: JournalPost }) {
 }
 
 export function JournalListPage() {
-    const { ln } = useTranslation();
+    const { ln, pick } = useTranslation();
 
     return (
         <main>
@@ -80,10 +80,10 @@ export function JournalListPage() {
                     {ln("eyebrow.journal")}
                 </Eyebrow>
                 <h1 className="m-0 mb-[16px] font-extrabold text-[clamp(30px,4vw,44px)] leading-[1.1] tracking-tight text-text-primary">
-                    {journalPage.heading}
+                    {pick(journalPage.heading)}
                 </h1>
                 <Text variant="body" tone="muted">
-                    {journalPage.description}
+                    {pick(journalPage.description)}
                 </Text>
             </div>
 
