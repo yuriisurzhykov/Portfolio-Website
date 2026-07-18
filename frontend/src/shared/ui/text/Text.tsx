@@ -81,7 +81,7 @@ const toneClasses: Record<TextTone, string> = {
     muted: "text-text-muted",
     faint: "text-text-faint",
     inverse: "text-text-inverse",
-    aurora: "text-accent-solid",
+    aurora: "text-accent-text",
     inherit: "",
 };
 

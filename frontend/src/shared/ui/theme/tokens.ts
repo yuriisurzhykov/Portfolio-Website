@@ -25,6 +25,10 @@ export const palette = {
     statusAmber: "#e8b45e",     // In progress
     statusAmberTintRgb: "232,180,94",
 
+    codeAccent: "oklch(0.72 0.17 45)",
+    codeStatusGreen: "#7fd88f",
+    codeStatusAmber: "#e8b45e",
+
     // Extra hues used only for code syntax highlighting variety
     syntaxPurple: "#b8a1ff",
     syntaxBlue: "#7ab8ff",
@@ -57,7 +61,21 @@ export const darkPalette = {
     text: "#f5f3f0",
     text2: "#b3b0ab",
     muted: "#8a877f",
-    dim: "#57544d",
+    // WCAG AA fix: the original #57544d only hit a ~2.6:1 contrast ratio against `bg`/`card`
+    // (needs >=4.5:1 for normal-size text) — see VISUAL_TESTING_GUIDE.md section 11. Lightened
+    // while keeping the same warm-gray hue; now ~6:1 against `bg` and ~5.3:1 even against the
+    // lightest nested surface (`tagBg` composited over `card`).
+    dim: "#938e83",
+    // Same values as the (now code-only) invariant palette above — dark theme's UI accent/status
+    // colors are unchanged from the original approved design; only light theme needed a darker
+    // variant (see lightPalette below).
+    accent: palette.codeAccent,
+    // Color for accent-colored INLINE TEXT with no background to lean on (links, Eyebrow,
+    // WorkDetailPage step titles) — see lightPalette.accentText for why this differs by theme.
+    // Dark theme: same vibrant orange as `accent`, already passes AA against the near-black page.
+    accentText: palette.codeAccent,
+    statusGreen: palette.codeStatusGreen,
+    statusAmber: palette.codeStatusAmber,
     tagBg: "rgba(255,255,255,.04)",
     tagBorder: "rgba(255,255,255,.12)",
     chip: "#d8d4cd",
@@ -86,7 +104,27 @@ export const lightPalette = {
     text: "#181614",
     text2: "#4a4744",
     muted: "#6b6862",
-    dim: "#948f86",
+    // WCAG AA fix: the original #948f86 only hit a ~3.0:1 contrast ratio against `bg` (needs
+    // >=4.5:1) — see VISUAL_TESTING_GUIDE.md section 11. Darkened while keeping the same
+    // warm-gray hue; now ~5.2:1 against `bg` (and higher still against the white `card` surface).
+    dim: "#6b6760",
+    // REVERTED: an earlier version of this fix darkened these to #ab5327/#40724a/#806230 to
+    // satisfy WCAG AA contrast on this theme's near-white background (see the color-contrast
+    // findings logged in VISUAL_TESTING_GUIDE.md, section 11) — but the result looked muddy/wrong
+    // and was rejected on visual grounds. Reverted to the original vibrant brand colors (same as
+    // dark theme) until a fix that's both accessible AND visually acceptable is agreed on. The 6
+    // related axe violations are intentionally left failing for now — see section 11.
+    accent: palette.codeAccent,
+    // WCAG AA fix: `accent`/`accentText` are otherwise the same value, but this role has no
+    // solid/tint background to lean on (plain inline links, Eyebrow labels, step titles directly
+    // on the page/card background) — the button/badge fix (dark ink ON TOP of a vibrant solid
+    // fill) doesn't apply here, there's simply no fill to put dark text on. Darkened to the same
+    // hue family; ratio ~4.7-5.7 against every background this text actually appears on (page bg,
+    // white cards, the accent tint). See VISUAL_TESTING_GUIDE.md, section 11, for the numbers and
+    // the two rejected alternatives (global darken, "onSolid"-style token) that came before this.
+    accentText: "#be3500",
+    statusGreen: palette.codeStatusGreen,
+    statusAmber: palette.codeStatusAmber,
     tagBg: "#ffffff",
     tagBorder: "rgba(0,0,0,.1)",
     chip: "#3a3733",
@@ -125,7 +163,7 @@ function buildColors(neutral: typeof darkPalette) {
             default: neutral.tagBorder,
             strong: neutral.borderStrong,
             connector: neutral.connector,
-            highlight: palette.accent,
+            highlight: neutral.accent,
         },
 
         text: {
@@ -138,28 +176,43 @@ function buildColors(neutral: typeof darkPalette) {
         },
 
         accent: {
-            solid: palette.accent,
+            solid: neutral.accent,
             solidHover: palette.accentHover,
-            glow: `radial-gradient(circle at 30% 30%, ${neutral.glowA} 0%, ${neutral.glowB} 55%, transparent 75%)`,
+            // Text drawn ON TOP of `accent.solid` (buttons, solid-fill badges) — deliberately
+            // NOT a lighter/darker shade of the accent itself (that path is what produced the
+            // rejected "muddy" fix, see VISUAL_TESTING_GUIDE.md section 11). Instead reuses the
+            // site's own near-black dark-theme background as an "ink" color: ~7.5:1 contrast
+            // against the vibrant orange in both themes, and the accent itself stays untouched.
+            onSolid: darkPalette.bg,
+            text: neutral.accentText,
+            glow: `radial-gradient(circle at 30% 30%, ${ neutral.glowA } 0%, ${ neutral.glowB } 55%, transparent 75%)`,
             glowOpacity: neutral.glowOpacity,
-            tintBg: `rgba(${palette.accentTintRgb},.12)`,
+            tintBg: `rgba(${ palette.accentTintRgb },.12)`,
         },
 
         status: {
-            success: palette.statusGreen,
-            successTintBg: `rgba(${palette.statusGreenTintRgb},.12)`,
-            warning: palette.statusAmber,
-            warningTintBg: `rgba(${palette.statusAmberTintRgb},.12)`,
+            success: neutral.statusGreen,
+            successTintBg: `rgba(${ palette.statusGreenTintRgb },.12)`,
+            warning: neutral.statusAmber,
+            warningTintBg: `rgba(${ palette.statusAmberTintRgb },.12)`,
             // No distinct danger color in the approved design; alias to warning.
-            error: palette.statusAmber,
+            error: neutral.statusAmber,
+            // Same value/rationale as accent.onSolid above — text/dot drawn on top of a solid
+            // status-success/warning fill (StatusBadge). Both statusGreen and statusAmber are
+            // light/pastel enough that dark ink clears WCAG AA with a huge margin (~10-11:1) in
+            // both themes, which is what let StatusBadge move from "pale tint + colored text"
+            // (failed AA on light theme) to "solid fill + dark text" (passes everywhere).
+            onSolid: darkPalette.bg,
         },
 
-        // Prism/CodeBlock syntax-highlighting palette — theme-invariant,
-        // the code panel itself is always dark (see `palette.codePanel*`).
+        // Prism/CodeBlock syntax-highlighting palette — theme-invariant (always the vibrant
+        // original values): the code panel itself is always dark regardless of site theme (see
+        // `palette.codePanel*`), so these deliberately do NOT use the theme-specific
+        // `neutral.accent`/`neutral.statusGreen`/`neutral.statusAmber` from above.
         code: {
-            keyword: palette.accent,
-            string: palette.statusGreen,
-            number: palette.statusAmber,
+            keyword: palette.codeAccent,
+            string: palette.codeStatusGreen,
+            number: palette.codeStatusAmber,
             className: palette.syntaxPurple,
             function: palette.syntaxBlue,
             property: palette.syntaxBlue,
@@ -263,7 +316,11 @@ export const shadows = {
     primaryBtn: "none",
     softGlow: "none",
     surfaceDeep: "0 20px 40px rgba(0,0,0,0.6)",
-    focusRing: `0 0 0 2px ${palette.accent}`,
+    // NOTE: not theme-aware (this object is built once, not per-theme like `colors`/
+    // `colorsLight`) — kept at the original invariant accent value. Focus-ring contrast against
+    // the light theme's background isn't covered by this task's axe scan (focus states aren't
+    // part of the static DOM), but would be worth revisiting if light theme becomes public.
+    focusRing: `0 0 0 2px ${ darkPalette.accent }`,
 };
 
 /**

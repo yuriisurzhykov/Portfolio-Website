@@ -78,7 +78,7 @@ export function WorkDetailPage() {
                             <div key={ step.title }
                                  className="bg-surface-base border border-border-subtle rounded-lg p-5">
                                 <Text as="div" variant="caption"
-                                      className="font-mono font-semibold text-accent-solid mb-2">
+                                      className="font-mono font-semibold text-accent-text mb-2">
                                     { step.title }
                                 </Text>
                                 <Text as="div" variant="caption" tone="muted" className="leading-[1.6]">
