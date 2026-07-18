@@ -35,13 +35,12 @@ jobs:
               content: "+1",
             });
 
-      - name: Checkout
+      - name: Checkout PR branch at reviewed commit
         uses: actions/checkout@v4
-
-      - name: Checkout PR branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr checkout ${{ github.event.issue.number }}
+        with:
+          repository: ${{ github.event.issue.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.issue.pull_request.head.ref }}
+          sha: ${{ github.event.issue.pull_request.head.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
