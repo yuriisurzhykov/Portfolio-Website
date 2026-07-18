@@ -17,7 +17,7 @@ filled in as the corresponding implementation step lands.
 5. [Running tests locally](#5-running-tests-locally)
 6. [Updating baseline screenshots locally](#6-updating-baseline-screenshots-locally)
 7. [How this works in CI](#7-how-this-works-in-ci)
-8. [Baseline auto-update & auto-commit](#8-baseline-auto-update--auto-commit)
+8. [Accepting new baselines from a PR](#8-accepting-new-baselines-from-a-pr-update-snapshots)
 9. [GitHub Pages](#9-github-pages)
 10. [Updating dependencies](#10-updating-dependencies)
 11. [Known issues & notes](#11-known-issues--notes)
@@ -43,9 +43,12 @@ Mobile 390×844), all on Chromium. Locale is fixed to `en` (the site's default) 
 size reasonable; see section 4 for why *which* pages get pixel-diffed vs. just accessibility-
 scanned isn't the same list.
 
-**Baselines auto-update:** merging to `master` regenerates every baseline from the current code
-and commits any changes straight back into the repo (bot commit, see section 8) — so every PR
-always diffs against the latest merged state, with zero manual "update the reference images" step.
+**Baselines are accepted from the PR, before merging** — `master` has a repository ruleset that
+blocks direct pushes (even from a bot with `contents: write`), so it can't fix its own baselines
+after the fact. Instead, when a visual check fails just because the page's own content changed
+(new work item, new journal post — not a real bug), commenting `/update-snapshots` on the PR
+regenerates and pushes the new baselines straight to that PR's branch, turning the check green
+before you merge. See section 8.
 
 **Reports:** Playwright's HTML report (actual/expected/diff view for every failed screenshot) gets
 published to GitHub Pages on every run, and a sticky comment on the PR summarizes pass/fail counts
@@ -132,6 +135,7 @@ other secrets in the repository are the VPS SSH deploy credentials used by the p
 frontend/
   playwright.config.ts
   tests/
+    README.md                       # this file
     e2e/
       pages.manifest.ts             # dynamic — ALL real pages, used by a11y.spec.ts only
       visual-fixtures.manifest.ts   # static — curated subset, used by visual.spec.ts only
@@ -160,21 +164,22 @@ treats array elements as nested path segments, so combined with `snapshotPathTem
 `playwright.config.ts` (`{snapshotDir}/{arg}-{projectName}{ext}`), the viewport (`{projectName}`)
 still ends up in the filename while the page name becomes the folder.
 
-**Two separate manifests, on purpose** (see the plan discussion this repo's chat history has
-about it): `pages.manifest.ts` is *dynamic* — it imports `@/data/work` and `@/data/journal`
-directly and derives one entry per page that actually renders (every `work` item with a
-`caseStudy`, every `journal` post with a `body`), plus 3 hardcoded static routes (`/`, `/work`,
-`/journal`). `visual-fixtures.manifest.ts` is *static* — a hand-picked list of a few of those
-same paths, chosen to represent distinct template variants, and it validates every path it lists
-still exists in `pages.manifest.ts` (throws a clear error at import time if not — e.g. if a case
-study's slug changes).
+**Two separate manifests, on purpose:** `pages.manifest.ts` is *dynamic* — it imports
+`@/data/work` and `@/data/journal` directly and derives one entry per page that actually renders
+(every `work` item with a `caseStudy`, every `journal` post with a `body`), plus 3 hardcoded
+static routes (`/`, `/work`, `/journal`). `visual-fixtures.manifest.ts` is *static* — a
+hand-picked list of a few of those same paths, chosen to represent distinct template variants,
+and it validates every path it lists still exists in `pages.manifest.ts` (throws a clear error at
+import time if not — e.g. if a case study's slug changes).
 
 **Why the split:** accessibility scans are cheap (no images stored, just DOM assertions) so
 `pages.manifest.ts` can safely scale to hundreds of future articles/projects with zero added
 cost. Screenshots are not cheap (every new page × 2 themes × 3 viewports = 6 new baseline PNGs,
 forever, in git history) — testing every single future article visually would provide near-zero
 extra signal (it's the same shared page template being re-tested) while bloating the repo. So
-visual regression stays pinned to a small, deliberately curated set.
+visual regression stays pinned to a small, deliberately curated set. See section 11 for why
+*masking* the dynamic content areas of `home`/`work-list`/`journal-list` was considered as an
+alternative and dropped in favor of the `/update-snapshots` mechanism (section 8).
 
 Neither manifest adds anything to the domain types — `WorkItem`/`JournalPost` in `src/data/*.ts`
 have zero knowledge that tests exist. That separation of concerns is intentional and should stay
@@ -187,7 +192,8 @@ manifest file, don't add a flag to the domain model.
   `journal.ts` / `work.ts` as normal (give it a `body`/`caseStudy`). `pages.manifest.ts` picks it
   up automatically — it will get accessibility coverage on the next run, with zero test-code
   changes. It will NOT automatically get visual-regression coverage (see above) — that's
-  deliberate.
+  deliberate. If the visual check on `home`/`work-list`/`journal-list` fails just because your
+  new content changed what they render, that's expected — see section 8 to accept it.
 - **You want this specific new page visually regression-tested too** (e.g. it uses a new content
   block type, or a layout variant nothing else has): add its path to the `FIXTURE_PATHS` array at
   the top of `tests/e2e/visual-fixtures.manifest.ts`.
@@ -232,13 +238,14 @@ npm run test:e2e:update
 
 **Don't commit baselines generated this way on Windows.** As covered in section 2, Windows and
 Linux render text with different anti-aliasing, so a Windows-generated baseline will show as a
-false diff the moment CI (Ubuntu) runs against it. Two options if you need to verify/update a
-baseline yourself instead of waiting for the master-branch auto-commit (section 8):
+false diff the moment CI (Ubuntu) runs against it. Three options, in order of preference:
 
-1. **Just push to a PR branch and look at the CI-run report** (simplest — the PR job's HTML
-   report shows you exactly what changed, with an actual/expected/diff view, without touching
-   your local baselines at all).
-2. **Reproduce the CI environment locally via Docker**, if you want to iterate without pushing:
+1. **Comment `/update-snapshots` on the PR** (recommended, no local setup at all — see section 8).
+2. **Just push to a PR branch and look at the CI-run report** (no local baseline update needed
+   either — the PR job's HTML report shows you exactly what changed, actual/expected/diff, side
+   by side).
+3. **Reproduce the CI environment locally via Docker**, if you specifically want to iterate on a
+   diff without pushing anything yet:
 
    ```bash
    docker run --rm -v "${PWD}:/work" -w /work/frontend \
@@ -252,22 +259,23 @@ baseline yourself instead of waiting for the master-branch auto-commit (section 
 
 ## 7. How this works in CI
 
-Workflow file: [`.github/workflows/visual-tests.yml`](../../.github/workflows/visual-tests.yml). One
-job, `test`, runs on two triggers with slightly different behavior:
+Workflow file: [`.github/workflows/visual-tests.yml`](../../.github/workflows/visual-tests.yml).
+One job, `test`, runs the exact same way on both triggers — **always compare-only, never
+`--update-snapshots`** (that only ever happens via the `/update-snapshots` PR-comment workflow,
+section 8):
 
-- **`pull_request`** (opened/synchronize/reopened, any branch): `npx playwright test` — compares
-  against whatever is currently committed in `tests/visual-snapshots/`. If any screenshot differs
-  or any accessibility check finds a `critical`/`serious` violation, this step (and therefore the
-  whole job/PR check) fails — that's the intended "red X" signal for the reviewer.
-- **`push` to `master`**: `npx playwright test --update-snapshots` — regenerates every baseline
-  from the current code and overwrites `tests/visual-snapshots/`. This does **not** make the job
-  immune to failure: `a11y.spec.ts`'s `expect(...).toEqual([])` assertions are unaffected by
-  `--update-snapshots` (that flag only changes `toHaveScreenshot` behavior), so a real
-  accessibility regression still fails the master job.
+- **`pull_request`** (opened/synchronize/reopened, any branch): compares against whatever is
+  currently committed in `tests/visual-snapshots/`. If any screenshot differs or any
+  accessibility check finds a `critical`/`serious` violation, this step (and therefore the whole
+  job/PR check) fails — that's the intended "red X" signal for the reviewer.
+- **`push` to `master`**: runs the identical check. Since a PR's baselines should already be
+  correct by the time it's merged (you accepted them via `/update-snapshots` before merging, if
+  needed), this run is a confirmation, not a place that fixes anything — `master` has a
+  repository ruleset blocking direct pushes anyway, so this job never tries to commit here (see
+  section 8 for why that matters).
 
-Regardless of outcome, the job always (`if: always()`) goes on to: commit any changed baseline
-PNGs (master only, section 8), publish the HTML report to GitHub Pages (section 9), and — on PRs
-— post/update a sticky summary comment built by
+Regardless of outcome, the job always (`if: always()`) goes on to: publish the HTML report to
+GitHub Pages (section 9), and — on PRs — post/update a sticky summary comment built by
 [`.github/scripts/format-summary.mjs`](../../.github/scripts/format-summary.mjs) from
 `frontend/test-results/summary.json` (the file our custom `summary-reporter.ts` writes).
 
@@ -280,30 +288,48 @@ Where to look:
   Playwright's own HTML report — click into any failed visual test to see actual/expected/diff
   images side by side.
 
-## 8. Baseline auto-update & auto-commit
+## 8. Accepting new baselines from a PR (`/update-snapshots`)
 
-On every push to `master`, after `--update-snapshots` regenerates `tests/visual-snapshots/`,
-[`stefanzweifel/git-auto-commit-action`](https://github.com/stefanzweifel/git-auto-commit-action)
-commits any changed files under that folder directly to `master`, with the message:
+Workflow file:
+[`.github/workflows/accept-visual-baselines.yml`](../../.github/workflows/accept-visual-baselines.yml).
+
+**Why this exists instead of a master auto-commit:** the original design regenerated baselines on
+`master` after merge and committed them directly. That doesn't work here — `master` has a
+repository ruleset (PR required, status checks required, CodeQL required) that blocks direct
+pushes, including from a bot with `contents: write`. The fix isn't to bypass that (e.g. via a PAT
+in the ruleset's allow-list — see the [RESOLVED] note in section 11 for the workaround that was
+tried first and abandoned) — it's to never need to push to `master` at all: baselines get
+accepted **before** merging, from the PR's own branch, which has no such restriction.
+
+**How to use it:** when a visual check fails and the report shows the diff is just your own
+content change (not a real bug), comment exactly:
 
 ```
-chore: update visual regression baselines [skip ci]
+/update-snapshots
 ```
 
-The `[skip ci]` is load-bearing: GitHub Actions has built-in support for skipping workflow runs
-triggered by a commit whose message contains that marker, which is what stops this from looping
-(commit → triggers push → workflow runs → commits again → ...). If the step finds no actual
-pixel differences, it's a no-op (nothing to commit, no new commit created).
+on the PR. The bot reacts with 👍, then:
 
-**How to recognize the auto-commit:** author will be `github-actions[bot]`, message will be
-exactly the string above, and the diff will only ever touch files under
-`frontend/tests/visual-snapshots/`.
+1. Checks out the **PR's own branch** (via `gh pr checkout`, not `master`).
+2. Regenerates `tests/visual-snapshots/` (`npx playwright test tests/e2e/visual.spec.ts --update-snapshots`)
+   in the same Ubuntu/Chromium environment CI uses — no local Docker step needed.
+3. Commits and pushes straight to that branch if anything actually changed.
+4. Posts a follow-up comment: ✅ if it pushed an update, ℹ️ if there was nothing to update, ❌ with
+   a link to the run if something went wrong.
 
-**If it fails:** check the job logs for that step first. The most common causes are (a) branch
-protection rules on `master` blocking a bot push — if you ever add branch protection, you'll need
-an exception or a PAT with bypass rights for this action — or (b) the checkout step not having
-fetched with enough permissions (`contents: write` is already declared at the workflow level;
-don't remove it).
+That push automatically re-triggers the normal `pull_request: synchronize` event, so
+`visual-tests.yml` re-runs and the check turns green on its own — no need to re-run anything by
+hand, and no second build on `master` either, since the PR's branch already has the correct
+baselines by the time you merge.
+
+**Restricted to trusted commenters:** the job only runs if `github.event.comment.author_association`
+is `OWNER`, `MEMBER`, or `COLLABORATOR` — anyone else's `/update-snapshots` comment is ignored.
+This matters because the job can push code; without this check, anyone able to comment on a PR
+(including on a fork PR, in a public repo) could trigger a code-pushing workflow.
+
+**Known limitation:** only works for PRs whose branch lives in this repository (not a fork) —
+`gh pr checkout` plus a push needs write access to the branch, which a fork's branch doesn't grant
+the base repo's `GITHUB_TOKEN`. Not a concern today (personal, single-maintainer repo).
 
 ## 9. GitHub Pages
 
@@ -323,6 +349,11 @@ PRs aren't wiped out by a newer run.
 
 After that one-time step, every workflow run publishes to
 `https://<owner>.github.io/<repo>/reports/<pr-N|master>/` automatically — no further manual steps.
+
+**The bare Pages root** (`https://<owner>.github.io/<repo>/`, with no `reports/...` path) is a
+separate small landing page, published by a second `peaceiris/actions-gh-pages` step using
+[`.github/scripts/generate-pages-index.mjs`](../../.github/scripts/generate-pages-index.mjs) — see
+the known-issue below for why this exists at all.
 
 **Known limitation:** this only works for PRs from branches within the same repository. A PR
 from a fork wouldn't get a `GITHUB_TOKEN` with `contents: write` (GitHub's security model, not
@@ -360,10 +391,10 @@ npm install --save-dev @playwright/test@1.61.1 @axe-core/playwright@4.12.1
    binary is the most common source of "works locally, fails in CI" (or vice versa) after a
    dependency bump.
 5. Because baselines are pixel comparisons, a Chromium version bump can shift anti-aliasing
-   subtly even with no code change — expect to possibly need one `--update-snapshots` run (via
-   the master workflow, per [section 8](#8-baseline-auto-update--auto-commit)) right after a
-   Playwright upgrade, and treat that particular baseline diff as "expected churn from the
-   upgrade", not a real regression.
+   subtly even with no code change — expect to possibly need one `--update-snapshots` run
+   accepted via a PR (per [section 8](#8-accepting-new-baselines-from-a-pr-update-snapshots))
+   right after a Playwright upgrade, and treat that particular baseline diff as "expected churn
+   from the upgrade", not a real regression.
 6. Also bump the Node version in `.github/workflows/visual-tests.yml` (`node-version: 20`) if you
    want to track a newer Node LTS — keep it in sync with `deploy_release.yaml` unless you have a
    specific reason to diverge.
@@ -556,6 +587,69 @@ is ever emitted now, so there's no ordering ambiguity to regress on. **Takeaway:
 design-system component's color via a raw same-specificity utility class in `className` when the
 component exposes a prop for that; it may work by accident today and silently flip later.
 
+### [RESOLVED] Master's baseline auto-commit silently failed — `master` has a protected-push ruleset
+
+Discovered via the GitHub API (job step logs), not from a failing check that was obviously red —
+the master run itself looked green-ish (report published, PR comment posted, etc.) but the
+"Commit updated baselines" step had `conclusion: "failure"` buried in the job's step list, and no
+`github-actions[bot]` commit ever actually appeared on `master`. Root cause: `master` has a
+repository ruleset (pull request required, status checks required, CodeQL required) that blocks
+direct pushes — including from `stefanzweifel/git-auto-commit-action` running with the default
+`GITHUB_TOKEN` and `contents: write`, since branch-protection rulesets take precedence over what
+a workflow's own `permissions:` block grants.
+
+**First attempt (tried, then abandoned):** work around it with a bypass-listed PAT instead of
+`GITHUB_TOKEN`:
+
+1. **Settings → Developer settings → Personal access tokens** — create a token (fine-grained,
+   scoped to just this repo, with **Contents: Read and write**).
+2. **Settings → Secrets and variables → Actions** — add it as a repository secret named
+   `BASELINE_COMMIT_PAT`.
+3. **Settings → Rules → Rulesets** — open the ruleset covering `master`, and in **Bypass list**
+   add **Repository admin**, set to **Always allow**.
+4. Use that secret as the `token:` input on the workflow's checkout step instead of
+   `GITHUB_TOKEN`, falling back to `GITHUB_TOKEN` when the secret isn't set.
+
+This does work (the bypass-list entry is what actually lets the push through; the PAT is just how
+the workflow proves it's an account holding that role) — but it's the wrong fix. It keeps the
+fundamental design flaw (a bot trying to push straight to a protected branch) and just punches a
+hole in the protection for it, plus it needs an extra secret and a ruleset exception that has to
+be remembered/maintained. Replaced entirely with the architecture in section 8: baselines are
+accepted **before** merge, from the PR branch (via `/update-snapshots`, a new comment-triggered
+workflow), so `master` never needs to accept a direct push for this at all. `visual-tests.yml`'s
+`master` job now runs in plain compare-only mode, identical to the `pull_request` job — no more
+`--update-snapshots`, no more auto-commit step, no more PAT, no more bypass-list entry needed.
+
+### [RESOLVED] Bare GitHub Pages root (`.../Portfolio-Website/`) 404s — permanently, not a delay
+
+Different from the transient "brand-new PR report path" propagation delay noted elsewhere in
+this section: the `gh-pages` branch only ever gets written to under `reports/<dest>/`
+(`destination_dir` in the workflow) — nothing publishes an `index.html` at the actual branch
+root, confirmed with `git ls-tree origin/gh-pages` (only `.nojekyll` and `reports/` at the top
+level). Visiting the bare Pages URL therefore 404s **forever**, not just for a minute after a
+fresh deploy — there's simply nothing there to serve, ever, until something publishes to that
+path.
+
+Fixed by adding a second, small `peaceiris/actions-gh-pages` step to the workflow that publishes
+a one-page static landing page (generated by `.github/scripts/generate-pages-index.mjs`, linking
+to `reports/master/` and explaining where PR reports live) straight to the branch root (no
+`destination_dir`), with `keep_files: true` so it doesn't wipe the `reports/` folder written by
+the other publish step in the same job.
+
+### Design change: content-driven visual diffs are accepted via PR comment, not avoided
+
+Initially considered (and asked about explicitly): masking the "living" content areas of
+`home`/`work-list`/`journal-list` (the featured-work grid, the journal preview, the full
+ledgers) with Playwright's `mask` option, so adding a new work item or journal post would never
+trigger an "expected" visual diff on those pages in the first place. Superseded by the
+`/update-snapshots` mechanism in section 8 before being implemented (a brief, incomplete
+`data-visual-mask` attribute landed in `WorkListPage.tsx` mid-exploration and was reverted): that
+mechanism solves the actual underlying friction (visual checks failing on legitimate content
+changes, with no easy way to move past it) more generally — it also covers genuine template/design
+changes on those same pages, which masking never would have. Revisit masking later only if
+`/update-snapshots` itself turns out to be too much friction for routine content updates in
+practice.
+
 ## 12. Implementation log
 
 _(Living, append-only. One entry per small implementation step: date, what was done, which files
@@ -652,3 +746,33 @@ Fixed `JournalListPage.tsx` to pass `tone={isPublished ? "primary" : "muted"}` i
 manual `className` override. Regenerated the `journal-list/` baselines (only) via Docker,
 confirmed visually against the same screenshot the user flagged, then re-ran the full suite:
 40/40 passed.
+
+### 2026-07-18 — First real PR/master run surfaced two more bugs, plus a bigger architecture change
+
+- **Report 404 (transient, not a bug):** a PR's first-ever report at `reports/pr-<N>/` briefly
+  404'd right after the check finished — confirmed via a live re-fetch minutes later that it was
+  just GitHub Pages' normal build/propagation lag for a brand-new path, not a broken publish.
+- **Master's baseline auto-commit was actually failing** (see the `[RESOLVED]` entry in section
+  11) — found via the GitHub API (`.../actions/runs/<id>/jobs`), which showed the "Commit updated
+  baselines" step with `conclusion: "failure"` even though the overall run "looked" mostly fine.
+  Root cause: a repository ruleset on `master` (PR required, status checks required, CodeQL
+  required) blocks direct pushes from anything, including a bot with `contents: write`.
+- Discussed the actual workflow the user wants: open a PR, see a visual check fail because page
+  content changed (not a bug), explicitly accept that, and have it land without a second
+  master-side build. Redesigned around that instead of patching the master auto-commit:
+  - Simplified `visual-tests.yml`: removed `--update-snapshots`/the auto-commit step entirely;
+    `master` now runs the exact same compare-only check as `pull_request`.
+  - Added `.github/workflows/accept-visual-baselines.yml`, a new `issue_comment`-triggered
+    workflow: `/update-snapshots` on a PR checks out that PR's branch (`gh pr checkout`),
+    regenerates baselines, and pushes straight to it — never touching `master` — restricted to
+    `OWNER`/`MEMBER`/`COLLABORATOR` commenters only.
+  - Considered masking the dynamic content areas of `home`/`work-list`/`journal-list` first (a
+    stray, incomplete `data-visual-mask` attribute briefly landed in `WorkListPage.tsx` from this
+    exploration) — dropped in favor of `/update-snapshots`, which solves the same friction more
+    generally; reverted that attribute.
+- Also fixed the permanent (non-transient) bare-Pages-root 404 — see the `[RESOLVED]` entry in
+  section 11 — by publishing a small landing page via `.github/scripts/generate-pages-index.mjs`.
+- **File relocated:** this document moved from `VISUAL_TESTING_GUIDE.md` at the repo root to
+  `frontend/tests/README.md` (user's call — keeps it next to the tests it documents rather than
+  competing with the repo's own top-level README). Updated every cross-reference in
+  `.github/workflows/*.yml` and `.github/scripts/*.mjs` to the new path/relative depth.
