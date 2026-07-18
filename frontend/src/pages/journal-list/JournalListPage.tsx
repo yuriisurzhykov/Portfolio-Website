@@ -93,7 +93,7 @@ export function JournalListPage() {
                 className="relative max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-[100px]">
                 <div
                     className="absolute left-[calc(clamp(20px,4vw,24px)+5px)] top-2 bottom-[100px] w-0.5 bg-border-subtle"/>
-                { journal.sort((a, b) => b.date.localeCompare(a.date)).map((post) => (
+                { [...journal].sort((a, b) => b.date.localeCompare(a.date)).map((post) => (
                     <LogEntry key={ post.slug } post={ post }/>
                 )) }
             </div>

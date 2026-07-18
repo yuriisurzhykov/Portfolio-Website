@@ -119,7 +119,7 @@ export function WorkListPage() {
                     <span className="text-right">{ ln("work.ledger.status") }</span>
                 </div>
 
-                { work.sort((a, b) => b.year - a.year).map((item) => (
+                { [...work].sort((a, b) => b.year - a.year).map((item) => (
                     <WorkRow key={ item.slug } item={ item }/>
                 )) }
             </div>

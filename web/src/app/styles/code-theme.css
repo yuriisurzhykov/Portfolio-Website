@@ -1,0 +1,64 @@
+/* Base typography for code — code panels stay dark regardless of site theme */
+code[class*="language-"],
+pre[class*="language-"] {
+    @apply text-code-panel-code;
+}
+
+/* Comments and low-importance noise */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+    @apply text-code-comment;
+}
+
+/* Keywords, control flow, operators */
+.token.keyword,
+.token.control-flow,
+.token.operator {
+    @apply text-code-keyword;
+}
+
+/* Strings, chars, regex, inserted diff */
+.token.string,
+.token.char,
+.token.regex,
+.token.inserted {
+    @apply text-code-string;
+}
+
+/* Numbers, booleans, constants */
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol {
+    @apply text-code-number;
+}
+
+/* Class names, types, builtins */
+.token.class-name,
+.token.builtin {
+    @apply text-code-class-name;
+}
+
+/* Functions and methods */
+.token.function,
+.token.method {
+    @apply text-code-function;
+}
+
+/* Punctuation, brackets, commas, etc. */
+.token.punctuation {
+    @apply text-code-punctuation;
+}
+
+/* Properties and attributes */
+.token.property,
+.token.attr-name {
+    @apply text-code-property;
+}
+
+/* Deleted code (diff -) */
+.token.deleted {
+    @apply text-status-error;
+}
