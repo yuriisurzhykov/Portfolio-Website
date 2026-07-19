@@ -55,3 +55,54 @@ export function isDatabaseConnectionError(error: unknown): boolean {
 export function isDatabaseUnavailableError(error: unknown): boolean {
     return error instanceof Error && error.name === "DatabaseUnavailableError";
 }
+
+/**
+ * Thrown by admin-posts.ts/admin-work.ts on a `slug` unique-constraint
+ * violation (Prisma code `P2002`) — turned into a friendly 409 by the
+ * `/api/admin/*` routes instead of a generic 500. Named by name, not
+ * `instanceof`, for the exact same cross-bundle reason as
+ * `isDatabaseUnavailableError` above.
+ */
+export class SlugAlreadyExistsError extends Error {
+    constructor(slug: string) {
+        super(`A record with slug "${ slug }" already exists.`);
+        this.name = "SlugAlreadyExistsError";
+    }
+}
+
+const UNIQUE_CONSTRAINT_CODE = "P2002";
+
+export function isUniqueConstraintError(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === UNIQUE_CONSTRAINT_CODE;
+}
+
+export function isSlugAlreadyExistsError(error: unknown): boolean {
+    return error instanceof Error && error.name === "SlugAlreadyExistsError";
+}
+
+/**
+ * Checked structurally (`"issues" in error`), not `instanceof
+ * z.ZodError` — same cross-bundle caution as the two checks above, kept
+ * even though a Zod schema's own `.parse()` throwing and this check
+ * running usually happen inside the same Route Handler bundle (no
+ * Server-Component-vs-Route-Handler split like `DatabaseUnavailableError`
+ * hit). `ZodError.issues` is Zod's own stable public field for this, not
+ * an implementation detail this is guessing at.
+ */
+export function isValidationError(error: unknown): boolean {
+    return typeof error === "object" && error !== null && "issues" in error && Array.isArray((error as { issues: unknown }).issues);
+}
+
+interface ZodIssueLike {
+    path: (string | number)[];
+    message: string;
+}
+
+/** Human-readable one-liner for a `/api/admin/*` 400 response body — every admin route needs this, not just one, so it's formatted once here rather than in each route. */
+export function formatValidationError(error: unknown): string {
+    if (!isValidationError(error)) {
+        return "Invalid input.";
+    }
+    const issues = (error as { issues: ZodIssueLike[] }).issues;
+    return issues.map((issue) => `${ issue.path.join(".") || "(root)" }: ${ issue.message }`).join("; ");
+}

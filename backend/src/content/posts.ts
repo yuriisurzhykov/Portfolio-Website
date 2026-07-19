@@ -21,7 +21,8 @@ export interface PostDetail extends PostSummary {
     body: Block[];
 }
 
-function toPostSummary(row: {
+/** Exported for reuse by admin-posts.ts (Phase 4) — the admin CRUD layer maps the exact same Prisma row shape back to the same public `PostSummary`, so this mapping stays defined in one place. */
+export function toPostSummary(row: {
     slug: string;
     date: string;
     dateLabel: string | null;

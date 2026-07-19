@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isDatabaseUnavailableError } from "@portfolio/backend";
+import { formatValidationError, isDatabaseUnavailableError, isSlugAlreadyExistsError, isValidationError } from "@portfolio/backend";
 
 /**
  * Reused by every auth Route Handler that touches the database
@@ -18,12 +18,27 @@ import { isDatabaseUnavailableError } from "@portfolio/backend";
  * `throw error` (a bare 500) every time, because Route Handlers and Server
  * Components compile `@portfolio/backend` as separate bundles.
  */
+/**
+ * Extended in Phase 4 for the new `/api/admin/posts`/`/api/admin/work`
+ * CRUD routes: `SlugAlreadyExistsError` → 409 (the request was understood,
+ * but conflicts with an existing resource) and a Zod `ZodError` from
+ * `postInputSchema`/`workInputSchema`.parse() → 400 (the request itself
+ * was malformed) — both are as reusable across every admin route as the
+ * original 503 case was across the three auth routes, so they belong here
+ * rather than repeated per-route.
+ */
 export function toErrorResponse(error: unknown): NextResponse {
     if (isDatabaseUnavailableError(error)) {
         return NextResponse.json(
             { error: "Service temporarily unavailable. Please try again shortly." },
             { status: 503, headers: { "Retry-After": "30" } },
         );
+    }
+    if (isSlugAlreadyExistsError(error)) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Slug already exists." }, { status: 409 });
+    }
+    if (isValidationError(error)) {
+        return NextResponse.json({ error: formatValidationError(error) }, { status: 400 });
     }
     throw error;
 }

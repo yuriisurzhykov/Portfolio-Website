@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { DatabaseUnavailableError, isDatabaseConnectionError, isDatabaseUnavailableError } from "./errors";
+import {
+    DatabaseUnavailableError,
+    formatValidationError,
+    isDatabaseConnectionError,
+    isDatabaseUnavailableError,
+    isSlugAlreadyExistsError,
+    isValidationError,
+    SlugAlreadyExistsError,
+} from "./errors";
 
 describe("isDatabaseConnectionError", () => {
     it("recognizes PrismaClientInitializationError as a connection error", () => {
@@ -76,5 +85,41 @@ describe("isDatabaseUnavailableError", () => {
     it("does not treat a non-Error value as database-unavailable", () => {
         expect(isDatabaseUnavailableError("just a string")).toBe(false);
         expect(isDatabaseUnavailableError(null)).toBe(false);
+    });
+});
+
+describe("isSlugAlreadyExistsError", () => {
+    it("recognizes a real SlugAlreadyExistsError instance", () => {
+        expect(isSlugAlreadyExistsError(new SlugAlreadyExistsError("my-slug"))).toBe(true);
+    });
+
+    it("does not treat an unrelated error as a slug conflict", () => {
+        expect(isSlugAlreadyExistsError(new Error("some other failure"))).toBe(false);
+    });
+});
+
+describe("isValidationError / formatValidationError", () => {
+    const schema = z.object({ slug: z.string().min(1), readMins: z.number().int() });
+
+    it("recognizes a real ZodError thrown by .parse()", () => {
+        try {
+            schema.parse({ slug: "", readMins: "not a number" });
+            expect.unreachable("schema.parse should have thrown");
+        } catch (error) {
+            expect(isValidationError(error)).toBe(true);
+        }
+    });
+
+    it("formats every issue into a readable, path-prefixed message", () => {
+        const result = schema.safeParse({ slug: "", readMins: "not a number" });
+        expect(result.success).toBe(false);
+        const message = formatValidationError(result.error);
+        expect(message).toContain("slug:");
+        expect(message).toContain("readMins:");
+    });
+
+    it("does not treat an unrelated error as a validation error", () => {
+        expect(isValidationError(new Error("some other failure"))).toBe(false);
+        expect(formatValidationError(new Error("some other failure"))).toBe("Invalid input.");
     });
 });

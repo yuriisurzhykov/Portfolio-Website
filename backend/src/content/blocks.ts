@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Single source of truth for "what a block looks like", shared by every
  * consumer: the import script (Phase 3), the content services below, the
- * future admin block editor (Phase 4), and web's <ContentBlocks> renderer.
+ * admin block editor (Phase 4), and web's <ContentBlocks> renderer.
  * Zod, not a plain TypeScript type, on purpose: `Block.text`/`Block.data`
  * are untyped `Json` columns in Postgres (see schema.prisma's comment on
  * why `type` isn't a DB enum) — anything read out of them is `unknown`
@@ -17,6 +17,14 @@ const localizedText = z.object({ en: z.string(), ru: z.string() });
 
 const baseFields = { id: z.string(), order: z.number().int() };
 
+// Every block "core" shape below (type + text/data, no id/order) is defined
+// once and reused for BOTH `blockSchema` (a block as read back from the
+// DB — has id/order) and `blockInputSchema` (a block as written by the
+// admin editor — the DB assigns id, `order` is just the array position).
+// Keeping one definition per type instead of two (one "with base fields",
+// one without) is what stops the read/write shapes from silently drifting
+// apart as block types are added.
+
 // `.nullish()`, not `.optional()`, for every field that's optional AND
 // backed by a nullable `Json` column: Prisma reads back an unset Json
 // column as `null`, never `undefined` — `.optional()` only accepts a
@@ -26,28 +34,24 @@ const baseFields = { id: z.string(), order: z.number().int() };
 // (a plain heading) — not something a type-only review would have caught,
 // since `unknown`-typed Json fields don't distinguish null from undefined
 // at the type level either.
-const leadBlock = z.object({ ...baseFields, type: z.literal("lead"), text: localizedText });
-const headingBlock = z.object({
-    ...baseFields,
+const leadCore = z.object({ type: z.literal("lead"), text: localizedText });
+const headingCore = z.object({
     type: z.literal("heading"),
     text: localizedText,
     data: z.object({ level: z.union([z.literal(2), z.literal(3)]).optional() }).nullish(),
 });
-const paragraphBlock = z.object({ ...baseFields, type: z.literal("paragraph"), text: localizedText });
-const quoteBlock = z.object({
-    ...baseFields,
+const paragraphCore = z.object({ type: z.literal("paragraph"), text: localizedText });
+const quoteCore = z.object({
     type: z.literal("quote"),
     text: localizedText,
     data: z.object({ attribution: z.string().optional() }).nullish(),
 });
-const noteBlock = z.object({
-    ...baseFields,
+const noteCore = z.object({
     type: z.literal("note"),
     text: localizedText,
     data: z.object({ variant: z.enum(["info", "warning", "tip"]) }),
 });
-const imageBlock = z.object({
-    ...baseFields,
+const imageCore = z.object({
     type: z.literal("image"),
     text: localizedText.nullish(), // optional caption
     data: z.object({
@@ -57,8 +61,7 @@ const imageBlock = z.object({
         height: z.number().int().positive().optional(),
     }),
 });
-const codeBlock = z.object({
-    ...baseFields,
+const codeCore = z.object({
     type: z.literal("code"),
     data: z.object({
         filename: z.string(),
@@ -66,13 +69,26 @@ const codeBlock = z.object({
         code: z.string(),
     }),
 });
-const approachListBlock = z.object({
-    ...baseFields,
+const approachListCore = z.object({
     type: z.literal("approachList"),
     data: z.object({
         items: z.array(z.object({ title: localizedText, description: localizedText })).min(1),
     }),
 });
+
+// One `.extend()` call per type, written out individually rather than
+// mapped over an array — a `.map()` here would widen every branch's
+// precise literal-discriminant type down to `ZodObject<any>`, which would
+// in turn collapse `Block` (via `z.infer`) into a loose, useless type.
+// Each call site below keeps its own exact inferred type instead.
+const leadBlock = leadCore.extend(baseFields);
+const headingBlock = headingCore.extend(baseFields);
+const paragraphBlock = paragraphCore.extend(baseFields);
+const quoteBlock = quoteCore.extend(baseFields);
+const noteBlock = noteCore.extend(baseFields);
+const imageBlock = imageCore.extend(baseFields);
+const codeBlock = codeCore.extend(baseFields);
+const approachListBlock = approachListCore.extend(baseFields);
 
 export const blockSchema = z.discriminatedUnion("type", [
     leadBlock,
@@ -85,6 +101,18 @@ export const blockSchema = z.discriminatedUnion("type", [
     approachListBlock,
 ]);
 
+/** Same block shapes, minus `id`/`order` — what the admin editor sends when saving a document's blocks (see content/document.ts's `replaceDocumentContent`). */
+export const blockInputSchema = z.discriminatedUnion("type", [
+    leadCore,
+    headingCore,
+    paragraphCore,
+    quoteCore,
+    noteCore,
+    imageCore,
+    codeCore,
+    approachListCore,
+]);
+
 // Exported (not just used internally) — Post/Work fields (title, summary,
 // excerpt, ...) are the exact same {en, ru} shape, and reusing this one
 // schema for them too (see posts.ts/work.ts) avoids a second, easy-to-drift
@@ -93,6 +121,7 @@ export const localizedTextSchema = localizedText;
 export type LocalizedText = z.infer<typeof localizedText>;
 export type Block = z.infer<typeof blockSchema>;
 export type BlockType = Block["type"];
+export type BlockInput = z.infer<typeof blockInputSchema>;
 
 /**
  * Shape of a raw row as it comes out of Prisma (`text`/`data` are
@@ -114,4 +143,8 @@ export function parseBlock(row: RawBlockRow): Block {
 
 export function parseBlocks(rows: RawBlockRow[]): Block[] {
     return rows.map(parseBlock);
+}
+
+export function parseBlockInputs(raw: unknown): BlockInput[] {
+    return z.array(blockInputSchema).parse(raw);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBlock, parseBlocks } from "./blocks";
+import { parseBlock, parseBlockInputs, parseBlocks } from "./blocks";
 
 describe("parseBlock", () => {
     it("parses a lead block", () => {
@@ -73,5 +73,30 @@ describe("parseBlock", () => {
             { id: "2", order: 1, type: "paragraph", text: { en: "B", ru: "B" }, data: null },
         ]);
         expect(blocks.map((b) => b.type)).toEqual(["heading", "paragraph"]);
+    });
+});
+
+describe("parseBlockInputs", () => {
+    it("accepts the exact shape the admin block editor submits — no id/order", () => {
+        const blocks = parseBlockInputs([
+            { type: "lead", text: { en: "Lead", ru: "Лид" } },
+            { type: "code", data: { filename: "a.kt", code: "fun main() {}" } },
+        ]);
+        expect(blocks.map((b) => b.type)).toEqual(["lead", "code"]);
+    });
+
+    it("still rejects a block missing required fields for its type", () => {
+        expect(() => parseBlockInputs([{ type: "note", text: { en: "x", ru: "x" } }])).toThrow();
+    });
+
+    it("rejects id/order if present — the admin editor must not be able to set them directly", () => {
+        // Extra keys are stripped/ignored by Zod object parsing by default,
+        // not rejected — this test documents that behavior rather than
+        // assuming it, since the whole point of BlockInput excluding
+        // id/order is that the caller can't dictate row identity or
+        // position (position comes from array order at save time instead).
+        const [block] = parseBlockInputs([{ type: "lead", text: { en: "x", ru: "x" }, id: "should-be-ignored", order: 99 }]);
+        expect(block).not.toHaveProperty("id");
+        expect(block).not.toHaveProperty("order");
     });
 });

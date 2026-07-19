@@ -47,7 +47,8 @@ interface RawWorkRow {
     caseStudyDocumentId: string | null;
 }
 
-function toWorkSummary(row: RawWorkRow): WorkSummary {
+/** Exported for reuse by admin-work.ts (Phase 4) — same reasoning as posts.ts's `toPostSummary`. */
+export function toWorkSummary(row: RawWorkRow): WorkSummary {
     return {
         slug: row.slug,
         title: row.title,
