@@ -68,6 +68,11 @@
   "label.button.copied": "Скопировано",
   "ui.codeBlock.liveRegion.copied": "Код скопирован в буфер обмена",
 
+  "label.aria.mobileMenu.open": "Открыть меню",
+  "label.aria.mobileMenu.close": "Закрыть меню",
+  "label.aria.mobileMenu.panel": "Навигационное меню",
+  "label.aria.backToTop": "Наверх страницы",
+
   "error.serviceUnavailable.title": "Временно недоступно",
   "error.serviceUnavailable.description": "Эта часть сайта сейчас не смогла загрузить данные. Попробуйте ещё раз через момент.",
   "error.serviceUnavailable.retry": "Попробовать снова",

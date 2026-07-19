@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Nav } from "@/widgets/nav";
 import { Footer } from "@/widgets/footer";
+import { BackToTop } from "@/shared/ui/back-to-top";
 
 /**
  * On every route change: jump to the target section if the URL has a hash
@@ -43,6 +44,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 {children}
             </div>
             <Footer />
+            <BackToTop />
         </div>
     );
 }

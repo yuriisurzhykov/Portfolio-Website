@@ -68,6 +68,11 @@
   "label.button.copied": "Copied",
   "ui.codeBlock.liveRegion.copied": "Code copied to clipboard",
 
+  "label.aria.mobileMenu.open": "Open menu",
+  "label.aria.mobileMenu.close": "Close menu",
+  "label.aria.mobileMenu.panel": "Navigation menu",
+  "label.aria.backToTop": "Back to top",
+
   "error.serviceUnavailable.title": "Temporarily unavailable",
   "error.serviceUnavailable.description": "This part of the site couldn't load its data just now. Please try again in a moment.",
   "error.serviceUnavailable.retry": "Try again",
