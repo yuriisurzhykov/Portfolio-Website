@@ -66,5 +66,12 @@
   "label.aria.theme.switch.auto": "Использовать системную тему",
   "label.button.copy": "Копировать",
   "label.button.copied": "Скопировано",
-  "ui.codeBlock.liveRegion.copied": "Код скопирован в буфер обмена"
+  "ui.codeBlock.liveRegion.copied": "Код скопирован в буфер обмена",
+
+  "error.serviceUnavailable.title": "Временно недоступно",
+  "error.serviceUnavailable.description": "Эта часть сайта сейчас не смогла загрузить данные. Попробуйте ещё раз через момент.",
+  "error.serviceUnavailable.retry": "Попробовать снова",
+  "error.generic.title": "Что-то пошло не так",
+  "error.generic.description": "Произошла непредвиденная ошибка. Попробуйте ещё раз.",
+  "error.generic.retry": "Попробовать снова"
 }

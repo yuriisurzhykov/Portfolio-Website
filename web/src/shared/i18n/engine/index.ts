@@ -1,14 +1,22 @@
-import { type LocaleStore } from "./LocaleStore";
 import { LocaleRegistry } from "./LocaleRegistry";
-import { WebLocaleStore } from "./impl/WebLocaleStore";
+import en from "../locales/en.json";
+import ru from "../locales/ru.json";
 
-const store: LocaleStore = new WebLocaleStore("/locales", "translation.json");
-export const i18nEngine: LocaleRegistry = new LocaleRegistry(store);
-
-export async function initI18n() {
-    await i18nEngine.registerLocale("en");
-    await i18nEngine.registerLocale("ru");
-}
+/**
+ * 2026-07-19 — Replaced a `fetch()`-based store (`WebLocaleStore`, now
+ * deleted) that loaded `/locales/{code}/translation.json` over the
+ * network from a `useEffect` in I18nContext.tsx. That produced a real,
+ * user-visible bug: `ln()` returns the raw key until the fetch resolves,
+ * and on a first-ever page load (nothing cached) that's long enough to be
+ * clearly visible — every nav label, button, and badge briefly (or not so
+ * briefly) shows things like "nav.work" instead of "Work". Two locale
+ * JSON files for a two-language personal site don't need a pluggable,
+ * async-loading abstraction — they're known at build time, so they're
+ * imported directly and bundled into the JS, available synchronously,
+ * identically on the server and the client, from the very first render.
+ * No fetch, no race, no flash.
+ */
+export const i18nEngine = new LocaleRegistry({ en, ru }, "en");
 
 export function setLocale(code: string) {
     i18nEngine.setLocale(code);

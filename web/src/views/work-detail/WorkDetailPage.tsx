@@ -2,36 +2,36 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import type { PostSummary, WorkDetail } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { Tag } from "@/shared/ui/tag";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { PlaceholderCover } from "@/shared/ui/placeholder-cover";
 import { LinkButton } from "@/shared/ui/button";
+import { ContentBlocks } from "@/shared/ui/content-blocks";
 import { useTranslation } from "@/shared/i18n";
-import { work } from "@/data/work";
-import { journal } from "@/data/journal";
 
-export function WorkDetailPage() {
-    const {ln, pick} = useTranslation();
-    const params = useParams<{ slug: string }>();
-    const router = useRouter();
-    const item = work.find((entry) => entry.slug === params.slug);
+export interface WorkDetailPageProps {
+    /** `caseStudy` is guaranteed non-null here — the route (app/(site)/work/[slug]/page.tsx) already 404s otherwise. */
+    item: WorkDetail;
+    relatedPost: PostSummary | null;
+}
 
-    // See JournalDetailPage for why this is an effect instead of react-router's <Navigate/>.
-    React.useEffect(() => {
-        if (!item || !item.caseStudy) {
-            router.replace("/work");
-        }
-    }, [item, router]);
-
-    if (!item || !item.caseStudy) {
-        return null;
-    }
-
-    const {caseStudy} = item;
-    const relatedPost = item.relatedPostSlug ? journal.find((post) => post.slug === item.relatedPostSlug) : undefined;
+/**
+ * The case-study narrative renders through the exact same <ContentBlocks>
+ * as a journal post body (`item.caseStudy.blocks`) — Phase 1/2 had this
+ * hand-rolled here (`caseStudy.sections.map(...)`, a separate
+ * `caseStudy.approach.map(...)`), duplicating logic that already existed
+ * in ContentBlocks for the journal detail page. Now that both a post body
+ * and a case study are the same Document/Block shape in the database
+ * (see the migration plan), there's no reason for two renderers — the old
+ * "sections" became heading+paragraph block pairs and "approach" became
+ * an `approachList` block during the Phase 3 data import.
+ */
+export function WorkDetailPage({ item, relatedPost }: WorkDetailPageProps) {
+    const { ln, pick } = useTranslation();
+    const caseStudy = item.caseStudy!;
     const isShipped = item.status === "shipped";
 
     return (
@@ -57,48 +57,19 @@ export function WorkDetailPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-6 mb-8 font-mono text-caption text-text-muted">
-                    <span>{ ln("work.caseStudy.started", {date: pick(caseStudy.startedLabel)}) }</span>
-                    <span>{ ln(isShipped ? "work.caseStudy.shipped" : "work.caseStudy.target", {date: pick(caseStudy.shippedLabel)}) }</span>
-                    <span>{ ln("work.caseStudy.role", {role: pick(caseStudy.role)}) }</span>
+                    <span>{ ln("work.caseStudy.started", { date: pick(caseStudy.startedLabel) }) }</span>
+                    <span>{ ln(isShipped ? "work.caseStudy.shipped" : "work.caseStudy.target", { date: pick(caseStudy.shippedLabel) }) }</span>
+                    <span>{ ln("work.caseStudy.role", { role: pick(caseStudy.role) }) }</span>
                 </div>
 
                 <PlaceholderCover
                     className="h-[280px] rounded-xl border border-border-subtle mb-10"
                     label={ `${ item.title.toLowerCase() } — hero screenshot` }
-                    src={ caseStudy.heroImage }
+                    src={ caseStudy.heroImage ?? undefined }
                     alt={ item.title }
                 />
 
-                { caseStudy.sections.map((section) => (
-                    <React.Fragment key={ pick(section.heading) }>
-                        <Text as="h2" variant="h2" className="mb-3.5">
-                            { pick(section.heading) }
-                        </Text>
-                        <Text variant="body" tone="muted" className="mb-7 max-w-[70ch] leading-[1.75]">
-                            { pick(section.body) }
-                        </Text>
-                    </React.Fragment>
-                )) }
-
-                { caseStudy.approach && (
-                    <div
-                        className="grid gap-4 mb-7"
-                        style={ {gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"} }
-                    >
-                        { caseStudy.approach.map((step) => (
-                            <div key={ pick(step.title) }
-                                 className="bg-surface-base border border-border-subtle rounded-lg p-5">
-                                <Text as="div" variant="caption"
-                                      className="font-mono font-semibold text-accent-text mb-2">
-                                    { pick(step.title) }
-                                </Text>
-                                <Text as="div" variant="caption" tone="muted" className="leading-[1.6]">
-                                    { pick(step.description) }
-                                </Text>
-                            </div>
-                        )) }
-                    </div>
-                ) }
+                <ContentBlocks blocks={ caseStudy.blocks }/>
 
                 <Text as="h2" variant="h2" className="mb-3.5">
                     { ln("work.caseStudy.stackHeading") }

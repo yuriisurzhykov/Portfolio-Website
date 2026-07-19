@@ -2,39 +2,33 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import type { PostDetail, WorkDetail } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { LinkButton } from "@/shared/ui/button";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
 import { useTranslation } from "@/shared/i18n";
-import { journal } from "@/data/journal";
-import { work } from "@/data/work";
 
-const monthYearFormatter = new Intl.DateTimeFormat("en-US", {month: "long", year: "numeric"});
+const monthYearFormatter = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
 
-export function JournalDetailPage() {
-    const {ln, pick} = useTranslation();
-    const params = useParams<{ slug: string }>();
-    const router = useRouter();
-    const post = journal.find((entry) => entry.slug === params.slug);
+export interface JournalDetailPageProps {
+    post: PostDetail;
+    relatedWork: WorkDetail | null;
+}
 
-    // Next.js's `useRouter()` only lets a Client Component redirect from an
-    // effect/event handler, not during render (unlike react-router's
-    // <Navigate/>) — so this bails out to an empty render for one tick
-    // before the replace happens.
-    React.useEffect(() => {
-        if (!post || !post.body) {
-            router.replace("/journal");
-        }
-    }, [post, router]);
-
-    if (!post || !post.body) {
-        return null;
-    }
-
-    const relatedWork = post.relatedWorkSlug ? work.find((item) => item.slug === post.relatedWorkSlug) : undefined;
+/**
+ * `post`/`relatedWork` arrive already resolved from the Server Component
+ * route (app/(site)/journal/[slug]/page.tsx) — that's also where "post not
+ * found" is handled now, via Next's `notFound()` (a real 404 response),
+ * replacing Phase 1's client-side `useRouter().replace()` workaround. That
+ * workaround existed only because Phase 1's data was still a static import
+ * with no natural place to do a server-side existence check; DB-backed
+ * data has one (the route file), so the hack goes away rather than
+ * carrying it forward.
+ */
+export function JournalDetailPage({ post, relatedWork }: JournalDetailPageProps) {
+    const { ln, pick } = useTranslation();
 
     return (
         <main>
@@ -47,7 +41,7 @@ export function JournalDetailPage() {
                 <div className="flex gap-sm items-center mt-7 mb-[18px] flex-wrap">
                     <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge>
                     <Text variant="caption" tone="faint" className="font-mono">
-                        { monthYearFormatter.format(new Date(post.date)) } · { ln("journal.readMins", {count: post.readMins}) }
+                        { monthYearFormatter.format(new Date(post.date)) } · { ln("journal.readMins", { count: post.readMins }) }
                     </Text>
                 </div>
 

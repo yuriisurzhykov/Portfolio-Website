@@ -78,6 +78,10 @@ jobs:
         working-directory: backend
         run: npx vitest run
 
+      - name: Run web test suite
+        working-directory: web
+        run: npm test
+
       - name: Build web (Next.js)
         working-directory: web
         run: npm run build

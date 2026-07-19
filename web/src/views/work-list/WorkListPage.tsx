@@ -2,20 +2,24 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { WorkSummary } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
-import { work, type WorkItem } from "@/data/work";
 import { workPage } from "@/data/workPage";
 import { cn } from "@/shared/lib/utils";
 
+export interface WorkListPageProps {
+    items: WorkSummary[];
+}
+
 const desktopRowGridCols = "sm:grid-cols-[100px_1fr_auto_auto]";
 
-function WorkRow({item}: { item: WorkItem }) {
-    const {ln, pick} = useTranslation();
+function WorkRow({ item }: { item: WorkSummary }) {
+    const { ln, pick } = useTranslation();
     const isShipped = item.status === "shipped";
-    const href = item.caseStudy ? `/work/${ item.slug }` : item.relatedPostSlug ? `/journal/${ item.relatedPostSlug }` : undefined;
+    const href = item.hasCaseStudy ? `/work/${ item.slug }` : item.relatedPostSlug ? `/journal/${ item.relatedPostSlug }` : undefined;
 
     const statusBadge = (
         <StatusBadge tone={ isShipped ? "success" : "warning" } className="whitespace-nowrap">
@@ -80,8 +84,8 @@ function WorkRow({item}: { item: WorkItem }) {
     return <div className={ wrapperClass }>{ body }</div>;
 }
 
-export function WorkListPage() {
-    const {ln, pick} = useTranslation();
+export function WorkListPage({ items }: WorkListPageProps) {
+    const { ln, pick } = useTranslation();
 
     return (
         <main>
@@ -121,7 +125,7 @@ export function WorkListPage() {
                     <span className="text-right">{ ln("work.ledger.status") }</span>
                 </div>
 
-                { [...work].sort((a, b) => b.year - a.year).map((item) => (
+                { items.map((item) => (
                     <WorkRow key={ item.slug } item={ item }/>
                 )) }
             </div>

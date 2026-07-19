@@ -60,3 +60,16 @@ workspace он хостится в корневом `node_modules/@prisma/client
 `backend/package.json` — теперь генерация клиента гарантированно происходит
 при любой установке зависимостей (свежий клон, CI, деплой на VPS), не
 только после миграций.
+
+## 2026-07-19 — Та же проблема повторилась после `prisma migrate dev`
+
+Дважды за Фазу 3 (после добавления Document/Block/Post/Work, и снова после
+добавления `Work.heroImage`) — тайпчек падал с "Property ... does not exist
+on type" сразу после `npx prisma migrate dev`, потому что клиент не
+перегенерировался автоматически, хотя по документации Prisma `migrate dev`
+обязан это делать сам. Раз это не сработало надёжно два раза подряд именно
+в этой Prisma 7 + npm workspace конфигурации — вместо того, чтобы третий раз
+понадеяться на неявное поведение, добавлен явный составной скрипт
+`"db:migrate": "prisma migrate dev && prisma generate"` в
+`backend/package.json`. Используйте его вместо голого
+`npx prisma migrate dev` при изменении схемы.

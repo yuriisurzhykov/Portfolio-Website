@@ -1,32 +1,24 @@
 "use client";
 
-import React, { createContext, useEffect, useState } from "react";
+import React, { createContext, useState } from "react";
 import type { I18nContextType, Language, LanguageProps, Localized } from "./types";
-import { initI18n, ln as lnEngine, setLocale } from "./engine";
+import { ln as lnEngine, setLocale } from "./engine";
 
 export const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
+/**
+ * No `useEffect`/`initI18n()` here anymore — `i18nEngine` (engine/index.ts)
+ * now constructs itself synchronously, with both dictionaries already
+ * bundled, and defaults to "en" the moment the module loads. There's
+ * nothing left to wait for: `ln()` is correct on the very first render,
+ * server-rendered HTML included, which is what actually fixes the
+ * flash-of-untranslated-keys bug an earlier version of this file had (see
+ * README.md's journal for the full story — that version's fix was a
+ * client-only effect that made the race *shorter*; this removes the race
+ * entirely).
+ */
 export const I18nProvider = ({children}: LanguageProps) => {
     const [language, setLanguage] = useState<Language>('en');
-
-    // In the old Vite entry point, `main.tsx` did `await initI18n()` at module
-    // scope BEFORE the first `ReactDOM.render` call — so by the time this
-    // component ever mounted, both locale dictionaries were already
-    // registered and `setLocale('en')` below was safe. Next.js has no
-    // equivalent "block rendering until this promise resolves" entry hook for
-    // a Client Component, so that ordering guarantee no longer holds; calling
-    // `setLocale('en')` without registering the locale first throws
-    // ("No locales registered..."). Fixed by having the provider register the
-    // locales itself, in order, before switching to one.
-    useEffect(() => {
-        async function init() {
-            await initI18n();
-            setLocale('en');
-            setLanguage('en');
-        }
-
-        void init();
-    }, []);
 
     const changeLanguage = (language: Language) => {
         setLanguage(language);

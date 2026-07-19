@@ -2,23 +2,27 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { PostSummary } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
-import { journal, type JournalPost } from "@/data/journal";
 import { journalPage } from "@/data/journalPage";
 import { cn } from "@/shared/lib/utils";
 
-function formatDate(post: JournalPost, ln: (key: string, vars?: Record<string, string | number>) => string) {
+export interface JournalListPageProps {
+    entries: PostSummary[];
+}
+
+function formatDate(post: PostSummary, ln: (key: string, vars?: Record<string, string | number>) => string) {
     if (post.status === "upcoming") {
-        return ln("status.upcoming", {date: post.dateLabel ?? post.date});
+        return ln("status.upcoming", { date: post.dateLabel ?? post.date });
     }
     return post.date;
 }
 
-function LogEntry({post}: { post: JournalPost }) {
-    const {ln, pick} = useTranslation();
+function LogEntry({ post }: { post: PostSummary }) {
+    const { ln, pick } = useTranslation();
     const isPublished = post.status === "published";
 
     const inner = (
@@ -36,7 +40,7 @@ function LogEntry({post}: { post: JournalPost }) {
                 { isPublished && <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge> }
                 { isPublished && (
                     <Text variant="caption" tone="faint" className="font-mono">
-                        { ln("journal.readMins", {count: post.readMins}) }
+                        { ln("journal.readMins", { count: post.readMins }) }
                     </Text>
                 ) }
             </div>
@@ -70,8 +74,8 @@ function LogEntry({post}: { post: JournalPost }) {
     );
 }
 
-export function JournalListPage() {
-    const {ln, pick} = useTranslation();
+export function JournalListPage({ entries }: JournalListPageProps) {
+    const { ln, pick } = useTranslation();
 
     return (
         <main>
@@ -95,7 +99,7 @@ export function JournalListPage() {
                 className="relative max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-[100px]">
                 <div
                     className="absolute left-[calc(clamp(20px,4vw,24px)+5px)] top-2 bottom-[100px] w-0.5 bg-border-subtle"/>
-                { [...journal].sort((a, b) => b.date.localeCompare(a.date)).map((post) => (
+                { entries.map((post) => (
                     <LogEntry key={ post.slug } post={ post }/>
                 )) }
             </div>

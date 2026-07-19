@@ -1,5 +1,5 @@
-// Prisma schema — Phase 2 scope only (auth foundation: User + Session).
-// Post/Work/Document/Block land in Phase 3; SiteContent in Phase 5.
+// Prisma schema — Phase 2 (auth: User + Session) + Phase 3 (content:
+// Document/Block/Post/Work). SiteContent lands in Phase 5.
 // See backend/README.md and the migration plan for the full model design.
 
 generator client {
@@ -43,4 +43,87 @@ model Session {
   revokedAt        DateTime?
 
   @@index([userId])
+}
+
+/// A journal post's body OR a work item's case-study narrative — the same
+/// container either way, see backend/src/content/README.md for why a case
+/// study is architecturally just a document, same as a post.
+model Document {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blocks Block[]
+  post   Post?
+  work   Work?
+}
+
+/// One row per paragraph/heading/image/code/quote/note/approachList, in
+/// order. `type` is a plain String, not a Prisma/Postgres enum — enums are
+/// a schema-level constraint, so adding a new block type would need a
+/// migration every time; a String does not (see the block-storage
+/// discussion in the migration plan for the full reasoning). `text` and
+/// `data` are deliberately untyped Json here — the actual shape per `type`
+/// is validated at the application layer (backend/src/content/blocks.ts,
+/// Zod schemas), not the database layer.
+model Block {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  order      Int
+  type       String
+  text       Json?
+  data       Json?
+
+  @@unique([documentId, order])
+  @@index([documentId])
+}
+
+/// Journal entry. `bodyDocumentId` is nullable — an "upcoming" stub post
+/// (announced, not yet written) has no body document at all.
+model Post {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  date            String
+  dateLabel       String?
+  title           Json
+  category        Json
+  readMins        Int
+  excerpt         Json
+  status          String
+  relatedWorkSlug String?
+  bodyDocumentId  String?   @unique
+  body            Document? @relation(fields: [bodyDocumentId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+/// Project/work item. `startedLabel`/`shippedLabel`/`role` are case-study
+/// metadata that stay scalar fields here (not part of the narrative
+/// blocks) — see backend/src/content/README.md.
+model Work {
+  id                  String    @id @default(cuid())
+  slug                String    @unique
+  title               String
+  year                Int
+  status              String
+  summary             Json
+  stack               String[]
+  coverImage          String?
+  featured            Boolean   @default(false)
+  relatedPostSlug     String?
+  startedLabel        Json?
+  shippedLabel        Json?
+  role                Json?
+  /// The case-study detail page's large hero image — a separate field from
+  /// `coverImage` (the small card/ledger thumbnail). Ported from the
+  /// original `WorkCaseStudy.heroImage`; currently unset by every existing
+  /// item (all show the placeholder pattern instead), kept for parity with
+  /// the original shape rather than silently dropping a field nothing
+  /// happens to use yet.
+  heroImage           String?
+  caseStudyDocumentId String?   @unique
+  caseStudy           Document? @relation(fields: [caseStudyDocumentId], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }

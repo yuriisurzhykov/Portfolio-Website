@@ -66,5 +66,12 @@
   "label.aria.theme.switch.auto": "Follow system color scheme",
   "label.button.copy": "Copy",
   "label.button.copied": "Copied",
-  "ui.codeBlock.liveRegion.copied": "Code copied to clipboard"
+  "ui.codeBlock.liveRegion.copied": "Code copied to clipboard",
+
+  "error.serviceUnavailable.title": "Temporarily unavailable",
+  "error.serviceUnavailable.description": "This part of the site couldn't load its data just now. Please try again in a moment.",
+  "error.serviceUnavailable.retry": "Try again",
+  "error.generic.title": "Something went wrong",
+  "error.generic.description": "An unexpected error occurred. Please try again.",
+  "error.generic.retry": "Try again"
 }

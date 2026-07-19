@@ -2,17 +2,20 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { PostSummary } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
-import { journal } from "@/data/journal";
 
-export function JournalPreview() {
+export interface JournalPreviewProps {
+    post: PostSummary | null;
+}
+
+export function JournalPreview({ post }: JournalPreviewProps) {
     const { ln, pick } = useTranslation();
-    const latest = journal.find((post) => post.status === "published");
 
-    if (!latest) return null;
+    if (!post) return null;
 
     return (
         <section
@@ -21,20 +24,20 @@ export function JournalPreview() {
         >
             <Eyebrow className="mb-[20px]">{ln("eyebrow.fromJournal")}</Eyebrow>
             <Link
-                href={`/journal/${latest.slug}`}
+                href={`/journal/${post.slug}`}
                 className="block p-[32px] bg-surface-base border border-border-subtle rounded-xl hover:border-border-default transition-colors duration-normal"
             >
                 <div className="flex gap-sm items-center mb-[14px] flex-wrap">
-                    <StatusBadge tone="accent">{pick(latest.category)}</StatusBadge>
+                    <StatusBadge tone="accent">{pick(post.category)}</StatusBadge>
                     <Text variant="caption" tone="faint" className="font-mono normal-case">
-                        {ln("journal.readMins", { count: latest.readMins })}
+                        {ln("journal.readMins", { count: post.readMins })}
                     </Text>
                 </div>
                 <Text as="h3" variant="h3" className="mb-[10px]">
-                    {pick(latest.title)}
+                    {pick(post.title)}
                 </Text>
                 <Text variant="body" tone="muted" className="max-w-[70ch] leading-[1.6]">
-                    {pick(latest.excerpt)}
+                    {pick(post.excerpt)}
                 </Text>
             </Link>
         </section>
