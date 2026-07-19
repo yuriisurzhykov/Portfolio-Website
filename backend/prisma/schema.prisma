@@ -1,0 +1,46 @@
+// Prisma schema — Phase 2 scope only (auth foundation: User + Session).
+// Post/Work/Document/Block land in Phase 3; SiteContent in Phase 5.
+// See backend/README.md and the migration plan for the full model design.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A person who can log into /admin. One row today (you) — modeled as a
+/// real table from day one (not a hardcoded single-admin check) so adding a
+/// second user or a role later is a data change, not a redesign.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions Session[]
+}
+
+/// One row per issued refresh token (= one row per logged-in device).
+/// Storing a hash of the refresh token (never the raw token) means a
+/// leaked database dump alone can't be used to impersonate a session —
+/// same principle as passwordHash. Deleting/revoking a row instantly
+/// invalidates that device without touching any other session, which is
+/// what makes "sign out this device" (and multi-device / future mobile
+/// client support) possible without redesigning anything later.
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ip               String?
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  @@index([userId])
+}

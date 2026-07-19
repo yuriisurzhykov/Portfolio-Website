@@ -1,0 +1,83 @@
+name: Backend & Web Checks
+
+# Runs on every pull request and every push to master: backend typecheck,
+# the Vitest suite in backend/ (unit + integration tests against a real,
+# ephemeral Postgres service container — mirrors the local dev setup in
+# docker-compose.yml, just ephemeral per run instead of persistent), and a
+# full `next build` of web/ to catch build-breaking changes early. This is
+# the equivalent of visual-tests.yml, but for the Next.js/Postgres/Prisma
+# side of the repo (web/ + backend/) rather than the legacy frontend/ SPA.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-web-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: portfolio
+          POSTGRES_PASSWORD: portfolio_ci
+          POSTGRES_DB: portfolio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # A real Postgres service container per run, not the dotenv-loaded
+      # backend/.env.test used locally (that file is gitignored and
+      # intentionally does not exist here) — these are already real
+      # environment variables, so backend/vitest.setup.ts's dotenv call is a
+      # no-op (it never overwrites an already-set variable) and
+      # web/next.config.ts's dotenv call is too (same reason), which is
+      # exactly the point of both being written that way.
+      DATABASE_URL: postgresql://portfolio:portfolio_ci@localhost:5432/portfolio_test
+      JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies (web/ + backend/)
+        run: npm ci
+
+      - name: Typecheck backend
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Apply migrations to the CI database
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Run backend test suite
+        working-directory: backend
+        run: npx vitest run
+
+      - name: Build web (Next.js)
+        working-directory: web
+        run: npm run build
