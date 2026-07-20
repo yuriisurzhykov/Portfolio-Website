@@ -76,6 +76,14 @@ time you need it (disaster recovery, new server). See the repo's
   silently. Also parameterized via `DB_NAME` (default `portfolio`) for the
   same dev/staging reason.
 
+- `08-systemd-service.sh` — installs/enables a systemd unit for one Next.js
+  target (`SERVICE_NAME`/`APP_BASE_DIR`/`PORT` params). Hardening
+  directives (`NoNewPrivileges`, `PrivateTmp`, `ProtectHome`,
+  `ProtectSystem=strict`) were verified incrementally against the real
+  `yuriisoft-web-dev` service — one group at a time — before being
+  combined here; see the commit history for each step's live
+  confirmation. Does not itself start/restart the service.
+
 ## Dev/staging rehearsal environment
 
 Before ever running a migration or a first `next start` against the real
