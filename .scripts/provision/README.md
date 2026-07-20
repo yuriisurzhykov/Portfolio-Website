@@ -90,6 +90,21 @@ time you need it (disaster recovery, new server). See the repo's
   combined here; see the commit history for each step's live
   confirmation. Does not itself start/restart the service.
 
+- `09-nginx-rate-limit-zone.sh` — installs the shared `login_limit`
+  `limit_req_zone` (10r/m per IP) in `/etc/nginx/conf.d/`, protecting
+  `/api/auth/login` — a second, independent layer in front of the
+  app-level lockout that already existed in
+  `backend/src/auth/rate-limit.ts` since Phase 2 (that file's own comment
+  anticipates this exact script). Verified live: a 15-request burst
+  against `dev.yuriisoft.me` returned `401` (real app rejection) for the
+  first 6, then `429` (nginx, never reached the app) for the rest.
+- `10-nginx-site.sh` — generates/installs an nginx reverse-proxy site
+  config (`SITE_NAME`/`DOMAIN`/`PORT`/optional `EXTRA_SERVER_NAMES`)
+  pointing at one Next.js target, with the rate-limited
+  `/api/auth/login` location from the zone above. Assumes an existing
+  Certbot cert for `DOMAIN`. Never runs `nginx -t`/reload itself —
+  verifying and reloading stays an explicit, separate step every time.
+
 ## Dev/staging rehearsal environment
 
 Before ever running a migration or a first `next start` against the real
