@@ -41,6 +41,45 @@ function approachToBlocks(approach?: { title: Localized; description: Localized 
     return [{ type: "approachList", data: { items: approach } }];
 }
 
+/**
+ * A block, after picking one language out of every `Localized` field —
+ * the shape `backend/src/content/blocks.ts` actually accepts now (plain
+ * `z.string()`, not `{en, ru}` — see its top comment for why: a
+ * translation is a wholly separate `Document`, not a paired field on
+ * every block). `BlockInput` above stays bilingual on purpose: it's this
+ * script's own source-of-truth literal data, written once in whichever
+ * language pairs are available, and split into two independent documents
+ * (one per language, `createDocument` below) only at the very end, right
+ * before it's written to Postgres.
+ */
+type LocaleBlockInput =
+    | { type: "lead" | "paragraph" | "heading"; text: string }
+    | { type: "code"; data: { filename: string; language?: string; code: string } }
+    | { type: "approachList"; data: { items: { title: string; description: string }[] } };
+
+function toLocaleBlocks(blocks: BlockInput[], locale: "en" | "ru"): LocaleBlockInput[] {
+    return blocks.map((block): LocaleBlockInput => {
+        switch (block.type) {
+            case "lead":
+            case "paragraph":
+            case "heading":
+                return { type: block.type, text: block.text[locale] };
+            case "approachList":
+                return {
+                    type: "approachList",
+                    data: {
+                        items: block.data.items.map((item) => ({
+                            title: item.title[locale],
+                            description: item.description[locale],
+                        })),
+                    },
+                };
+            case "code":
+                return block;
+        }
+    });
+}
+
 // ---------------------------------------------------------------------------
 // JOURNAL — transcribed from frontend/src/data/journal.ts
 // ---------------------------------------------------------------------------
@@ -873,7 +912,7 @@ const workSeeds: WorkSeed[] = [
 // Import
 // ---------------------------------------------------------------------------
 
-async function createDocument(blocks: BlockInput[]): Promise<string> {
+async function createDocument(blocks: LocaleBlockInput[]): Promise<string> {
     const document = await prisma.document.create({ data: {} });
     await prisma.block.createMany({
         data: blocks.map((block, index) => ({
@@ -895,7 +934,8 @@ async function importJournal() {
             continue;
         }
 
-        const bodyDocumentId = seed.body ? await createDocument(seed.body) : undefined;
+        const bodyDocumentId = seed.body ? await createDocument(toLocaleBlocks(seed.body, "en")) : undefined;
+        const bodyDocumentIdRu = seed.body ? await createDocument(toLocaleBlocks(seed.body, "ru")) : undefined;
 
         await prisma.post.create({
             data: {
@@ -909,6 +949,7 @@ async function importJournal() {
                 status: seed.status,
                 relatedWorkSlug: seed.relatedWorkSlug,
                 bodyDocumentId,
+                bodyDocumentIdRu,
             },
         });
         console.log(`  created: journal/${seed.slug}`);
@@ -924,9 +965,11 @@ async function importWork() {
         }
 
         let caseStudyDocumentId: string | undefined;
+        let caseStudyDocumentIdRu: string | undefined;
         if (seed.caseStudy) {
             const blocks = [...sectionsToBlocks(seed.caseStudy.sections), ...approachToBlocks(seed.caseStudy.approach)];
-            caseStudyDocumentId = await createDocument(blocks);
+            caseStudyDocumentId = await createDocument(toLocaleBlocks(blocks, "en"));
+            caseStudyDocumentIdRu = await createDocument(toLocaleBlocks(blocks, "ru"));
         }
 
         await prisma.work.create({
@@ -945,6 +988,7 @@ async function importWork() {
                 role: seed.caseStudy?.role,
                 heroImage: seed.caseStudy?.heroImage,
                 caseStudyDocumentId,
+                caseStudyDocumentIdRu,
             },
         });
         console.log(`  created: work/${seed.slug}`);

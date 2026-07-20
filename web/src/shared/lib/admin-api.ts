@@ -1,6 +1,6 @@
 "use client";
 
-import type { PostInput, PostSummary, WorkInput, WorkSummary } from "@portfolio/backend";
+import type { PostInput, PostSummary, TranslatePostInput, TranslateWorkInput, WorkInput, WorkSummary } from "@portfolio/backend";
 
 /**
  * Every mutation from the admin UI (Post/Work create/update/delete,
@@ -63,4 +63,12 @@ export const adminApi = {
     createWork: (input: WorkInput) => request<WorkSummary>("POST", "/api/admin/work", input),
     updateWork: (slug: string, input: WorkInput) => request<WorkSummary>("PUT", `/api/admin/work/${ encodeURIComponent(slug) }`, input),
     deleteWork: (slug: string) => request<{ ok: true }>("DELETE", `/api/admin/work/${ encodeURIComponent(slug) }`),
+
+    // Separate from `updatePost`/`updateWork` — see the two `[slug]/translation`
+    // route files' top comments — this is the only path that ever writes
+    // a Russian value for these records.
+    translatePost: (slug: string, input: TranslatePostInput) =>
+        request<PostSummary>("PUT", `/api/admin/posts/${ encodeURIComponent(slug) }/translation`, input),
+    translateWork: (slug: string, input: TranslateWorkInput) =>
+        request<WorkSummary>("PUT", `/api/admin/work/${ encodeURIComponent(slug) }/translation`, input),
 };

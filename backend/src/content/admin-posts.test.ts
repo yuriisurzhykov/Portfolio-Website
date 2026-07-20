@@ -2,19 +2,35 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { isSlugAlreadyExistsError } from "../errors";
-import { createPost, deletePost, getPostForAdmin, type PostInput, updatePost } from "./admin-posts";
+import {
+    createPost,
+    deletePost,
+    getPostForAdmin,
+    getPostTranslationForAdmin,
+    type PostInput,
+    translatePost,
+    type TranslatePostInput,
+    updatePost,
+} from "./admin-posts";
 
 const basePostInput: PostInput = {
     slug: "test-post",
     date: "2026-01-01",
     dateLabel: null,
-    title: { en: "Test Post", ru: "Тестовый пост" },
-    category: { en: "Notes", ru: "Заметки" },
+    title: "Test Post",
+    category: "Notes",
     readMins: 3,
-    excerpt: { en: "An excerpt.", ru: "Отрывок." },
+    excerpt: "An excerpt.",
     status: "published",
     relatedWorkSlug: null,
-    blocks: [{ type: "lead", text: { en: "Lead.", ru: "Лид." } }],
+    blocks: [{ type: "lead", text: "Lead." }],
+};
+
+const baseTranslationInput: TranslatePostInput = {
+    title: "Тестовый пост",
+    category: "Заметки",
+    excerpt: "Отрывок.",
+    blocks: [{ type: "lead", text: "Лид." }],
 };
 
 beforeEach(async () => {
@@ -79,8 +95,8 @@ describe("updatePost", () => {
         await updatePost("test-post", {
             ...basePostInput,
             blocks: [
-                { type: "heading", text: { en: "H", ru: "З" } },
-                { type: "paragraph", text: { en: "P", ru: "П" } },
+                { type: "heading", text: "H" },
+                { type: "paragraph", text: "P" },
             ],
         });
 
@@ -102,7 +118,7 @@ describe("updatePost", () => {
 
     it("creates a new Document when blocks are added to a post that had none", async () => {
         await createPost({ ...basePostInput, blocks: [] });
-        await updatePost("test-post", { ...basePostInput, blocks: [{ type: "paragraph", text: { en: "P", ru: "П" } }] });
+        await updatePost("test-post", { ...basePostInput, blocks: [{ type: "paragraph", text: "P" }] });
 
         const row = await prisma.post.findUnique({ where: { slug: "test-post" } });
         expect(row?.bodyDocumentId).not.toBeNull();
@@ -132,5 +148,79 @@ describe("deletePost", () => {
         expect(await prisma.post.findUnique({ where: { slug: "test-post" } })).toBeNull();
         expect(await prisma.document.count()).toBe(0);
         expect(await prisma.block.count()).toBe(0);
+    });
+
+    it("also deletes the Russian translation Document, if one exists", async () => {
+        await createPost(basePostInput);
+        await translatePost("test-post", baseTranslationInput);
+
+        expect(await deletePost("test-post")).toBe(true);
+        expect(await prisma.document.count()).toBe(0);
+    });
+});
+
+describe("createPost — English-only, ru starts empty", () => {
+    it("writes ru: \"\" on every localized metadata field", async () => {
+        await createPost(basePostInput);
+
+        const row = await prisma.post.findUnique({ where: { slug: "test-post" } });
+        expect(row?.title).toEqual({ en: "Test Post", ru: "" });
+        expect(row?.category).toEqual({ en: "Notes", ru: "" });
+        expect(row?.excerpt).toEqual({ en: "An excerpt.", ru: "" });
+    });
+});
+
+describe("getPostTranslationForAdmin", () => {
+    it("returns null for a slug that doesn't exist", async () => {
+        expect(await getPostTranslationForAdmin("nope")).toBeNull();
+    });
+
+    it("returns blocks: [] and empty ru strings for a post with no translation yet", async () => {
+        await createPost(basePostInput);
+
+        const translation = await getPostTranslationForAdmin("test-post");
+        expect(translation?.title).toEqual({ en: "Test Post", ru: "" });
+        expect(translation?.blocks).toEqual([]);
+    });
+});
+
+describe("translatePost", () => {
+    it("returns null when the slug doesn't exist", async () => {
+        expect(await translatePost("nope", baseTranslationInput)).toBeNull();
+    });
+
+    it("writes the Russian side of title/category/excerpt without touching English", async () => {
+        await createPost(basePostInput);
+        await translatePost("test-post", baseTranslationInput);
+
+        const row = await prisma.post.findUnique({ where: { slug: "test-post" } });
+        expect(row?.title).toEqual({ en: "Test Post", ru: "Тестовый пост" });
+        expect(row?.category).toEqual({ en: "Notes", ru: "Заметки" });
+        expect(row?.excerpt).toEqual({ en: "An excerpt.", ru: "Отрывок." });
+    });
+
+    it("creates an independent Russian body Document, leaving the English one untouched", async () => {
+        await createPost(basePostInput);
+        const before = await prisma.post.findUnique({ where: { slug: "test-post" } });
+
+        await translatePost("test-post", baseTranslationInput);
+
+        const after = await prisma.post.findUnique({ where: { slug: "test-post" } });
+        expect(after?.bodyDocumentId).toBe(before?.bodyDocumentId);
+        expect(after?.bodyDocumentIdRu).not.toBeNull();
+        expect(after?.bodyDocumentIdRu).not.toBe(after?.bodyDocumentId);
+
+        const translation = await getPostTranslationForAdmin("test-post");
+        expect(translation?.blocks.map((b) => b.type)).toEqual(["lead"]);
+    });
+
+    it("a subsequent English-only updatePost does not wipe out the Russian translation", async () => {
+        await createPost(basePostInput);
+        await translatePost("test-post", baseTranslationInput);
+
+        await updatePost("test-post", { ...basePostInput, title: "Updated Title" });
+
+        const row = await prisma.post.findUnique({ where: { slug: "test-post" } });
+        expect(row?.title).toEqual({ en: "Updated Title", ru: "Тестовый пост" });
     });
 });

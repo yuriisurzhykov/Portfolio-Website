@@ -27,7 +27,13 @@ function toCodeLanguage(language: string | undefined): CodeLanguage {
     return KNOWN_CODE_LANGUAGES.has(language as CodeLanguage) ? (language as CodeLanguage) : "ts";
 }
 
-const noteVariantClasses: Record<"info" | "warning" | "tip", string> = {
+/**
+ * Exported (not just a local const) — `shared/ui/block-editor`'s `NoteBlock`
+ * renders the exact same variant→classes mapping inside the admin editor's
+ * live preview, so a note looks the same while being written as it will on
+ * the published page. One definition instead of two that could drift.
+ */
+export const noteVariantClasses: Record<"info" | "warning" | "tip", string> = {
     info: "border-border-default bg-surface-base",
     warning: "border-status-warning bg-status-warning-tint-bg",
     tip: "border-accent-solid bg-accent-tint-bg",
@@ -39,11 +45,19 @@ const noteVariantClasses: Record<"info" | "warning" | "tip", string> = {
  * Renders a post body or case-study narrative from `Block[]` (see
  * backend/src/content/blocks.ts for the shape) — the same renderer for
  * both, since a case study is architecturally just a document (see the
- * migration plan). Authoring content means adding rows through the admin
- * UI (Phase 4), never writing JSX for it.
+ * migration plan). Authoring content means adding blocks through the
+ * admin BlockNote editor, never writing JSX for it.
+ *
+ * `block.text`/nested `alt`/`title`/`description` are plain strings now,
+ * not `{en, ru}` pairs — a block's language is a property of the
+ * `Document` it came from (the route already picked the right one via
+ * `getPostBySlug(slug, locale)`/`getWorkBySlug(slug, locale)`), not
+ * something this component resolves per-field anymore. Only `ln()` (UI
+ * chrome — the copy/copied button labels below) still goes through
+ * `useTranslation()`.
  */
 export function ContentBlocks({ blocks }: ContentBlocksProps) {
-    const { ln, pick } = useTranslation();
+    const { ln } = useTranslation();
 
     return (
         <div className="flex flex-col gap-md">
@@ -53,7 +67,7 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                         return (
                             <React.Fragment key={block.id}>
                                 <Text variant="body-lg" tone="secondary">
-                                    <Markdown text={pick(block.text)} />
+                                    <Markdown text={block.text} />
                                 </Text>
                                 <hr className="border-t border-border-subtle my-sm" />
                             </React.Fragment>
@@ -62,14 +76,14 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                     case "heading":
                         return (
                             <Text key={block.id} as="h2" variant="h2" className="mt-lg">
-                                <Markdown text={pick(block.text)} />
+                                <Markdown text={block.text} />
                             </Text>
                         );
 
                     case "paragraph":
                         return (
                             <Text key={block.id} variant="body" tone="secondary">
-                                <Markdown text={pick(block.text)} />
+                                <Markdown text={block.text} />
                             </Text>
                         );
 
@@ -79,7 +93,7 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                                 key={block.id}
                                 className="border-l-2 border-border-default pl-md italic text-text-secondary"
                             >
-                                <Markdown text={pick(block.text)} />
+                                <Markdown text={block.text} />
                                 {block.data?.attribution && (
                                     <Text as="footer" variant="caption" tone="faint" className="mt-xs not-italic">
                                         — {block.data.attribution}
@@ -94,7 +108,7 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                                 key={block.id}
                                 className={cn("rounded-lg border p-md", noteVariantClasses[block.data.variant])}
                             >
-                                <Markdown text={pick(block.text)} />
+                                <Markdown text={block.text} />
                             </div>
                         );
 
@@ -104,14 +118,14 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                                 {/* eslint-disable-next-line @next/next/no-img-element -- src comes from admin-authored content, not a static/known-at-build-time asset Next.js's <Image> can optimize */}
                                 <img
                                     src={block.data.src}
-                                    alt={pick(block.data.alt)}
+                                    alt={block.data.alt}
                                     width={block.data.width}
                                     height={block.data.height}
                                     className="rounded-lg border border-border-subtle w-full"
                                 />
                                 {block.text && (
                                     <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
-                                        <Markdown text={pick(block.text)} />
+                                        <Markdown text={block.text} />
                                     </Text>
                                 )}
                             </figure>
@@ -154,10 +168,10 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                                             variant="caption"
                                             className="font-mono font-semibold text-accent-text mb-2"
                                         >
-                                            {pick(item.title)}
+                                            {item.title}
                                         </Text>
                                         <Text as="div" variant="caption" tone="muted" className="leading-[1.6]">
-                                            {pick(item.description)}
+                                            {item.description}
                                         </Text>
                                     </div>
                                 ))}

@@ -58,8 +58,8 @@ describe("getWorkBySlug", () => {
         const document = await prisma.document.create({ data: {} });
         await prisma.block.createMany({
             data: [
-                { documentId: document.id, order: 0, type: "heading", text: { en: "Overview", ru: "Обзор" } },
-                { documentId: document.id, order: 1, type: "paragraph", text: { en: "Body", ru: "Текст" } },
+                { documentId: document.id, order: 0, type: "heading", text: "Overview" },
+                { documentId: document.id, order: 1, type: "paragraph", text: "Body" },
             ],
         });
         await prisma.work.create({
@@ -76,5 +76,42 @@ describe("getWorkBySlug", () => {
         const item = await getWorkBySlug("with-cs");
         expect(item?.caseStudy?.blocks.map((b) => b.type)).toEqual(["heading", "paragraph"]);
         expect(item?.caseStudy?.role.en).toBe("Sole engineer");
+    });
+
+    it("locale=\"ru\" reads the Russian case-study Document when one exists, else falls back to English", async () => {
+        const enDocA = await prisma.document.create({ data: {} });
+        await prisma.block.create({ data: { documentId: enDocA.id, order: 0, type: "paragraph", text: "English A" } });
+        const ruDocA = await prisma.document.create({ data: {} });
+        await prisma.block.create({ data: { documentId: ruDocA.id, order: 0, type: "paragraph", text: "Русский A" } });
+        const enDocB = await prisma.document.create({ data: {} });
+        await prisma.block.create({ data: { documentId: enDocB.id, order: 0, type: "paragraph", text: "English B" } });
+
+        await prisma.work.create({
+            data: {
+                ...baseWorkData,
+                slug: "translated",
+                caseStudyDocumentId: enDocA.id,
+                caseStudyDocumentIdRu: ruDocA.id,
+                startedLabel: { en: "Jan", ru: "Янв" },
+                shippedLabel: { en: "Feb", ru: "Фев" },
+                role: { en: "Engineer", ru: "Инженер" },
+            },
+        });
+        await prisma.work.create({
+            data: {
+                ...baseWorkData,
+                slug: "untranslated",
+                caseStudyDocumentId: enDocB.id,
+                startedLabel: { en: "Jan", ru: "Янв" },
+                shippedLabel: { en: "Feb", ru: "Фев" },
+                role: { en: "Engineer", ru: "Инженер" },
+            },
+        });
+
+        const translated = await getWorkBySlug("translated", "ru");
+        expect(translated?.caseStudy?.blocks[0]).toMatchObject({ text: "Русский A" });
+
+        const untranslated = await getWorkBySlug("untranslated", "ru");
+        expect(untranslated?.caseStudy?.blocks[0]).toMatchObject({ text: "English B" });
     });
 });

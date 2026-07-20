@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ln, setLocale } from "./index";
+import { ln, lnFor, setLocale } from "./index";
 
 /**
  * The direct regression test for the FOUC bug (see ../README.md's "Настоящий
@@ -25,5 +25,10 @@ describe("engine (bundled dictionaries, real translation.json content)", () => {
         setLocale("ru");
         expect(ln("nav.work")).toBe("Работы");
         setLocale("en"); // restore default for any other test relying on it
+    });
+
+    it("lnFor resolves an explicit locale without touching the shared setLocale()/ln() state", () => {
+        expect(lnFor("ru", "nav.work")).toBe("Работы");
+        expect(ln("nav.work")).toBe("Work"); // unaffected — no setLocale() call happened
     });
 });

@@ -1,6 +1,8 @@
 import { prisma } from "../db/client";
-import { type Block, type LocalizedText, localizedTextSchema } from "./blocks";
+import type { Block } from "./blocks";
 import { getDocumentBlocks } from "./document";
+import { type LocalizedText, localizedTextSchema } from "./localized-text";
+import type { ContentLocale } from "./locale";
 
 export type WorkStatus = "shipped" | "in-progress";
 
@@ -45,6 +47,7 @@ interface RawWorkRow {
     role: unknown;
     heroImage: string | null;
     caseStudyDocumentId: string | null;
+    caseStudyDocumentIdRu?: string | null;
 }
 
 /** Exported for reuse by admin-work.ts (Phase 4) — same reasoning as posts.ts's `toPostSummary`. */
@@ -83,21 +86,29 @@ export async function getFeaturedWork(): Promise<WorkSummary[]> {
  * doesn't exist. `caseStudy` itself (not the whole return value) is null
  * for items that never had a case study (e.g. small internal tools), same
  * as the current site's `item.caseStudy` optional field.
+ *
+ * `locale` picks which case-study `Document` to read blocks from — same
+ * fallback reasoning as `posts.ts`'s `getPostBySlug`: `caseStudyDocumentIdRu`
+ * for `"ru"`, falling back to the English `caseStudyDocumentId` when no
+ * translation exists yet. The metadata fields (`startedLabel`/
+ * `shippedLabel`/`role`) stay `{en, ru}` regardless — `pick()` resolves
+ * those client-side, same as `title`/`summary`/etc.
  */
-export async function getWorkBySlug(slug: string): Promise<WorkDetail | null> {
+export async function getWorkBySlug(slug: string, locale: ContentLocale = "en"): Promise<WorkDetail | null> {
     const row = await prisma.work.findUnique({where: {slug}});
     if (!row) {
         return null;
     }
 
     let caseStudy: CaseStudy | null = null;
-    if (row.caseStudyDocumentId) {
+    const caseStudyDocumentId = (locale === "ru" ? row.caseStudyDocumentIdRu : null) ?? row.caseStudyDocumentId;
+    if (caseStudyDocumentId) {
         caseStudy = {
             startedLabel: localizedTextSchema.parse(row.startedLabel),
             shippedLabel: localizedTextSchema.parse(row.shippedLabel),
             role: localizedTextSchema.parse(row.role),
             heroImage: row.heroImage,
-            blocks: await getDocumentBlocks(row.caseStudyDocumentId),
+            blocks: await getDocumentBlocks(caseStudyDocumentId),
         };
     }
 

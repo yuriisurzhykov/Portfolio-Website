@@ -25,3 +25,8 @@ export function setLocale(code: string) {
 export function ln(i18key: string, vars?: Record<string, string | number>): string {
     return i18nEngine.ln(i18key, vars);
 }
+
+/** Stateless variant — see `LocaleRegistry.lnFor`'s comment for why `I18nContext` uses this instead of `ln()`/`setLocale()`. */
+export function lnFor(locale: string, i18key: string, vars?: Record<string, string | number>): string {
+    return i18nEngine.lnFor(locale, i18key, vars);
+}

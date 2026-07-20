@@ -47,15 +47,24 @@ model Session {
 
 /// A journal post's body OR a work item's case-study narrative — the same
 /// container either way, see backend/src/content/README.md for why a case
-/// study is architecturally just a document, same as a post.
+/// study is architecturally just a document, same as a post. Named
+/// relations below (`"PostBody"`/`"PostBodyRu"`/`"WorkCaseStudy"`/
+/// `"WorkCaseStudyRu"`) exist only because `Post`/`Work` each now have TWO
+/// FKs pointing at this same model (an English document and, optionally,
+/// an independent Russian one — see the migration plan's "язык — на
+/// уровне документа, не поля блока") — Prisma requires an explicit name to
+/// disambiguate once a model has more than one relation to the same
+/// target.
 model Document {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   blocks Block[]
-  post   Post?
-  work   Work?
+  post   Post?   @relation("PostBody")
+  postRu Post?   @relation("PostBodyRu")
+  work   Work?   @relation("WorkCaseStudy")
+  workRu Work?   @relation("WorkCaseStudyRu")
 }
 
 /// One row per paragraph/heading/image/code/quote/note/approachList, in
@@ -81,49 +90,66 @@ model Block {
 
 /// Journal entry. `bodyDocumentId` is nullable — an "upcoming" stub post
 /// (announced, not yet written) has no body document at all.
+/// `bodyDocumentIdRu`/`bodyRu` are the SAME kind of nullable relation, one
+/// level further: independent of whether an English body exists, a
+/// Russian translation of it may or may not exist yet. It's a wholly
+/// separate `Document` (own blocks, own count/order), not a `ru` field
+/// bolted onto every English block — see blocks.ts's top comment for why.
+/// Written only through the translation endpoint (admin-posts.ts's
+/// `translatePost`), never through `createPost`/`updatePost`.
 model Post {
-  id              String    @id @default(cuid())
-  slug            String    @unique
-  date            String
-  dateLabel       String?
-  title           Json
-  category        Json
-  readMins        Int
-  excerpt         Json
-  status          String
-  relatedWorkSlug String?
-  bodyDocumentId  String?   @unique
-  body            Document? @relation(fields: [bodyDocumentId], references: [id])
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  slug             String    @unique
+  date             String
+  dateLabel        String?
+  title            Json
+  category         Json
+  readMins         Int
+  excerpt          Json
+  status           String
+  relatedWorkSlug  String?
+  bodyDocumentId   String?   @unique
+  body             Document? @relation("PostBody", fields: [bodyDocumentId], references: [id])
+  bodyDocumentIdRu String?   @unique
+  bodyRu           Document? @relation("PostBodyRu", fields: [bodyDocumentIdRu], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 /// Project/work item. `startedLabel`/`shippedLabel`/`role` are case-study
 /// metadata that stay scalar fields here (not part of the narrative
 /// blocks) — see backend/src/content/README.md.
 model Work {
-  id                  String    @id @default(cuid())
-  slug                String    @unique
-  title               String
-  year                Int
-  status              String
-  summary             Json
-  stack               String[]
-  coverImage          String?
-  featured            Boolean   @default(false)
-  relatedPostSlug     String?
-  startedLabel        Json?
-  shippedLabel        Json?
-  role                Json?
+  id                    String    @id @default(cuid())
+  slug                  String    @unique
+  title                 String
+  year                  Int
+  status                String
+  summary               Json
+  stack                 String[]
+  coverImage            String?
+  featured              Boolean   @default(false)
+  relatedPostSlug       String?
+  startedLabel          Json?
+  shippedLabel          Json?
+  role                  Json?
   /// The case-study detail page's large hero image — a separate field from
   /// `coverImage` (the small card/ledger thumbnail). Ported from the
   /// original `WorkCaseStudy.heroImage`; currently unset by every existing
   /// item (all show the placeholder pattern instead), kept for parity with
   /// the original shape rather than silently dropping a field nothing
   /// happens to use yet.
-  heroImage           String?
-  caseStudyDocumentId String?   @unique
-  caseStudy           Document? @relation(fields: [caseStudyDocumentId], references: [id])
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  heroImage             String?
+  caseStudyDocumentId   String?   @unique
+  caseStudy             Document? @relation("WorkCaseStudy", fields: [caseStudyDocumentId], references: [id])
+  /// Independent Russian case-study Document — same reasoning as
+  /// `Post.bodyDocumentIdRu` above (own blocks, written only through the
+  /// translation endpoint). The label fields (`startedLabel`/
+  /// `shippedLabel`/`role`) stay single `Json` `{en, ru}` values, not
+  /// duplicated per language document — they're one string pair each,
+  /// not a block list a translator restructures.
+  caseStudyDocumentIdRu String?   @unique
+  caseStudyRu           Document? @relation("WorkCaseStudyRu", fields: [caseStudyDocumentIdRu], references: [id])
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }

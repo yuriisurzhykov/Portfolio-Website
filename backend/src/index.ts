@@ -11,12 +11,31 @@ export { getJournalEntries, getLatestPublishedPost, getPostBySlug } from "./cont
 export type { PostDetail, PostStatus, PostSummary } from "./content/posts";
 export { getAllWork, getFeaturedWork, getWorkBySlug } from "./content/work";
 export type { CaseStudy, WorkDetail, WorkStatus, WorkSummary } from "./content/work";
-export type { Block, BlockInput, BlockType, LocalizedText } from "./content/blocks";
+export type { Block, BlockInput, BlockType } from "./content/blocks";
+export type { LocalizedText } from "./content/localized-text";
+export type { ContentLocale } from "./content/locale";
 
-export { createPost, deletePost, getPostForAdmin, postInputSchema, updatePost } from "./content/admin-posts";
-export type { AdminPostDetail, PostInput } from "./content/admin-posts";
-export { createWork, deleteWork, updateWork, workInputSchema } from "./content/admin-work";
-export type { WorkInput } from "./content/admin-work";
+export {
+    createPost,
+    deletePost,
+    getPostForAdmin,
+    getPostTranslationForAdmin,
+    postInputSchema,
+    translatePost,
+    translatePostInputSchema,
+    updatePost,
+} from "./content/admin-posts";
+export type { AdminPostDetail, AdminPostTranslation, PostInput, TranslatePostInput } from "./content/admin-posts";
+export {
+    createWork,
+    deleteWork,
+    getWorkTranslationForAdmin,
+    translateWork,
+    translateWorkInputSchema,
+    updateWork,
+    workInputSchema,
+} from "./content/admin-work";
+export type { AdminWorkTranslation, TranslateWorkInput, WorkInput } from "./content/admin-work";
 
 export {
     DatabaseUnavailableError,

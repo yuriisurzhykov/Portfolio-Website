@@ -3,7 +3,7 @@ import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { getJournalEntries, getLatestPublishedPost, getPostBySlug } from "./posts";
 
-async function makeDocument(blocks: { type: string; text?: object; data?: object }[]) {
+async function makeDocument(blocks: { type: string; text?: string; data?: object }[]) {
     const document = await prisma.document.create({ data: {} });
     await prisma.block.createMany({
         data: blocks.map((b, i) => ({ documentId: document.id, order: i, type: b.type, text: b.text, data: b.data })),
@@ -60,10 +60,10 @@ describe("getLatestPublishedPost", () => {
 });
 
 describe("getPostBySlug", () => {
-    it("returns the post with its parsed body blocks", async () => {
+    it("returns the post with its parsed English body blocks by default", async () => {
         const bodyDocumentId = await makeDocument([
-            { type: "lead", text: { en: "Lead", ru: "Лид" } },
-            { type: "paragraph", text: { en: "Para", ru: "Абзац" } },
+            { type: "lead", text: "Lead" },
+            { type: "paragraph", text: "Para" },
         ]);
         await prisma.post.create({
             data: {
@@ -89,5 +89,34 @@ describe("getPostBySlug", () => {
         });
 
         expect(await getPostBySlug("no-body-yet")).toBeNull();
+    });
+
+    it("locale=\"ru\" reads the Russian body Document when one exists", async () => {
+        const bodyDocumentId = await makeDocument([{ type: "paragraph", text: "English para" }]);
+        const bodyDocumentIdRu = await makeDocument([{ type: "paragraph", text: "Русский абзац" }]);
+        await prisma.post.create({
+            data: {
+                slug: "translated", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", bodyDocumentId, bodyDocumentIdRu,
+            },
+        });
+
+        const en = await getPostBySlug("translated", "en");
+        const ru = await getPostBySlug("translated", "ru");
+        expect(en?.body[0]).toMatchObject({ text: "English para" });
+        expect(ru?.body[0]).toMatchObject({ text: "Русский абзац" });
+    });
+
+    it("locale=\"ru\" silently falls back to the English body when no translation exists yet", async () => {
+        const bodyDocumentId = await makeDocument([{ type: "paragraph", text: "English only" }]);
+        await prisma.post.create({
+            data: {
+                slug: "untranslated", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", bodyDocumentId,
+            },
+        });
+
+        const ru = await getPostBySlug("untranslated", "ru");
+        expect(ru?.body[0]).toMatchObject({ text: "English only" });
     });
 });

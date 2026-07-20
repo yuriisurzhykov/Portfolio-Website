@@ -41,3 +41,35 @@ Next.js Server Action, ровно как того требует план Фаз
 блоки превращаются в JSON для API — это инкапсулировано в
 `draftToBlockInput` (`shared/ui/block-editor`), вызывается один раз перед
 отправкой.
+
+## 2026-07-19 — Английский-только + BlockNote + "Add translation"
+
+**Что нужно сделать.** По плану "WYSIWYG-редактор + переводы как отдельные
+страницы": эта форма — только английский контент; перевод — отдельный
+экран, не поле рядом.
+
+**Как сделано.** `FormState`/`toFormState` больше не держат `{en, ru}` —
+`title`/`category`/`excerpt` теперь простые строки (`post.title.en`, не
+весь объект), `LocalizedInputField`/`LocalizedTextareaField` заменены на
+обычные `Input`/`Textarea` (см. `shared/ui/form/README.md`'s запись про их
+удаление). `updatePost` (backend) сам сохраняет существующий `ru`, если
+он уже есть — эта страница физически не может его затронуть, ей просто
+негде показать это поле.
+
+Кнопка "Add translation"/"Edit translation" (текст зависит от того, есть
+ли уже `post.title.ru`) ведёт на `/admin/journal/:slug/translate` —
+отдельный экран (`admin-post-translate`), отдельный API-вызов
+(`translatePost`), отдельный `<BlockEditor>` на русское тело. Кнопка
+показывается только в режиме редактирования (`isEditing`) — у ещё не
+сохранённого поста просто нет slug, на который вести.
+
+Блочный редактор — `<BlockEditor ref={blockEditorRef} initialBlocks=.../>`
+(`shared/ui/block-editor`, полностью переписан на BlockNote — см. его
+README) вместо `BlockListEditor`/`blocks`/`onChange`. `handleSubmit` читает
+`blockEditorRef.current?.getBlocks()` один раз при отправке — компонент не
+контролируемый, см. `BlockNoteEditor.tsx`'s комментарий про то, почему
+`ref`, а не `value`/`onChange`.
+
+**SOLID.** Не изменилось: `PostEditorPage` всё ещё не знает, как блоки
+превращаются в JSON — теперь это `editorBlocksToBlockInputs` (внутри
+`BlockEditor.getBlocks()`), вызывается так же один раз перед отправкой.

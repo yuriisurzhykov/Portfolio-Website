@@ -26,7 +26,24 @@ export class LocaleRegistry {
     }
 
     ln(i18key: string, vars?: Record<string, string | number>): string {
-        let string = this.locales[this.currentLocale]?.[i18key] ?? i18key;
+        return this.lnFor(this.currentLocale, i18key, vars);
+    }
+
+    /**
+     * Same lookup as `ln()`, but takes the locale as an explicit argument
+     * instead of reading `this.currentLocale` — added for `I18nContext`
+     * (see its comment), which needs to resolve a string for whichever
+     * locale a given request/render is showing WITHOUT calling
+     * `setLocale()` first. `setLocale()`/`currentLocale` mutate one shared
+     * instance (`i18nEngine`, constructed once per server process) — safe
+     * for a client-only single-user toggle, but calling it during
+     * server-side rendering would mean two concurrent requests (one
+     * rendering `/journal/x`, one rendering `/ru/journal/x`) mutating and
+     * reading the same field, racing across their own `await` points. This
+     * method has no shared state to race on at all.
+     */
+    lnFor(locale: string, i18key: string, vars?: Record<string, string | number>): string {
+        let string = this.locales[locale]?.[i18key] ?? i18key;
         if (vars) {
             for (const key in vars) {
                 string = string.replaceAll(`{${key}}`, String(vars[key]));

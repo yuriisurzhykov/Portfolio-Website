@@ -10,6 +10,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@blocknote/core": "^0.51.4",
+    "@blocknote/mantine": "^0.51.4",
+    "@blocknote/react": "^0.51.4",
+    "@mantine/core": "^8.3.11",
+    "@mantine/hooks": "^8.3.11",
     "@portfolio/backend": "*",
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",

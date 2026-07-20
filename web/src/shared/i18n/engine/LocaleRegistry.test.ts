@@ -28,3 +28,24 @@ describe("LocaleRegistry", () => {
         expect(() => registry.setLocale("fr")).toThrow();
     });
 });
+
+describe("LocaleRegistry.lnFor — the stateless lookup I18nContext uses instead of setLocale()+ln()", () => {
+    it("resolves a locale passed explicitly, without ever calling setLocale", () => {
+        const registry = new LocaleRegistry({ en: { greeting: "Hello" }, ru: { greeting: "Привет" } }, "en");
+        expect(registry.lnFor("ru", "greeting")).toBe("Привет");
+        // currentLocale (read via the stateful ln()) must be untouched.
+        expect(registry.ln("greeting")).toBe("Hello");
+    });
+
+    it("interleaved calls for two different locales never contaminate each other — no shared mutable state to race on", () => {
+        const registry = new LocaleRegistry({ en: { greeting: "Hello" }, ru: { greeting: "Привет" } }, "en");
+        expect(registry.lnFor("en", "greeting")).toBe("Hello");
+        expect(registry.lnFor("ru", "greeting")).toBe("Привет");
+        expect(registry.lnFor("en", "greeting")).toBe("Hello");
+    });
+
+    it("falls back to the raw key for a locale that was never bundled, rather than throwing", () => {
+        const registry = new LocaleRegistry({ en: { greeting: "Hello" } }, "en");
+        expect(registry.lnFor("fr", "greeting")).toBe("greeting");
+    });
+});

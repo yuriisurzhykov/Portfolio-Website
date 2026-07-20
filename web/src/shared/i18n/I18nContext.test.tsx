@@ -61,3 +61,46 @@ describe("I18nProvider — first-render behavior (the actual FOUC regression tes
         expect(screen.getByTestId("probe").textContent).toBe("Hello");
     });
 });
+
+describe("I18nProvider — initialLanguage (server-resolved locale, see get-request-locale.ts)", () => {
+    it("renders ln() in Russian on the very first render when initialLanguage=\"ru\" — no toggle click needed", () => {
+        render(
+            <I18nProvider initialLanguage="ru">
+                <LnProbe i18nKey="nav.work" />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId("probe").textContent).toBe("Работы");
+    });
+
+    it("falls back to English when a {en, ru} value has an empty ru string (no translation yet) — pick() uses ||, not ??", () => {
+        function EmptyRuProbe() {
+            const { pick } = useTranslation();
+            return <div data-testid="probe">{pick({ en: "English text", ru: "" })}</div>;
+        }
+
+        render(
+            <I18nProvider initialLanguage="ru">
+                <EmptyRuProbe />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId("probe").textContent).toBe("English text");
+    });
+
+    it("two providers with different initialLanguage never interfere with each other — ln() has no shared mutable state to race on", () => {
+        render(
+            <>
+                <I18nProvider initialLanguage="en">
+                    <LnProbe i18nKey="nav.work" />
+                </I18nProvider>
+                <I18nProvider initialLanguage="ru">
+                    <LnProbe i18nKey="nav.work" />
+                </I18nProvider>
+            </>,
+        );
+
+        const probes = screen.getAllByTestId("probe");
+        expect(probes.map((el) => el.textContent)).toEqual(["Work", "Работы"]);
+    });
+});

@@ -1,6 +1,8 @@
 import { prisma } from "../db/client";
-import { localizedTextSchema, type Block, type LocalizedText } from "./blocks";
+import type { Block } from "./blocks";
 import { getDocumentBlocks } from "./document";
+import { localizedTextSchema, type LocalizedText } from "./localized-text";
+import type { ContentLocale } from "./locale";
 
 export type PostStatus = "published" | "upcoming";
 
@@ -68,13 +70,30 @@ export async function getLatestPublishedPost(): Promise<PostSummary | null> {
     return row ? toPostSummary(row) : null;
 }
 
-/** Full post, including its body blocks — null if the slug doesn't exist OR the post has no body yet (upcoming stub). */
-export async function getPostBySlug(slug: string): Promise<PostDetail | null> {
+/**
+ * Full post, including its body blocks — null if the slug doesn't exist OR
+ * the post has no body yet (upcoming stub), in EITHER language.
+ *
+ * `locale` picks which `Document` to read the body from — `bodyDocumentIdRu`
+ * for `"ru"`, falling back to the English `bodyDocumentId` whenever no
+ * translation exists yet (a post with no Russian body at all, or a
+ * genuinely untranslated one). This is the silent "render on /ru/... with
+ * English blocks" behavior the routing plan calls for — there's no
+ * separate "not translated" state surfaced to the caller, the English
+ * `Document` is simply what a Russian reader sees until a translation is
+ * added (see admin-posts.ts's `translatePost`).
+ */
+export async function getPostBySlug(slug: string, locale: ContentLocale = "en"): Promise<PostDetail | null> {
     const row = await prisma.post.findUnique({ where: { slug } });
-    if (!row || !row.bodyDocumentId) {
+    if (!row) {
         return null;
     }
 
-    const body = await getDocumentBlocks(row.bodyDocumentId);
+    const bodyDocumentId = (locale === "ru" ? row.bodyDocumentIdRu : null) ?? row.bodyDocumentId;
+    if (!bodyDocumentId) {
+        return null;
+    }
+
+    const body = await getDocumentBlocks(bodyDocumentId);
     return { ...toPostSummary(row), body };
 }

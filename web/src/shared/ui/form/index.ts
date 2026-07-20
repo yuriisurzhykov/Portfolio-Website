@@ -5,5 +5,3 @@ export { Select } from "./Select";
 export { Checkbox } from "./Checkbox";
 export { Field } from "./Field";
 export type { FieldProps } from "./Field";
-export { LocalizedInputField, LocalizedTextareaField } from "./LocalizedField";
-export type { LocalizedTextValue } from "./LocalizedField";

@@ -6,8 +6,8 @@ import type { AdminPostDetail, PostInput, PostStatus } from "@portfolio/backend"
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
-import { Field, Input, LocalizedInputField, LocalizedTextareaField, Select } from "@/shared/ui/form";
-import { BlockListEditor, blockToDraft, draftToBlockInput, type DraftBlock } from "@/shared/ui/block-editor";
+import { Field, Input, Select, Textarea } from "@/shared/ui/form";
+import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 
 export interface PostEditorPageProps {
@@ -19,23 +19,32 @@ interface FormState {
     slug: string;
     date: string;
     dateLabel: string;
-    title: { en: string; ru: string };
-    category: { en: string; ru: string };
+    title: string;
+    category: string;
     readMins: string;
-    excerpt: { en: string; ru: string };
+    excerpt: string;
     status: PostStatus;
     relatedWorkSlug: string;
 }
 
+/**
+ * English-only form — see the migration plan's "перевод — отдельная
+ * страница, не параллельный ввод". `initialPost.title`/`category`/
+ * `excerpt` are still full `{en, ru}` pairs (the read side hasn't
+ * changed), this page just only ever shows/edits `.en` — the `ru` side
+ * (if any exists already) is preserved server-side by `updatePost` (see
+ * its comment in admin-posts.ts), never touched here. "Add translation"
+ * below links to the one screen that does touch it.
+ */
 function toFormState(post?: AdminPostDetail): FormState {
     return {
         slug: post?.slug ?? "",
         date: post?.date ?? "",
         dateLabel: post?.dateLabel ?? "",
-        title: post?.title ?? { en: "", ru: "" },
-        category: post?.category ?? { en: "", ru: "" },
+        title: post?.title.en ?? "",
+        category: post?.category.en ?? "",
         readMins: post ? String(post.readMins) : "",
-        excerpt: post?.excerpt ?? { en: "", ru: "" },
+        excerpt: post?.excerpt.en ?? "",
         status: post?.status ?? "published",
         relatedWorkSlug: post?.relatedWorkSlug ?? "",
     };
@@ -46,7 +55,7 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
     const isEditing = Boolean(initialPost);
 
     const [form, setForm] = React.useState<FormState>(() => toFormState(initialPost));
-    const [blocks, setBlocks] = React.useState<DraftBlock[]>(() => (initialPost?.blocks ?? []).map(blockToDraft));
+    const blockEditorRef = React.useRef<BlockEditorHandle>(null);
     const [error, setError] = React.useState<string | null>(null);
     const [submitting, setSubmitting] = React.useState(false);
     const [deleting, setDeleting] = React.useState(false);
@@ -63,13 +72,13 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
             slug: form.slug.trim(),
             date: form.date.trim(),
             dateLabel: form.dateLabel.trim() || null,
-            title: form.title,
-            category: form.category,
+            title: form.title.trim(),
+            category: form.category.trim(),
             readMins: Number(form.readMins) || 0,
-            excerpt: form.excerpt,
+            excerpt: form.excerpt.trim(),
             status: form.status,
             relatedWorkSlug: form.relatedWorkSlug.trim() || null,
-            blocks: blocks.map(draftToBlockInput),
+            blocks: blockEditorRef.current?.getBlocks() ?? [],
         };
 
         setSubmitting(true);
@@ -106,11 +115,18 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
         <form onSubmit={handleSubmit} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-center justify-between">
                 <Text as="h1" variant="h3">{isEditing ? `Edit post: ${ initialPost?.slug }` : "New post"}</Text>
-                {isEditing && (
-                    <Button type="button" variant="ghost" size="sm" onClick={handleDelete} loading={deleting}>
-                        Delete
-                    </Button>
-                )}
+                <div className="flex items-center gap-sm">
+                    {isEditing && (
+                        <Button type="button" variant="secondary" size="sm" onClick={() => router.push(`/admin/journal/${ initialPost?.slug }/translate`)}>
+                            {initialPost?.title.ru ? "Edit translation" : "Add translation"}
+                        </Button>
+                    )}
+                    {isEditing && (
+                        <Button type="button" variant="ghost" size="sm" onClick={handleDelete} loading={deleting}>
+                            Delete
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
@@ -138,14 +154,20 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
                     </Field>
                 </div>
 
-                <LocalizedInputField label="Title" value={form.title} onChange={(title) => update("title", title)} required />
-                <LocalizedInputField label="Category" value={form.category} onChange={(category) => update("category", category)} required />
-                <LocalizedTextareaField label="Excerpt" value={form.excerpt} onChange={(excerpt) => update("excerpt", excerpt)} rows={2} required />
+                <Field label="Title" htmlFor="title">
+                    <Input id="title" required value={form.title} onChange={(e) => update("title", e.target.value)} />
+                </Field>
+                <Field label="Category" htmlFor="category">
+                    <Input id="category" required value={form.category} onChange={(e) => update("category", e.target.value)} />
+                </Field>
+                <Field label="Excerpt" htmlFor="excerpt">
+                    <Textarea id="excerpt" required rows={2} value={form.excerpt} onChange={(e) => update("excerpt", e.target.value)} />
+                </Field>
             </Card>
 
             <div className="flex flex-col gap-sm">
                 <Text variant="h5" as="h2">Body</Text>
-                <BlockListEditor blocks={blocks} onChange={setBlocks} />
+                <BlockEditor ref={blockEditorRef} initialBlocks={initialPost?.blocks ?? []} />
             </div>
 
             {error && (

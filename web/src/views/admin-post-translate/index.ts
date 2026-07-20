@@ -1,0 +1,1 @@
+export { PostTranslatePage } from "./PostTranslatePage";

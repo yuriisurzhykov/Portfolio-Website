@@ -2,8 +2,8 @@ import { z } from "zod";
 
 /**
  * Single source of truth for "what a block looks like", shared by every
- * consumer: the import script (Phase 3), the content services below, the
- * admin block editor (Phase 4), and web's <ContentBlocks> renderer.
+ * consumer: the migration scripts, the content services below, the admin
+ * BlockNote editor (Phase 5/6), and web's <ContentBlocks> renderer.
  * Zod, not a plain TypeScript type, on purpose: `Block.text`/`Block.data`
  * are untyped `Json` columns in Postgres (see schema.prisma's comment on
  * why `type` isn't a DB enum) — anything read out of them is `unknown`
@@ -11,10 +11,19 @@ import { z } from "zod";
  * runtime validator AND (via `z.infer`) the TypeScript type, instead of
  * maintaining a hand-written type and a hand-written validator that can
  * silently drift apart.
+ *
+ * `text`/nested `alt`/`title`/`description` are plain `z.string()` here,
+ * NOT `{en, ru}` (see `localized-text.ts` for that shape, which moved
+ * there — it's now exclusive to Post/Work scalar metadata). A block's
+ * language is a property of the *Document* it belongs to, not of the
+ * block itself: an English post body and its Russian translation are two
+ * separate `Document`s (`Post.bodyDocumentId`/`bodyDocumentIdRu`), each
+ * containing plain-string blocks in one language — see the migration
+ * plan's "язык — на уровне документа, не поля блока". A translator
+ * writing their own structure (different block count/order) could never
+ * fit a paired `{en, ru}` field on every block; a whole separate Document
+ * has no such limit.
  */
-
-const localizedText = z.object({ en: z.string(), ru: z.string() });
-
 const baseFields = { id: z.string(), order: z.number().int() };
 
 // Every block "core" shape below (type + text/data, no id/order) is defined
@@ -34,29 +43,29 @@ const baseFields = { id: z.string(), order: z.number().int() };
 // (a plain heading) — not something a type-only review would have caught,
 // since `unknown`-typed Json fields don't distinguish null from undefined
 // at the type level either.
-const leadCore = z.object({ type: z.literal("lead"), text: localizedText });
+const leadCore = z.object({ type: z.literal("lead"), text: z.string() });
 const headingCore = z.object({
     type: z.literal("heading"),
-    text: localizedText,
+    text: z.string(),
     data: z.object({ level: z.union([z.literal(2), z.literal(3)]).optional() }).nullish(),
 });
-const paragraphCore = z.object({ type: z.literal("paragraph"), text: localizedText });
+const paragraphCore = z.object({ type: z.literal("paragraph"), text: z.string() });
 const quoteCore = z.object({
     type: z.literal("quote"),
-    text: localizedText,
+    text: z.string(),
     data: z.object({ attribution: z.string().optional() }).nullish(),
 });
 const noteCore = z.object({
     type: z.literal("note"),
-    text: localizedText,
+    text: z.string(),
     data: z.object({ variant: z.enum(["info", "warning", "tip"]) }),
 });
 const imageCore = z.object({
     type: z.literal("image"),
-    text: localizedText.nullish(), // optional caption
+    text: z.string().nullish(), // optional caption
     data: z.object({
         src: z.string(),
-        alt: localizedText,
+        alt: z.string(),
         width: z.number().int().positive().optional(),
         height: z.number().int().positive().optional(),
     }),
@@ -72,7 +81,7 @@ const codeCore = z.object({
 const approachListCore = z.object({
     type: z.literal("approachList"),
     data: z.object({
-        items: z.array(z.object({ title: localizedText, description: localizedText })).min(1),
+        items: z.array(z.object({ title: z.string(), description: z.string() })).min(1),
     }),
 });
 
@@ -113,12 +122,6 @@ export const blockInputSchema = z.discriminatedUnion("type", [
     approachListCore,
 ]);
 
-// Exported (not just used internally) — Post/Work fields (title, summary,
-// excerpt, ...) are the exact same {en, ru} shape, and reusing this one
-// schema for them too (see posts.ts/work.ts) avoids a second, easy-to-drift
-// definition of "what a localized string looks like".
-export const localizedTextSchema = localizedText;
-export type LocalizedText = z.infer<typeof localizedText>;
 export type Block = z.infer<typeof blockSchema>;
 export type BlockType = Block["type"];
 export type BlockInput = z.infer<typeof blockInputSchema>;
