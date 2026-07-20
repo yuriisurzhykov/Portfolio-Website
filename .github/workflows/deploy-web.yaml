@@ -1,0 +1,148 @@
+name: Deploy web/ (Next.js)
+
+# push to master  -> deploy to dev.yuriisoft.me  (yuriisoft-web-dev.service, :3001)
+# push tag v*     -> deploy to yuriisoft.me      (yuriisoft-web.service, :3000)
+#
+# Mirrors deploy_release.yaml's tag-triggered production model (same VPS
+# secrets, same appleboy actions) but adds a continuous dev deploy on every
+# master push, and adds the extra steps deploy.sh never needed for a
+# static site: wiring backend/.env into the release and running
+# `prisma migrate deploy` before restarting the app (see deploy-web.sh).
+#
+# Supersedes build-web-artifact.yml (a manual, deploy-less diagnostic
+# workflow used to get the very first artifact onto the VPS during initial
+# Phase 6 bring-up) — that file is removed in the same commit as this one.
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # See build-web-artifact.yml's original comment: `prisma generate`
+    # (backend's postinstall script) needs DATABASE_URL to be *set*, even
+    # though it never connects — these are build-time placeholders only.
+    env:
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      JWT_ACCESS_SECRET: build-time-placeholder-not-for-real-use
+      JWT_REFRESH_SECRET: build-time-placeholder-not-for-real-use
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies (web/ + backend/)
+        run: npm ci
+
+      - name: Build web (Next.js)
+        working-directory: web
+        run: npm run build
+
+      - name: Package artifact
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='frontend' \
+            --exclude='web/.next/cache' \
+            -czf release.tar.gz \
+            package.json package-lock.json node_modules backend web
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: release.tar.gz
+          retention-days: 7
+
+  deploy-dev:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-release
+
+      - name: Copy files to Server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "release.tar.gz, .scripts/deploy-web.sh"
+          target: "/tmp/"
+
+      - name: Deploy on Server (dev)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /tmp/.scripts/deploy-web.sh
+            /tmp/.scripts/deploy-web.sh "${{ github.sha }}" /tmp/release.tar.gz /srv/apps/yuriisoft-web-dev yuriisoft-web-dev.service
+            DEPLOY_EXIT_CODE=$?
+            rm -f /tmp/release.tar.gz
+            rm -rf /tmp/.scripts
+            if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+              echo "❌ Deployment FAILED with exit code $DEPLOY_EXIT_CODE"
+              exit $DEPLOY_EXIT_CODE
+            fi
+
+  deploy-prod:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read version from tag
+        id: ver
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-release
+
+      - name: Copy files to Server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "release.tar.gz, .scripts/deploy-web.sh"
+          target: "/tmp/"
+
+      - name: Deploy on Server (prod)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /tmp/.scripts/deploy-web.sh
+            /tmp/.scripts/deploy-web.sh "${{ steps.ver.outputs.VERSION }}" /tmp/release.tar.gz /srv/apps/yuriisoft-web yuriisoft-web.service
+            DEPLOY_EXIT_CODE=$?
+            rm -f /tmp/release.tar.gz
+            rm -rf /tmp/.scripts
+            if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+              echo "❌ Deployment FAILED with exit code $DEPLOY_EXIT_CODE"
+              exit $DEPLOY_EXIT_CODE
+            fi

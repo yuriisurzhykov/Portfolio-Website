@@ -116,6 +116,19 @@ time you need it (disaster recovery, new server). See the repo's
   replace with a self-created OAuth client_id
   (https://rclone.org/drive/#making-your-own-client-id) before then.
 
+## Real CI/CD (post-bring-up)
+
+Once the whole pipeline had been proven manually end to end (dev, then
+prod), it was wired into real automation:
+`.github/workflows/deploy-web.yaml` builds once on every push, then
+deploys to `dev.yuriisoft.me` on a push to `master` or to `yuriisoft.me` on
+a `v*` tag push — using `.scripts/deploy-web.sh` (parallel to the existing
+`.scripts/deploy.sh` for `frontend/`, but with the extra steps a database-
+backed app needs: wiring `shared/.env` into the release and running
+`prisma migrate deploy` before restarting the systemd service, instead of
+just reloading nginx). Superseded the earlier manual/diagnostic
+`build-web-artifact.yml` (removed).
+
 ## Dev/staging rehearsal environment
 
 Before ever running a migration or a first `next start` against the real
