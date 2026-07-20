@@ -1,0 +1,19 @@
+services:
+  # Local development database only. Production Postgres on the VPS is a
+  # native apt-installed service bound to 127.0.0.1 (see the deployment plan,
+  # Phase 6) — this container never runs there. Bound to 127.0.0.1 here too,
+  # so nothing outside this machine can ever reach it, even during dev.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: portfolio
+      POSTGRES_PASSWORD: portfolio_dev_only
+      POSTGRES_DB: portfolio
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - portfolio_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  portfolio_postgres_data:

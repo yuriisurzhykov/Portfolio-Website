@@ -1,0 +1,153 @@
+import { z } from "zod";
+
+/**
+ * Single source of truth for "what a block looks like", shared by every
+ * consumer: the migration scripts, the content services below, the admin
+ * BlockNote editor (Phase 5/6), and web's <ContentBlocks> renderer.
+ * Zod, not a plain TypeScript type, on purpose: `Block.text`/`Block.data`
+ * are untyped `Json` columns in Postgres (see schema.prisma's comment on
+ * why `type` isn't a DB enum) — anything read out of them is `unknown`
+ * until validated. Zod gives one definition that's simultaneously the
+ * runtime validator AND (via `z.infer`) the TypeScript type, instead of
+ * maintaining a hand-written type and a hand-written validator that can
+ * silently drift apart.
+ *
+ * `text`/nested `alt`/`title`/`description` are plain `z.string()` here,
+ * NOT `{en, ru}` (see `localized-text.ts` for that shape, which moved
+ * there — it's now exclusive to Post/Work scalar metadata). A block's
+ * language is a property of the *Document* it belongs to, not of the
+ * block itself: an English post body and its Russian translation are two
+ * separate `Document`s (`Post.bodyDocumentId`/`bodyDocumentIdRu`), each
+ * containing plain-string blocks in one language — see the migration
+ * plan's "язык — на уровне документа, не поля блока". A translator
+ * writing their own structure (different block count/order) could never
+ * fit a paired `{en, ru}` field on every block; a whole separate Document
+ * has no such limit.
+ */
+const baseFields = { id: z.string(), order: z.number().int() };
+
+// Every block "core" shape below (type + text/data, no id/order) is defined
+// once and reused for BOTH `blockSchema` (a block as read back from the
+// DB — has id/order) and `blockInputSchema` (a block as written by the
+// admin editor — the DB assigns id, `order` is just the array position).
+// Keeping one definition per type instead of two (one "with base fields",
+// one without) is what stops the read/write shapes from silently drifting
+// apart as block types are added.
+
+// `.nullish()`, not `.optional()`, for every field that's optional AND
+// backed by a nullable `Json` column: Prisma reads back an unset Json
+// column as `null`, never `undefined` — `.optional()` only accepts a
+// missing/`undefined` key, so it rejects the very much real `null` Prisma
+// hands back and the whole block fails to parse. Found by running the
+// Phase 3 import + read-back against a real block that had no `data`
+// (a plain heading) — not something a type-only review would have caught,
+// since `unknown`-typed Json fields don't distinguish null from undefined
+// at the type level either.
+const leadCore = z.object({ type: z.literal("lead"), text: z.string() });
+const headingCore = z.object({
+    type: z.literal("heading"),
+    text: z.string(),
+    data: z.object({ level: z.union([z.literal(2), z.literal(3)]).optional() }).nullish(),
+});
+const paragraphCore = z.object({ type: z.literal("paragraph"), text: z.string() });
+const quoteCore = z.object({
+    type: z.literal("quote"),
+    text: z.string(),
+    data: z.object({ attribution: z.string().optional() }).nullish(),
+});
+const noteCore = z.object({
+    type: z.literal("note"),
+    text: z.string(),
+    data: z.object({ variant: z.enum(["info", "warning", "tip"]) }),
+});
+const imageCore = z.object({
+    type: z.literal("image"),
+    text: z.string().nullish(), // optional caption
+    data: z.object({
+        src: z.string(),
+        alt: z.string(),
+        width: z.number().int().positive().optional(),
+        height: z.number().int().positive().optional(),
+    }),
+});
+const codeCore = z.object({
+    type: z.literal("code"),
+    data: z.object({
+        filename: z.string(),
+        language: z.string().optional(),
+        code: z.string(),
+    }),
+});
+const approachListCore = z.object({
+    type: z.literal("approachList"),
+    data: z.object({
+        items: z.array(z.object({ title: z.string(), description: z.string() })).min(1),
+    }),
+});
+
+// One `.extend()` call per type, written out individually rather than
+// mapped over an array — a `.map()` here would widen every branch's
+// precise literal-discriminant type down to `ZodObject<any>`, which would
+// in turn collapse `Block` (via `z.infer`) into a loose, useless type.
+// Each call site below keeps its own exact inferred type instead.
+const leadBlock = leadCore.extend(baseFields);
+const headingBlock = headingCore.extend(baseFields);
+const paragraphBlock = paragraphCore.extend(baseFields);
+const quoteBlock = quoteCore.extend(baseFields);
+const noteBlock = noteCore.extend(baseFields);
+const imageBlock = imageCore.extend(baseFields);
+const codeBlock = codeCore.extend(baseFields);
+const approachListBlock = approachListCore.extend(baseFields);
+
+export const blockSchema = z.discriminatedUnion("type", [
+    leadBlock,
+    headingBlock,
+    paragraphBlock,
+    quoteBlock,
+    noteBlock,
+    imageBlock,
+    codeBlock,
+    approachListBlock,
+]);
+
+/** Same block shapes, minus `id`/`order` — what the admin editor sends when saving a document's blocks (see content/document.ts's `replaceDocumentContent`). */
+export const blockInputSchema = z.discriminatedUnion("type", [
+    leadCore,
+    headingCore,
+    paragraphCore,
+    quoteCore,
+    noteCore,
+    imageCore,
+    codeCore,
+    approachListCore,
+]);
+
+export type Block = z.infer<typeof blockSchema>;
+export type BlockType = Block["type"];
+export type BlockInput = z.infer<typeof blockInputSchema>;
+
+/**
+ * Shape of a raw row as it comes out of Prisma (`text`/`data` are
+ * `JsonValue`, i.e. still `unknown` at the type level) — merges them with
+ * `type` before validating, since the schema above expects `data`/`text`
+ * to sit alongside `type` at the top level, not as separate arguments.
+ */
+export interface RawBlockRow {
+    id: string;
+    order: number;
+    type: string;
+    text: unknown;
+    data: unknown;
+}
+
+export function parseBlock(row: RawBlockRow): Block {
+    return blockSchema.parse({ id: row.id, order: row.order, type: row.type, text: row.text, data: row.data });
+}
+
+export function parseBlocks(rows: RawBlockRow[]): Block[] {
+    return rows.map(parseBlock);
+}
+
+export function parseBlockInputs(raw: unknown): BlockInput[] {
+    return z.array(blockInputSchema).parse(raw);
+}

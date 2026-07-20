@@ -1,46 +1,57 @@
 "use client";
 
-import React, { createContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useState } from "react";
 import type { I18nContextType, Language, LanguageProps, Localized } from "./types";
-import { initI18n, ln as lnEngine, setLocale } from "./engine";
+import { lnFor } from "./engine";
 
 export const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
-export const I18nProvider = ({children}: LanguageProps) => {
-    const [language, setLanguage] = useState<Language>('en');
+/**
+ * No `useEffect`/`initI18n()` here anymore — `i18nEngine` (engine/index.ts)
+ * now constructs itself synchronously, with both dictionaries already
+ * bundled, and defaults to "en" the moment the module loads. There's
+ * nothing left to wait for: `ln()` is correct on the very first render,
+ * server-rendered HTML included, which is what actually fixes the
+ * flash-of-untranslated-keys bug an earlier version of this file had (see
+ * README.md's journal for the full story — that version's fix was a
+ * client-only effect that made the race *shorter*; this removes the race
+ * entirely).
+ *
+ * `ln()` resolves through `lnFor(language, key, vars)` — a pure lookup
+ * closed over this provider's own `language` state — instead of the
+ * module-level `ln()`/`setLocale()` pair the previous version called.
+ * Those mutate one `i18nEngine` instance shared by the whole server
+ * process; `changeLanguage` calling `setLocale()` was harmless while it
+ * only ever ran client-side (a user clicking the toggle), but Phase 1 of
+ * the localized-routing plan needs `<I18nProvider initialLanguage="ru">`
+ * to render Russian correctly DURING server-side rendering — and two
+ * concurrent requests (one for `/journal/x`, one for `/ru/journal/x`)
+ * both mutating that same shared instance across their own `await` points
+ * would race. Deriving `ln()` from local `language` state removes the
+ * shared mutable state this provider depended on, rather than trying to
+ * make the mutation itself concurrency-safe.
+ */
+export const I18nProvider = ({children, initialLanguage}: LanguageProps) => {
+    const [language, setLanguage] = useState<Language>(initialLanguage ?? 'en');
 
-    // In the old Vite entry point, `main.tsx` did `await initI18n()` at module
-    // scope BEFORE the first `ReactDOM.render` call — so by the time this
-    // component ever mounted, both locale dictionaries were already
-    // registered and `setLocale('en')` below was safe. Next.js has no
-    // equivalent "block rendering until this promise resolves" entry hook for
-    // a Client Component, so that ordering guarantee no longer holds; calling
-    // `setLocale('en')` without registering the locale first throws
-    // ("No locales registered..."). Fixed by having the provider register the
-    // locales itself, in order, before switching to one.
-    useEffect(() => {
-        async function init() {
-            await initI18n();
-            setLocale('en');
-            setLanguage('en');
-        }
-
-        void init();
-    }, []);
-
-    const changeLanguage = (language: Language) => {
-        setLanguage(language);
-        setLocale(language);
-    };
+    const ln = useCallback(
+        (key: string, vars?: Record<string, string | number>) => lnFor(language, key, vars),
+        [language],
+    );
 
     function pick<T>(value: Localized<T>): T {
-        return value[language] ?? value.en;
+        // `||`, not `??`: a per-field translation that hasn't been written
+        // yet is stored as `ru: ""` (see backend/src/content/localized-text.ts),
+        // not `null`/`undefined` — `??` only falls back on nullish, so an
+        // empty string would render as blank instead of falling back to
+        // English.
+        return value[language] || value.en;
     }
 
     const contextValue: I18nContextType = {
         language: language,
-        setLanguage: changeLanguage,
-        ln: lnEngine,
+        setLanguage: setLanguage,
+        ln,
         pick
     };
 

@@ -1,5 +1,56 @@
 # backend — серверная логика (npm workspace-пакет)
 
+## Тесты
+
+**Расположение тестовых файлов — рядом с кодом, не в отдельной папке.**
+`password.test.ts` лежит рядом с `password.ts`, не в `backend/tests/`.
+Обсуждали отдельно: co-location — стандартная конвенция Vitest/Jest
+(находят тесты по умолчанию без специальной настройки glob-путей), не
+влияет на то, что попадает в прод-сборку (проверено на собранном
+`web/.next` — тестовые файлы туда не попадают независимо от того, где они
+физически лежат, бандлер включает только то, что реально импортируется из
+`src/index.ts`/`src/edge.ts`). Решено оставить co-location.
+
+
+`npm test` (из `backend/`) — Vitest: юнит-тесты чистых функций
+(`password.ts`, `tokens.ts`, `jwt.ts`, `rate-limit.ts`) и интеграционные
+тесты, бьющие в настоящую тестовую БД (`session.ts`, `auth-service.ts`,
+`create-admin-user.ts`) — таблицы очищаются перед каждым тестом
+(`src/test-utils/db.ts`), не переиспользуются между файлами. Требует
+отдельную БД `portfolio_test` (см. `.env.test.example`) — не ту же самую,
+с которой вы работаете руками, чтобы тесты не удаляли ваши реальные
+локальные данные.
+
+Гоняется автоматически на каждый pull request и push в `master` через
+[`.github/workflows/backend-web-checks.yml`](../.github/workflows/backend-web-checks.yml)
+— там Postgres поднимается как эфemeral service-контейнер прямо в самом
+workflow (не переиспользует ничего персистентного), мигрируется с нуля на
+каждый прогон, плюс тайпчек `backend/` и полная сборка `web/` (`next build`)
+— чтобы поймать не только логические баги, но и "сборка развалилась".
+
+## Локальный запуск с нуля
+
+```bash
+# 1. Поднять локальный Postgres (docker-compose.yml в корне репозитория)
+docker compose up -d
+
+# 2. Установить зависимости всего workspace (из корня репозитория)
+npm install
+
+# 3. Скопировать backend/.env.example -> backend/.env, при необходимости
+#    сгенерировать свои JWT_ACCESS_SECRET/JWT_REFRESH_SECRET
+cp backend/.env.example backend/.env
+
+# 4. Прогнать миграции
+cd backend && npx prisma migrate dev
+
+# 5. Создать единственного admin-пользователя (интерактивно, без флагов)
+npm run create-admin
+
+# 6. Запустить сайт
+cd ../web && npm run dev
+```
+
 `@portfolio/backend` — не отдельный сервис, а npm-пакет верхнего уровня,
 который `web/` (Next.js) подключает как обычную зависимость через npm
 workspaces. Рантайм всё равно один: один Next.js-процесс, один systemd-сервис

@@ -1,3 +1,3 @@
-export { ContentBlocks } from "./ContentBlocks";
+export { ContentBlocks, noteVariantClasses } from "./ContentBlocks";
 export type { ContentBlocksProps } from "./ContentBlocks";
-export type { ContentBlock } from "./ContentBlocks.types";
+export type { Block, BlockType } from "@portfolio/backend";

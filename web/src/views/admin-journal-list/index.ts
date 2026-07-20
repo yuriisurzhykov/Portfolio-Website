@@ -1,0 +1,1 @@
+export { AdminJournalListPage } from "./AdminJournalListPage";

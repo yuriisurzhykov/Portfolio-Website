@@ -1,0 +1,209 @@
+---
+description: Development methodology and hard-won technical lessons for this repo (Next.js/Postgres portfolio migration) — process to follow plus a catalog of real bugs already found and fixed, so they aren't rediscovered from scratch.
+alwaysApply: true
+---
+
+# How work happens in this repo
+
+This project is mid-migration from a static Vite SPA (`frontend/`) to a
+database-backed Next.js app (`web/` + `backend/`), following the plan in
+`.cursor/plans/` (or wherever it currently lives — search for it). Everything
+below was learned the hard way, over real sessions of building this out —
+follow the process, and skim the lesson catalog before touching an area it
+covers.
+
+## The process — apply this to every non-trivial step
+
+1. **"Will this be reused?"** — ask this before writing anything. If yes, it
+   goes in a shared location, not duplicated at the call site:
+   - Cross-cutting backend logic (DB queries, error classification) →
+     `backend/src/<domain>/` service functions, exported from
+     `backend/src/index.ts` (or `./edge` — see below).
+   - Cross-cutting UI (a11y-correct overlay mechanics, markdown rendering,
+     error fallbacks) → `web/src/shared/ui/<name>/`.
+   - Cross-cutting rendering/fetch glue (e.g. "fetch or show a fallback") →
+     `web/src/shared/lib/`.
+2. **Before finalizing a non-trivial change, walk through:**
+   1. What do I actually need to do?
+   2. How will I do it (what are the real alternatives, not just the first idea)?
+   3. Would another developer — or the repo's author — understand this without
+      me explaining it out loud?
+   4. Will it hold up under real load (even if "real load" here is modest)?
+   5. Is it extensible/replaceable later without a rewrite?
+   6. If it touches data: how hard is migration, and what happens if a
+      dependency (the database, in particular) is temporarily unavailable?
+   7. Does the component's structure actually reflect SOLID, or just gesture at it?
+3. **Document as you go, per "slice" (feature-sliced-design unit) or new
+   architectural layer** — not a big write-up at the end:
+   - A README.md per slice/package you **create or meaningfully change**
+     (not for a byte-for-byte copy with zero logic changes).
+   - Structure entries as: what needed doing → what was actually done
+     (including wrong turns, not just the final answer) → why it's
+     understandable/scalable/extensible → migration/fault-tolerance impact →
+     SOLID angle.
+   - See `backend/README.md`, `web/README.md`, and the various
+     `src/**/README.md` files for the established tone/format — match it.
+4. **Never trust "should work."** Verify live, every time, before calling
+   something done:
+   - Run the actual migration/import script against a real (local) database,
+     not just a type-check.
+   - Hit real HTTP endpoints (`curl`/`Invoke-WebRequest`) and read the actual
+     response body/status, not just "the build succeeded."
+   - For anything DB-dependent, actually stop the local Postgres container and
+     confirm graceful behavior, then start it again and confirm recovery —
+     don't just reason about it.
+   - For anything UI-visual, ask the user to check in a real browser (they
+     will — and they've caught real bugs this way that no test or type-check
+     did: a hydration mismatch, a squashed mobile drawer, raw i18n keys on
+     first paint).
+5. **When a first hypothesis is wrong, say so and show the correction** — both
+   in code comments and in the relevant README. Several bugs below took two
+   tries to diagnose correctly; the wrong turn is left in the record on
+   purpose, not silently replaced, because the wrong turn is often what makes
+   the real cause make sense.
+6. **Prefer removing the root cause over shrinking the symptom.** E.g., the
+   i18n flash-of-untranslated-keys bug was fixed by removing the async
+   dictionary fetch entirely (dictionaries are bundled at build time now),
+   not by parallelizing/speeding up the fetch — a faster race is still a
+   race.
+7. **Security/reliability defaults, not afterthoughts:** hash refresh tokens
+   (never store raw), Argon2id for passwords with a timing-attack mitigation
+   on login, rate-limit auth endpoints, never leak internal error details
+   (hosts, ports, driver/class names, stack traces) to a client response, and
+   prefer a graceful fallback UI over a crash whenever a dependency (the
+   database, in particular) might be temporarily down.
+
+## Lesson catalog — real bugs already found here (check before you re-hit them)
+
+### Next.js / Turbopack
+- **`middleware.ts` is renamed to `proxy.ts`** in Next.js 16 (`export function
+  proxy()`, not `middleware()`). Config export name (`config`/`matcher`)
+  unchanged.
+- **Turbopack refuses to resolve `tsconfig.json` `paths` pointing outside the
+  project directory** (e.g. `"@backend/*": ["../backend/src/*"]` from `web/`)
+  — fails with `Module not found`. Fix: make the sibling directory a real npm
+  **workspace package** (own `package.json`, symlinked via `npm install` at
+  the repo root) and import it by package name instead. See
+  `backend/README.md`.
+- **`transpilePackages` compiles a package SEPARATELY per execution context**
+  (Server Components vs. Route Handlers are different bundles). An error
+  class thrown in one context fails `instanceof` checks in code running in a
+  different context, even though it's the exact same source file. Check
+  `error.name` (a plain string, survives the boundary) instead of
+  `instanceof` for any custom error class crossing between
+  `backend`-exported code and `web` route handlers/pages. See
+  `web/README.md`'s "отказоустойчивость" entry and `backend/src/errors.ts`.
+- **`backdrop-filter`/`filter`/`transform`/`perspective`/`will-change` on an
+  ancestor element creates a new CSS containing block for `position: fixed`
+  descendants** — a "fixed" modal/drawer nested inside e.g. a header with
+  `backdrop-blur-*` collapses to that header's box instead of the viewport.
+  Fix: portal overlay/drawer/modal components to `document.body` via
+  `createPortal` — never assume a caller avoids nesting you inside a
+  filtered/transformed ancestor. See `web/src/shared/ui/drawer/README.md`.
+- **Next.js silently prerenders (SSG) a page with no dynamic APIs at BUILD
+  time**, even if its Server Component queries a database — the query result
+  gets baked into static HTML and won't reflect later data changes until the
+  next rebuild. Add `export const dynamic = "force-dynamic";` to any
+  route whose content can change without a redeploy (basically anything
+  reading from the DB that isn't already using dynamic route params).
+- **A feature-sliced-design layer literally named `pages/`** collides with
+  Next.js's legacy Pages Router auto-detection — renamed to `views/` in this
+  repo.
+- Before porting SSR infrastructure for a dependency (e.g. styled-components'
+  SSR registry), **verify the dependency is actually used** — it may be a
+  dead `package.json` entry from an earlier iteration.
+
+### Prisma 7
+- `datasource.url` moved out of `schema.prisma` into `prisma.config.ts`;
+  `PrismaClient` now requires an explicit driver adapter (`@prisma/adapter-pg`
+  + `pg` for Postgres) passed to its constructor.
+- `prisma migrate dev` did not reliably auto-run `prisma generate` in this
+  setup (happened twice). Use the `db:migrate` npm script
+  (`prisma migrate dev && prisma generate`) instead of the bare CLI command,
+  and keep `"postinstall": "prisma generate"` in `backend/package.json` so a
+  fresh `npm install` always has a working client.
+- **Prisma Client Extensions (`$extends`)** are the right place to centralize
+  a cross-cutting concern across every query (e.g. translating a raw
+  connection error into `DatabaseUnavailableError`) — not a try/catch
+  repeated in every service function.
+- **Zod's `.optional()` only accepts `undefined`, never `null`.** Prisma
+  returns `null` (not `undefined`) for an unset nullable `Json` column — use
+  `.nullish()` for any Zod field backed by one, or parsing breaks on
+  perfectly normal, real data.
+
+### i18n / SSR / hydration
+- A client-side `fetch()` for translation dictionaries causes a real,
+  user-visible flash of raw i18n keys on first load — not a theoretical
+  concern, reported live. Fix: bundle small, build-time-known dictionaries as
+  static JSON imports (`import en from "./locales/en.json"`), and make the
+  locale registry fully synchronous. No async init at all if the data doesn't
+  need to be async.
+- **Any value read synchronously during render that branches on
+  `typeof window === "undefined"`** (e.g. reading `localStorage` for a
+  component's initial state) causes a hydration mismatch the moment real SSR
+  exists — server always takes the "undefined" branch, client's first render
+  (before any effect runs) takes the other one. Fix: always return a
+  deterministic default for the very first render on both server and client;
+  correct it in a `useEffect` immediately after mount.
+
+### npm workspaces / dependency hygiene
+- **An exact version pin (no `^`) in one workspace member can force npm to
+  install a separate, nested copy of that dependency** instead of deduping to
+  the version hoisted at the workspace root — causes silent "two React
+  instances" bugs (hooks throw "cannot read properties of null," since the
+  render happens via one copy of `react-dom` and hooks resolve via a
+  different copy of `react`). Diagnose with `npm ls <package> --all`; fix
+  with root-level `"overrides"` in `package.json` forcing one version across
+  the whole tree.
+- Audit `dependencies` vs `devDependencies` against what a package's public
+  entry points **actually import** — not what "feels like" a runtime vs. dev
+  concern. A CLI-only tool (`dotenv-cli`, `tsx`, `prisma` the CLI) or
+  test-only tool (`vitest`) that ends up in `dependencies` will survive a
+  `--omit=dev` production install for no reason.
+
+### Testing
+- `@testing-library/react`'s automatic per-test `cleanup()` only registers
+  itself if it detects a global `afterEach` (`test.globals: true` in Vitest
+  config) — without that, register `cleanup()` explicitly in the shared
+  `vitest.setup.ts`, or tests using the global `screen` object start finding
+  elements left over from a previous test ("multiple elements found," not a
+  real bug in the component).
+- Node's `readline.Interface` closes itself when its input stream hits EOF —
+  which happens almost immediately with piped/non-interactive stdin. A
+  multi-`question()` CLI script can silently lose later answers this way
+  (`ERR_USE_AFTER_CLOSE`, or worse, no error at all — just wrong behavior).
+  Never really "fixable" for piped input without fighting Node — instead,
+  extract the actual business rule into a plain, directly-testable function
+  with no stdin involved, and treat the interactive shell around it as a
+  thin, manually-verified-once wrapper.
+- Test the actual security/reliability invariant directly, not just the
+  happy path — e.g. render markdown containing a raw `<script>` tag and
+  assert it never becomes a live DOM node, rather than only testing that
+  **bold** renders as `<strong>`.
+- `vi.useFakeTimers()` fakes `requestAnimationFrame`/`cancelAnimationFrame`
+  by default, as part of the same timer group as `setTimeout`. A manual
+  `vi.stubGlobal("requestAnimationFrame", ...)` — called before OR after
+  `useFakeTimers()` — gets silently overwritten either way and simply never
+  fires; there's no error, the code just behaves as if the callback was
+  dropped. Don't hand-roll a rAF stub at all once fake timers are active —
+  drive it with the real fake-timer API instead
+  (`vi.advanceTimersToNextFrame()` / `vi.advanceTimersByTime()`).
+- Advancing fake timers that trigger a React state update (e.g. flushing a
+  rAF-throttled `scroll` handler's `setState`) must itself be wrapped in
+  `act()` from `@testing-library/react` — otherwise `renderHook`'s
+  `result.current` can still read the pre-update value right after, even
+  though the timer callback (and the `setState` inside it) already ran.
+  Looks exactly like "the hook doesn't work"; the actual hook logic was
+  fine, the test just read state before React's own flush caught up.
+
+### Local dev environment (Windows-specific but worth knowing)
+- A dev server that "accepts connections but never responds to any request,
+  including static ones" after many rapid restarts in one session is
+  typically stale process/socket state, not a code bug — kill all `node`
+  processes, clear `.next/`, and retry on a fresh port before assuming the
+  code broke.
+- Docker Desktop can silently not be running — this is exactly the scenario
+  the `DatabaseUnavailableError` + `<ServiceUnavailable/>` fallback exists
+  for (see `web/README.md`). If a page crashes with a raw Prisma stack trace
+  instead of a friendly fallback, that fallback path itself has a bug — fix
+  it there, don't just restart Docker and move on.

@@ -1,0 +1,178 @@
+// Prisma schema — Phase 2 (auth: User + Session) + Phase 3 (content:
+// Document/Block/Post/Work) + Phase 5 (SiteContent).
+// See backend/README.md and the migration plan for the full model design.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A person who can log into /admin. One row today (you) — modeled as a
+/// real table from day one (not a hardcoded single-admin check) so adding a
+/// second user or a role later is a data change, not a redesign.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions Session[]
+}
+
+/// One row per issued refresh token (= one row per logged-in device).
+/// Storing a hash of the refresh token (never the raw token) means a
+/// leaked database dump alone can't be used to impersonate a session —
+/// same principle as passwordHash. Deleting/revoking a row instantly
+/// invalidates that device without touching any other session, which is
+/// what makes "sign out this device" (and multi-device / future mobile
+/// client support) possible without redesigning anything later.
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ip               String?
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  @@index([userId])
+}
+
+/// A journal post's body OR a work item's case-study narrative — the same
+/// container either way, see backend/src/content/README.md for why a case
+/// study is architecturally just a document, same as a post. Named
+/// relations below (`"PostBody"`/`"PostBodyRu"`/`"WorkCaseStudy"`/
+/// `"WorkCaseStudyRu"`) exist only because `Post`/`Work` each now have TWO
+/// FKs pointing at this same model (an English document and, optionally,
+/// an independent Russian one — see the migration plan's "язык — на
+/// уровне документа, не поля блока") — Prisma requires an explicit name to
+/// disambiguate once a model has more than one relation to the same
+/// target.
+model Document {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blocks Block[]
+  post   Post?   @relation("PostBody")
+  postRu Post?   @relation("PostBodyRu")
+  work   Work?   @relation("WorkCaseStudy")
+  workRu Work?   @relation("WorkCaseStudyRu")
+}
+
+/// One row per paragraph/heading/image/code/quote/note/approachList, in
+/// order. `type` is a plain String, not a Prisma/Postgres enum — enums are
+/// a schema-level constraint, so adding a new block type would need a
+/// migration every time; a String does not (see the block-storage
+/// discussion in the migration plan for the full reasoning). `text` and
+/// `data` are deliberately untyped Json here — the actual shape per `type`
+/// is validated at the application layer (backend/src/content/blocks.ts,
+/// Zod schemas), not the database layer.
+model Block {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  order      Int
+  type       String
+  text       Json?
+  data       Json?
+
+  @@unique([documentId, order])
+  @@index([documentId])
+}
+
+/// Journal entry. `bodyDocumentId` is nullable — an "upcoming" stub post
+/// (announced, not yet written) has no body document at all.
+/// `bodyDocumentIdRu`/`bodyRu` are the SAME kind of nullable relation, one
+/// level further: independent of whether an English body exists, a
+/// Russian translation of it may or may not exist yet. It's a wholly
+/// separate `Document` (own blocks, own count/order), not a `ru` field
+/// bolted onto every English block — see blocks.ts's top comment for why.
+/// Written only through the translation endpoint (admin-posts.ts's
+/// `translatePost`), never through `createPost`/`updatePost`.
+model Post {
+  id               String    @id @default(cuid())
+  slug             String    @unique
+  /// Set once, automatically, at creation (`createPost`) — never a form
+  /// field. `dateLabel` (a free-text override for imprecise/upcoming
+  /// dates) has been REMOVED — see backend/src/content/README.md's dated
+  /// entry — the admin editor no longer exposes any date field at all.
+  date             String
+  title            Json
+  category         Json
+  readMins         Int
+  excerpt          Json
+  status           String
+  relatedWorkSlug  String?
+  bodyDocumentId   String?   @unique
+  body             Document? @relation("PostBody", fields: [bodyDocumentId], references: [id])
+  bodyDocumentIdRu String?   @unique
+  bodyRu           Document? @relation("PostBodyRu", fields: [bodyDocumentIdRu], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+/// Project/work item. `startedLabel`/`shippedLabel`/`role` are case-study
+/// metadata that stay scalar fields here (not part of the narrative
+/// blocks) — see backend/src/content/README.md.
+model Work {
+  id                    String    @id @default(cuid())
+  slug                  String    @unique
+  title                 String
+  year                  Int
+  status                String
+  summary               Json
+  stack                 String[]
+  coverImage            String?
+  featured              Boolean   @default(false)
+  relatedPostSlug       String?
+  startedLabel          Json?
+  shippedLabel          Json?
+  role                  Json?
+  /// The case-study detail page's large hero image — a separate field from
+  /// `coverImage` (the small card/ledger thumbnail). Ported from the
+  /// original `WorkCaseStudy.heroImage`; currently unset by every existing
+  /// item (all show the placeholder pattern instead), kept for parity with
+  /// the original shape rather than silently dropping a field nothing
+  /// happens to use yet.
+  heroImage             String?
+  caseStudyDocumentId   String?   @unique
+  caseStudy             Document? @relation("WorkCaseStudy", fields: [caseStudyDocumentId], references: [id])
+  /// Independent Russian case-study Document — same reasoning as
+  /// `Post.bodyDocumentIdRu` above (own blocks, written only through the
+  /// translation endpoint). The label fields (`startedLabel`/
+  /// `shippedLabel`/`role`) stay single `Json` `{en, ru}` values, not
+  /// duplicated per language document — they're one string pair each,
+  /// not a block list a translator restructures.
+  caseStudyDocumentIdRu String?   @unique
+  caseStudyRu           Document? @relation("WorkCaseStudyRu", fields: [caseStudyDocumentIdRu], references: [id])
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+/// A generic key→JSON settings bag for the handful of small, singleton
+/// content sections that don't need their own table — `hero`, `contact`,
+/// `principles`, `techStack`, `config`, `journalPage`, `workPage` (see the
+/// migration plan's Phase 5). One row per section; `key` IS the row's
+/// identity (no separate `id` column — there's no scenario where two rows
+/// share a `key`, so a surrogate id would only add an unused column).
+/// `data`'s shape is validated at the application layer per-key
+/// (`backend/src/content/site-content.ts`'s Zod schemas), the same
+/// "untyped Json column, typed application boundary" split `Block.text`/
+/// `Block.data` already use above — a 7-arm union of very different
+/// shapes (an array for `principles`, a nested object for `config`, ...)
+/// has no single reasonable typed-column representation anyway, so this
+/// isn't giving up type safety that a differently-shaped schema could
+/// have kept.
+model SiteContent {
+  key       String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}

@@ -2,23 +2,21 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { JournalPageContent, PostSummary } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
-import { journal, type JournalPost } from "@/data/journal";
-import { journalPage } from "@/data/journalPage";
 import { cn } from "@/shared/lib/utils";
+import { formatMonthYear } from "@/shared/lib/date-format";
 
-function formatDate(post: JournalPost, ln: (key: string, vars?: Record<string, string | number>) => string) {
-    if (post.status === "upcoming") {
-        return ln("status.upcoming", {date: post.dateLabel ?? post.date});
-    }
-    return post.date;
+export interface JournalListPageProps {
+    entries: PostSummary[];
+    journalPage: JournalPageContent;
 }
 
-function LogEntry({post}: { post: JournalPost }) {
-    const {ln, pick} = useTranslation();
+function LogEntry({ post }: { post: PostSummary }) {
+    const { ln, pick } = useTranslation();
     const isPublished = post.status === "published";
 
     const inner = (
@@ -31,12 +29,12 @@ function LogEntry({post}: { post: JournalPost }) {
             />
             <div className="flex gap-sm items-baseline mb-2 flex-wrap">
                 <Text variant="caption" tone="faint" className="font-mono">
-                    { formatDate(post, ln) }
+                    { isPublished ? formatMonthYear(post.date) : ln("status.upcoming", { date: formatMonthYear(post.date) }) }
                 </Text>
                 { isPublished && <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge> }
                 { isPublished && (
                     <Text variant="caption" tone="faint" className="font-mono">
-                        { ln("journal.readMins", {count: post.readMins}) }
+                        { ln("journal.readMins", { count: post.readMins }) }
                     </Text>
                 ) }
             </div>
@@ -70,8 +68,8 @@ function LogEntry({post}: { post: JournalPost }) {
     );
 }
 
-export function JournalListPage() {
-    const {ln, pick} = useTranslation();
+export function JournalListPage({ entries, journalPage }: JournalListPageProps) {
+    const { ln, pick } = useTranslation();
 
     return (
         <main>
@@ -95,7 +93,7 @@ export function JournalListPage() {
                 className="relative max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-[100px]">
                 <div
                     className="absolute left-[calc(clamp(20px,4vw,24px)+5px)] top-2 bottom-[100px] w-0.5 bg-border-subtle"/>
-                { [...journal].sort((a, b) => b.date.localeCompare(a.date)).map((post) => (
+                { entries.map((post) => (
                     <LogEntry key={ post.slug } post={ post }/>
                 )) }
             </div>
