@@ -2,14 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Trash2 } from "lucide-react";
 import type { PostSummary } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
-import { Button } from "@/shared/ui/button";
 import { LinkButton } from "@/shared/ui/button/LinkButton";
-import { Card } from "@/shared/ui/card";
 import { StatusBadge } from "@/shared/ui/status-badge";
+import { AdminListItem } from "@/shared/ui/admin-list-item";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { formatAdminDate } from "@/shared/lib/date-format";
 
@@ -51,30 +48,16 @@ export function AdminJournalListPage({ entries }: AdminJournalListPageProps) {
             ) : (
                 <div className="flex flex-col gap-sm">
                     {entries.map((post) => (
-                        <Card key={post.slug} variant="outlined" className="p-md flex items-center justify-between gap-md">
-                            <div className="flex flex-col gap-xs min-w-0">
-                                <div className="flex items-center gap-sm">
-                                    <Text variant="body" className="font-medium truncate">{post.title.en}</Text>
-                                    <StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>
-                                </div>
-                                <Text variant="caption" tone="faint" className="font-mono">{post.slug} · {formatAdminDate(post.date)}</Text>
-                            </div>
-                            <div className="flex items-center gap-sm shrink-0">
-                                <Link href={`/admin/journal/${ post.slug }/edit`}>
-                                    <Button type="button" variant="secondary" size="sm">Edit</Button>
-                                </Link>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleDelete(post.slug)}
-                                    loading={deletingSlug === post.slug}
-                                    iconLeft={<Trash2 className="w-4 h-4" aria-hidden="true" />}
-                                >
-                                    Delete
-                                </Button>
-                            </div>
-                        </Card>
+                        <AdminListItem
+                            key={post.slug}
+                            badges={<StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>}
+                            meta={formatAdminDate(post.date)}
+                            title={post.title.en}
+                            slug={post.slug}
+                            editHref={`/admin/journal/${ post.slug }/edit`}
+                            onDelete={() => handleDelete(post.slug)}
+                            deleting={deletingSlug === post.slug}
+                        />
                     ))}
                 </div>
             )}

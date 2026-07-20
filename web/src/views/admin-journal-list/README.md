@@ -31,3 +31,12 @@ Server Component перезапросил список у базы. Подтве
 warning (`AdminWorkListPage`'s `in-progress`, новый `<StatusToggle>` в
 обоих редакторах — все warning) — исправлено для единообразия, не
 намеренное отличие, которое стоило сохранить.
+
+## 2026-07-20 — Строка списка переехала в `shared/ui/admin-list-item`
+
+Разметка одной карточки поста (`<Card>` + бэйдж/slug/дата/Edit/Delete) —
+теперь `<AdminListItem>`, общий с `admin-work-list`. Полный разбор
+(причина — живая обратная связь по скриншоту узкого списка, как устроена
+hover-анимация Edit/Delete) — в `shared/ui/admin-list-item/README.md`.
+Этот файл больше не рендерит `<Card>` напрямую, только решает, что
+подставить в `badges`/`meta` для поста (статус-бэйдж + `formatAdminDate`).
