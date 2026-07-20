@@ -1,12 +1,16 @@
 "use client";
 
 import * as React from "react";
+import type { ConfigContent } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { useTranslation } from "@/shared/i18n";
-import { site } from "@/data/config";
 import { cn } from "@/shared/lib/utils";
 
-export function Footer() {
+export interface FooterProps {
+    config: ConfigContent;
+}
+
+export function Footer({ config: site }: FooterProps) {
     const { ln } = useTranslation();
     const year = new Date().getFullYear();
 

@@ -1,5 +1,15 @@
 # widgets/nav — Nav
 
+## 2026-07-19 — Фаза 5: `site` (config) стал пропом `config`
+
+`Nav` больше не импортирует `site` из `@/data/config` (файл удалён) —
+принимает `config: ConfigContent` как проп (destructured locally back to
+the name `site`, so the rest of the file — `site.initials`/
+`site.availability` — needed no other change). Threaded down from
+`app/(site)/layout.tsx` through `AppLayout` — see `widgets/layout/README.md`'s
+Фаза 5 entry for why that layout reads it through `getSiteConfigSafe()`
+instead of `getSiteContent("config")` directly.
+
 ## 2026-07-18 — Перенос с react-router на Next.js App Router
 
 **Что нужно сделать.** `NavLink` из react-router-dom умеет сам подсвечивать

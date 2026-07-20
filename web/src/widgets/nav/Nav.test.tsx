@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
 import { I18nProvider } from "@/shared/i18n";
 import { ThemeProvider } from "@/shared/theme";
 import { Nav } from "./Nav";
@@ -13,7 +14,7 @@ function renderNav() {
     return render(
         <ThemeProvider>
             <I18nProvider>
-                <Nav />
+                <Nav config={SITE_CONTENT_DEFAULTS.config} />
             </I18nProvider>
         </ThemeProvider>,
     );

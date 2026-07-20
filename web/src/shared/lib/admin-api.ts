@@ -1,6 +1,15 @@
 "use client";
 
-import type { PostInput, PostSummary, TranslatePostInput, TranslateWorkInput, WorkInput, WorkSummary } from "@portfolio/backend";
+import type {
+    PostInput,
+    PostSummary,
+    SiteContentDataMap,
+    SiteContentKey,
+    TranslatePostInput,
+    TranslateWorkInput,
+    WorkInput,
+    WorkSummary,
+} from "@portfolio/backend";
 
 /**
  * Every mutation from the admin UI (Post/Work create/update/delete,
@@ -71,4 +80,13 @@ export const adminApi = {
         request<PostSummary>("PUT", `/api/admin/posts/${ encodeURIComponent(slug) }/translation`, input),
     translateWork: (slug: string, input: TranslateWorkInput) =>
         request<WorkSummary>("PUT", `/api/admin/work/${ encodeURIComponent(slug) }/translation`, input),
+
+    // No `getSiteContent` here — the settings edit page loads its initial
+    // data server-side (`getSiteContent()` called directly in
+    // `app/admin/(dashboard)/settings/[key]/page.tsx`), same as
+    // `WorkEditorPage`'s edit route calls `getWorkBySlug` directly rather
+    // than round-tripping through this client and `/api/admin/work/[slug]`
+    // GET. Only the write side needs a browser-callable endpoint.
+    updateSiteContent: <K extends SiteContentKey>(key: K, data: SiteContentDataMap[K]) =>
+        request<SiteContentDataMap[K]>("PUT", `/api/admin/settings/${ encodeURIComponent(key) }`, data),
 };

@@ -1,12 +1,16 @@
 "use client";
 
 import * as React from "react";
+import type { TechStackContent } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Tag } from "@/shared/ui/tag";
 import { useTranslation } from "@/shared/i18n";
-import { techStack } from "@/data/techStack";
 
-export function TechStack() {
+export interface TechStackProps {
+    techStack: TechStackContent;
+}
+
+export function TechStack({ techStack }: TechStackProps) {
     const { ln, pick } = useTranslation();
 
     return (

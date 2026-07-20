@@ -1,5 +1,37 @@
 # widgets/layout — AppLayout
 
+## 2026-07-19 — Фаза 5: `config` теперь проп, читается через `getSiteConfigSafe()`
+
+**Что нужно сделать.** `Nav`/`Footer` читали `site` из статического
+`@/data/config`; Фаза 5 переносит это в `SiteContent`.
+
+**Как сделано.** `AppLayout` получил проп `config: ConfigContent`,
+передаёт его в `<Nav/>`/`<Footer/>` без изменений. Сам `AppLayout` остаётся
+`"use client"` и ничего не читает из БД сам — `app/(site)/layout.tsx`
+(Server Component, теперь `async`) вызывает
+`shared/lib/get-site-config-safe.ts`'s `getSiteConfigSafe()`, не
+`getSiteContent("config")` напрямую.
+
+**Почему не напрямую.** `(site)/layout.tsx` оборачивает КАЖДУЮ страницу
+под `(site)`, включая те, что уже сами корректно обрабатывают
+`DatabaseUnavailableError` через `renderOrServiceUnavailable()` (Фаза 3).
+Если бы чтение `config` бросало исключение на уровне layout, ошибка
+поднялась бы ВЫШЕ конкретной страницы — на уровень `error.tsx` этого
+route-group, заменяя аккуратный `<ServiceUnavailable/>` страницы на общий
+экран ошибки. `Nav`/`Footer` — это chrome, не основной контент: при любой
+ошибке (не только "строки нет", но и реальной недоступности БД)
+`getSiteConfigSafe()` возвращает `SITE_CONTENT_DEFAULTS.config` — те же
+реальные identity/contact-данные, что были на момент последнего деплоя, не
+плейсхолдер — так что шапка/футер продолжают работать, даже когда тело
+страницы показывает "сервис недоступен".
+
+**Расширяемость/заменяемость.** Тот же паттерн подойдёт для любого
+будущего layout-уровня чтения `SiteContent` — не только `config`.
+
+**SOLID.** Single Responsibility не пострадал: `AppLayout` как и раньше
+отвечает только за "рамку" страницы, не за то, откуда взялся `config` —
+это знает только вызывающий `(site)/layout.tsx`.
+
 ## 2026-07-18 — Перенос с react-router на Next.js App Router
 
 **Что нужно сделать.** `AppLayout` больше не может оборачивать `<Outlet/>`

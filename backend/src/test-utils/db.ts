@@ -16,4 +16,5 @@ export async function resetTestDatabase(): Promise<void> {
     await prisma.work.deleteMany();
     await prisma.block.deleteMany();
     await prisma.document.deleteMany();
+    await prisma.siteContent.deleteMany();
 }

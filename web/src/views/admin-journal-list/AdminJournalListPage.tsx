@@ -11,6 +11,7 @@ import { LinkButton } from "@/shared/ui/button/LinkButton";
 import { Card } from "@/shared/ui/card";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
+import { formatAdminDate } from "@/shared/lib/date-format";
 
 export interface AdminJournalListPageProps {
     entries: PostSummary[];
@@ -54,9 +55,9 @@ export function AdminJournalListPage({ entries }: AdminJournalListPageProps) {
                             <div className="flex flex-col gap-xs min-w-0">
                                 <div className="flex items-center gap-sm">
                                     <Text variant="body" className="font-medium truncate">{post.title.en}</Text>
-                                    <StatusBadge tone={post.status === "published" ? "success" : "accent"}>{post.status}</StatusBadge>
+                                    <StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>
                                 </div>
-                                <Text variant="caption" tone="faint" className="font-mono">{post.slug} · {post.date}</Text>
+                                <Text variant="caption" tone="faint" className="font-mono">{post.slug} · {formatAdminDate(post.date)}</Text>
                             </div>
                             <div className="flex items-center gap-sm shrink-0">
                                 <Link href={`/admin/journal/${ post.slug }/edit`}>

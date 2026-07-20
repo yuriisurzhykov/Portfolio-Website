@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
+import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
 import "@/app/styles/index.css";
 import { themeVars } from "@/shared/ui/theme";
 import { MainProviders } from "@/app/providers/MainProviders";
-import { site } from "@/data/config";
 import { getRequestLocale } from "@/shared/lib/get-request-locale";
 
+// `SITE_CONTENT_DEFAULTS.config.name`, not a DB read — this metadata export
+// has to stay a static object (not `generateMetadata()`) to cover EVERY
+// route under this root layout, including /admin and /storybook, which
+// must keep working with zero DB dependency. `(site)/layout.tsx`'s
+// `getSiteConfigSafe()` is the one place `config` is actually read live,
+// scoped to the public site chrome that can meaningfully reflect an admin
+// edit; the <title>/description here are a build-time SEO concern, not
+// something Phase 5 needed to make live-editable.
 export const metadata: Metadata = {
-    title: site.name,
+    title: SITE_CONTENT_DEFAULTS.config.name,
     description: "Systems engineer — event-driven architecture, navigation engines, and code-generation tooling for OEM Android platforms.",
 };
 

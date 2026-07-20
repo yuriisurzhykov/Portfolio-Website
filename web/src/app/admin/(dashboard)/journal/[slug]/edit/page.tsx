@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getPostForAdmin } from "@portfolio/backend";
+import { getDistinctPostCategories, getPostForAdmin } from "@portfolio/backend";
 import { PostEditorPage } from "@/views/admin-post-editor";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 
@@ -18,8 +18,9 @@ export default async function Page({ params }: PageProps) {
             if (!post) {
                 notFound();
             }
-            return post;
+            const existingCategories = await getDistinctPostCategories();
+            return { post, existingCategories };
         },
-        (post) => <PostEditorPage initialPost={post} />,
+        ({ post, existingCategories }) => <PostEditorPage initialPost={post} existingCategories={existingCategories} />,
     );
 }

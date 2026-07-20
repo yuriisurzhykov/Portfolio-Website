@@ -2,16 +2,16 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { WorkSummary } from "@portfolio/backend";
+import type { WorkPageContent, WorkSummary } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
-import { workPage } from "@/data/workPage";
 import { cn } from "@/shared/lib/utils";
 
 export interface WorkListPageProps {
     items: WorkSummary[];
+    workPage: WorkPageContent;
 }
 
 const desktopRowGridCols = "sm:grid-cols-[100px_1fr_auto_auto]";
@@ -84,7 +84,7 @@ function WorkRow({ item }: { item: WorkSummary }) {
     return <div className={ wrapperClass }>{ body }</div>;
 }
 
-export function WorkListPage({ items }: WorkListPageProps) {
+export function WorkListPage({ items, workPage }: WorkListPageProps) {
     const { ln, pick } = useTranslation();
 
     return (

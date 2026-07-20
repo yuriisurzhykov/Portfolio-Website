@@ -15,11 +15,14 @@ import { toPostSummary, type PostStatus, type PostSummary } from "./posts";
  * below in `createPost`) and the English body (`bodyDocumentId`) — the
  * Russian side is exclusively `translatePostInputSchema`/`translatePost`'s
  * job, below.
+ *
+ * No `date`/`dateLabel` here at all — `date` is set once, automatically,
+ * by `createPost` (never by the admin), and `dateLabel` (a free-text
+ * override for imprecise/upcoming dates) has been removed outright, not
+ * just hidden from this schema — see content/README.md's dated entry.
  */
 export const postInputSchema = z.object({
     slug: slugSchema,
-    date: z.string().min(1),
-    dateLabel: z.string().nullish(),
     title: z.string().min(1),
     category: z.string().min(1),
     readMins: z.number().int().min(0),
@@ -99,7 +102,14 @@ async function assertSlugAvailable(slug: string, excludingCurrentSlug?: string):
     }
 }
 
-/** English content only — `ru` starts as `""` (untranslated) on every field, exactly what `pick()` (web) treats as "fall back to English" until a translation is added. */
+/**
+ * English content only — `ru` starts as `""` (untranslated) on every
+ * field, exactly what `pick()` (web) treats as "fall back to English"
+ * until a translation is added. `date` is always "today" in the server's
+ * own clock at the moment of creation — never taken from `input`, so
+ * there's no way for the admin UI to backdate/postdate a post even by
+ * accident.
+ */
 export async function createPost(input: PostInput): Promise<PostSummary> {
     await assertSlugAvailable(input.slug);
 
@@ -107,8 +117,7 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
     const row = await prisma.post.create({
         data: {
             slug: input.slug,
-            date: input.date,
-            dateLabel: input.dateLabel ?? null,
+            date: new Date().toISOString().slice(0, 10),
             title: { en: input.title, ru: "" },
             category: { en: input.category, ru: "" },
             readMins: input.readMins,
@@ -129,7 +138,9 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
  * (`{...existing, en: input.title}`, not a wholesale overwrite): editing
  * the English post must never silently wipe out someone's translation
  * work. The Russian body Document (`bodyDocumentIdRu`) isn't touched at
- * all here — only `translatePost` below ever writes to it.
+ * all here — only `translatePost` below ever writes to it. `date` isn't
+ * in `data` at all — it's set once, by `createPost`, and never changes
+ * again, editing included.
  */
 export async function updatePost(slug: string, input: PostInput): Promise<PostSummary | null> {
     const existing = await prisma.post.findUnique({ where: { slug } });
@@ -148,8 +159,6 @@ export async function updatePost(slug: string, input: PostInput): Promise<PostSu
         where: { slug },
         data: {
             slug: input.slug,
-            date: input.date,
-            dateLabel: input.dateLabel ?? null,
             title: { ...existingTitle, en: input.title },
             category: { ...existingCategory, en: input.category },
             readMins: input.readMins,

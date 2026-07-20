@@ -1,13 +1,17 @@
 "use client";
 
 import * as React from "react";
+import type { PrinciplesContent } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { useTranslation } from "@/shared/i18n";
-import { principles } from "@/data/principles";
 
-export function Principles() {
+export interface PrinciplesProps {
+    principles: PrinciplesContent;
+}
+
+export function Principles({ principles }: PrinciplesProps) {
     const { ln, pick } = useTranslation();
 
     return (

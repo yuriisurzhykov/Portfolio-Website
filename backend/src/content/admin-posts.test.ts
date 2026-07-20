@@ -15,8 +15,6 @@ import {
 
 const basePostInput: PostInput = {
     slug: "test-post",
-    date: "2026-01-01",
-    dateLabel: null,
     title: "Test Post",
     category: "Notes",
     readMins: 3,
@@ -167,6 +165,21 @@ describe("createPost — English-only, ru starts empty", () => {
         expect(row?.title).toEqual({ en: "Test Post", ru: "" });
         expect(row?.category).toEqual({ en: "Notes", ru: "" });
         expect(row?.excerpt).toEqual({ en: "An excerpt.", ru: "" });
+    });
+});
+
+describe("createPost/updatePost — date is server-generated, never form input", () => {
+    it("createPost sets date to today's date, regardless of what's in the input (there's no such field anymore)", async () => {
+        const created = await createPost(basePostInput);
+        expect(created.date).toBe(new Date().toISOString().slice(0, 10));
+    });
+
+    it("updatePost never changes the date a post was created with", async () => {
+        const created = await createPost(basePostInput);
+
+        const updated = await updatePost("test-post", { ...basePostInput, title: "Updated Title" });
+
+        expect(updated?.date).toBe(created.date);
     });
 });
 

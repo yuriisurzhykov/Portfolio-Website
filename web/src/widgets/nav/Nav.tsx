@@ -4,10 +4,10 @@ import * as React from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
+import type { ConfigContent } from "@portfolio/backend";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { Drawer } from "@/shared/ui/drawer";
 import { useTranslation } from "@/shared/i18n";
-import { site } from "@/data/config";
 import { cn } from "@/shared/lib/utils";
 import { useHideOnScroll } from "@/shared/lib/useHideOnScroll";
 import { ThemeSegmentedToggle } from "./ThemeSegmentedToggle";
@@ -44,7 +44,11 @@ function useUrlHash(): string {
     return hash;
 }
 
-export function Nav() {
+export interface NavProps {
+    config: ConfigContent;
+}
+
+export function Nav({ config: site }: NavProps) {
     const { ln } = useTranslation();
     const pathname = usePathname();
     const hash = useUrlHash();

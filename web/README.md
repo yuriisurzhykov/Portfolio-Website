@@ -580,6 +580,57 @@ create/update/delete с реальной тестовой БД), полный `n
 Markdown и обратно как `<strong>` на странице, и что редактирование
 английской версии не портит уже сохранённый русский перевод.
 
+### 2026-07-19 — Фаза 5: `SiteContent` (hero/contact/principles/techStack/config/journalPage/workPage)
+
+**Что нужно сделать.** Перенести 7 статических секций (`web/src/data/*.ts`)
+в базу, с одной простой формой на секцию за `/admin/settings/[key]`, и
+перевести соответствующие Server/Client-компоненты на чтение из БД — план
+явно называет эту фазу "низкозатратной", потому что схема (Фаза 3) была
+спроектирована так, чтобы не требовать изменений.
+
+**Как сделано, по слоям (детали — в README каждого слайса):**
+
+- **`backend/src/content/site-content.ts`(`-defaults.ts`)** — новый
+  generic key→JSON модуль, полный разбор (включая generic-indexed-access
+  находку) в `backend/src/content/README.md`.
+- **`app/api/admin/settings/[key]/route.ts`** — тот же `toErrorResponse()`,
+  что и `/api/admin/posts`/`/api/admin/work`; без `DELETE` (секция — не
+  создаваемая/удаляемая сущность, см. файл).
+- **`shared/lib/admin-api.ts`** — один новый метод
+  `updateSiteContent(key, data)`; нет `getSiteContent` на клиенте — как и
+  `WorkEditorPage`, форма грузит начальные данные через Server Component,
+  не round-trip через браузер.
+- **`views/admin-settings-editor`** — новый слайс, 7 маленьких форм +
+  диспетчер + общий хук `useSiteContentForm`; свой README ниже.
+- **`widgets/admin-nav`** — один новый пункт ("Settings").
+- **Публичная сторона**: `views/landing/sections/{Hero,ContactCta,
+  Principles,TechStack}`, `views/journal-list`, `views/work-list`,
+  `widgets/nav`, `widgets/footer` перешли со статического импорта
+  `@/data/*` на пропсы, приходящие из Server Component (`app/(site)/page.tsx`,
+  `.../journal/page.tsx`, `.../work/page.tsx`, `app/(site)/layout.tsx`) —
+  `web/src/data/` целиком удалена. `app/(site)/layout.tsx` — единственное
+  место, где `config` читается через `getSiteConfigSafe()` (не
+  `getSiteContent("config")` напрямую): layout оборачивает КАЖДУЮ
+  страницу под `(site)`, так что здесь чтение из БД никогда не должно
+  бросать исключение — иначе страница, у которой на своём уровне уже
+  корректно настроен `<ServiceUnavailable/>` (Фаза 3), получила бы вместо
+  него общий `error.tsx` на уровень выше. Корневой `app/layout.tsx`
+  (метаданные `<title>`) НЕ читает БД вообще — берёт
+  `SITE_CONTENT_DEFAULTS.config.name` (тот же backend-модуль, что
+  используется для сида/фолбэка) статически, потому что этот layout
+  оборачивает и `/admin`, и `/storybook`, которым лишняя зависимость от БД
+  не нужна.
+
+**Проверено:** полный `npm test` в `backend/` (128 тестов, включая новый
+`site-content.test.ts`) и `web/` (44 теста), `tsc --noEmit` в обоих
+пакетах, и вручную через `curl` на реальном `npm run dev`: логин
+тестовым admin-пользователем → `GET /api/admin/settings/contact` →
+`PUT` с новым значением → главная страница (`/`, уже `force-dynamic` с
+Фазы 3) немедленно отдаёт новый текст без пересборки → значение возвращено
+к исходному, тестовый пользователь удалён. `/`, `/journal`, `/work`
+проверены на реальный HTML-вывод (hero/tech-stack/principles/contact/
+journalPage/workPage — все из базы, не из удалённых `data/*.ts`).
+
 ## Структура (целевая, будет заполняться по мере миграции)
 
 ```

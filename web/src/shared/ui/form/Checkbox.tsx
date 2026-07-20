@@ -4,6 +4,8 @@ import { cn } from "@/shared/lib/utils";
 
 export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> {
     label: string;
+    /** Same idea as `Field`'s hint — a checkbox whose EFFECT isn't obvious from its label alone (e.g. "Has a case study": what does turning it on actually change?) needs somewhere to say so, right under the label, not just in a tooltip nobody hovers. */
+    hint?: string;
 }
 
 /**
@@ -13,10 +15,10 @@ export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputE
  * all work for free.
  */
 export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-    function Checkbox({ label, className, checked, ...rest }, ref) {
+    function Checkbox({ label, hint, className, checked, ...rest }, ref) {
         return (
-            <label className={cn("inline-flex items-center gap-sm cursor-pointer select-none", className)}>
-                <span className="relative inline-flex shrink-0">
+            <label className={cn("inline-flex items-start gap-sm cursor-pointer select-none", className)}>
+                <span className="relative inline-flex shrink-0 mt-[1px]">
                     <input ref={ref} type="checkbox" checked={checked} className="peer sr-only" {...rest} />
                     <span
                         className={cn(
@@ -29,7 +31,10 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
                         {checked && <Check className="w-3.5 h-3.5 text-accent-on-solid" aria-hidden="true" />}
                     </span>
                 </span>
-                <span className="text-body text-text-primary">{label}</span>
+                <span className="flex flex-col gap-[2px]">
+                    <span className="text-body text-text-primary">{label}</span>
+                    {hint && <span className="text-micro normal-case tracking-normal text-text-faint">{hint}</span>}
+                </span>
             </label>
         );
     },

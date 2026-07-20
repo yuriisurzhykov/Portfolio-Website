@@ -9,8 +9,7 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { LinkButton } from "@/shared/ui/button";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
 import { useTranslation } from "@/shared/i18n";
-
-const monthYearFormatter = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
+import { formatMonthYear } from "@/shared/lib/date-format";
 
 export interface JournalDetailPageProps {
     post: PostDetail;
@@ -41,7 +40,7 @@ export function JournalDetailPage({ post, relatedWork }: JournalDetailPageProps)
                 <div className="flex gap-sm items-center mt-7 mb-[18px] flex-wrap">
                     <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge>
                     <Text variant="caption" tone="faint" className="font-mono">
-                        { monthYearFormatter.format(new Date(post.date)) } · { ln("journal.readMins", { count: post.readMins }) }
+                        { formatMonthYear(post.date) } · { ln("journal.readMins", { count: post.readMins }) }
                     </Text>
                 </div>
 

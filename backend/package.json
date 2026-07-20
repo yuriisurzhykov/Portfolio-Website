@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev && prisma generate",
     "create-admin": "tsx scripts/create-admin.ts",
+    "seed-site-content": "tsx scripts/seed-site-content.ts",
     "test": "npm run test:migrate && vitest run",
     "test:watch": "vitest",
     "test:migrate": "dotenv -e .env.test -- prisma migrate deploy"

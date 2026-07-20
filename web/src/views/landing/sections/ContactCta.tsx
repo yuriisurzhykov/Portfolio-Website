@@ -1,13 +1,18 @@
 "use client";
 
 import * as React from "react";
+import type { ContactContent } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { LinkButton } from "@/shared/ui/button";
 import { useTranslation } from "@/shared/i18n";
-import { site } from "@/data/config";
-import { contact } from "@/data/contact";
 
-export function ContactCta() {
+export interface ContactCtaProps {
+    contact: ContactContent;
+    /** Just `config.email`, not the whole `ConfigContent` — same Interface Segregation reasoning as `Hero`'s `role` prop. */
+    email: string;
+}
+
+export function ContactCta({ contact, email }: ContactCtaProps) {
     const { ln, pick } = useTranslation();
 
     return (
@@ -30,7 +35,7 @@ export function ContactCta() {
                 <Text variant="body" tone="muted" className="relative mb-[28px] max-w-[60ch] mx-auto">
                     {pick(contact.description)}
                 </Text>
-                <LinkButton href={`mailto:${site.email}`} variant="primary" size="lg" className="relative">
+                <LinkButton href={`mailto:${email}`} variant="primary" size="lg" className="relative">
                     {ln("button.getInTouch")}
                 </LinkButton>
             </div>

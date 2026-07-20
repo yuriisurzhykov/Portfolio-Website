@@ -2,23 +2,17 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { PostSummary } from "@portfolio/backend";
+import type { JournalPageContent, PostSummary } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
-import { journalPage } from "@/data/journalPage";
 import { cn } from "@/shared/lib/utils";
+import { formatMonthYear } from "@/shared/lib/date-format";
 
 export interface JournalListPageProps {
     entries: PostSummary[];
-}
-
-function formatDate(post: PostSummary, ln: (key: string, vars?: Record<string, string | number>) => string) {
-    if (post.status === "upcoming") {
-        return ln("status.upcoming", { date: post.dateLabel ?? post.date });
-    }
-    return post.date;
+    journalPage: JournalPageContent;
 }
 
 function LogEntry({ post }: { post: PostSummary }) {
@@ -35,7 +29,7 @@ function LogEntry({ post }: { post: PostSummary }) {
             />
             <div className="flex gap-sm items-baseline mb-2 flex-wrap">
                 <Text variant="caption" tone="faint" className="font-mono">
-                    { formatDate(post, ln) }
+                    { isPublished ? formatMonthYear(post.date) : ln("status.upcoming", { date: formatMonthYear(post.date) }) }
                 </Text>
                 { isPublished && <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge> }
                 { isPublished && (
@@ -74,7 +68,7 @@ function LogEntry({ post }: { post: PostSummary }) {
     );
 }
 
-export function JournalListPage({ entries }: JournalListPageProps) {
+export function JournalListPage({ entries, journalPage }: JournalListPageProps) {
     const { ln, pick } = useTranslation();
 
     return (

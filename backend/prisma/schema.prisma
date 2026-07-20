@@ -1,5 +1,5 @@
 // Prisma schema — Phase 2 (auth: User + Session) + Phase 3 (content:
-// Document/Block/Post/Work). SiteContent lands in Phase 5.
+// Document/Block/Post/Work) + Phase 5 (SiteContent).
 // See backend/README.md and the migration plan for the full model design.
 
 generator client {
@@ -100,8 +100,11 @@ model Block {
 model Post {
   id               String    @id @default(cuid())
   slug             String    @unique
+  /// Set once, automatically, at creation (`createPost`) — never a form
+  /// field. `dateLabel` (a free-text override for imprecise/upcoming
+  /// dates) has been REMOVED — see backend/src/content/README.md's dated
+  /// entry — the admin editor no longer exposes any date field at all.
   date             String
-  dateLabel        String?
   title            Json
   category         Json
   readMins         Int
@@ -152,4 +155,24 @@ model Work {
   caseStudyRu           Document? @relation("WorkCaseStudyRu", fields: [caseStudyDocumentIdRu], references: [id])
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+}
+
+/// A generic key→JSON settings bag for the handful of small, singleton
+/// content sections that don't need their own table — `hero`, `contact`,
+/// `principles`, `techStack`, `config`, `journalPage`, `workPage` (see the
+/// migration plan's Phase 5). One row per section; `key` IS the row's
+/// identity (no separate `id` column — there's no scenario where two rows
+/// share a `key`, so a surrogate id would only add an unused column).
+/// `data`'s shape is validated at the application layer per-key
+/// (`backend/src/content/site-content.ts`'s Zod schemas), the same
+/// "untyped Json column, typed application boundary" split `Block.text`/
+/// `Block.data` already use above — a 7-arm union of very different
+/// shapes (an array for `principles`, a nested object for `config`, ...)
+/// has no single reasonable typed-column representation anyway, so this
+/// isn't giving up type safety that a differently-shaped schema could
+/// have kept.
+model SiteContent {
+  key       String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
 }

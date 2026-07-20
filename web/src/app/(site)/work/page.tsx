@@ -1,4 +1,4 @@
-import { getAllWork } from "@portfolio/backend";
+import { getAllWork, getSiteContent } from "@portfolio/backend";
 import { WorkListPage } from "@/views/work-list";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
     return renderOrServiceUnavailable(
-        () => getAllWork(),
-        (items) => <WorkListPage items={items} />,
+        () => Promise.all([getAllWork(), getSiteContent("workPage")]),
+        ([items, workPage]) => <WorkListPage items={items} workPage={workPage} />,
     );
 }

@@ -6,19 +6,23 @@ import type { AdminPostDetail, PostInput, PostStatus } from "@portfolio/backend"
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
-import { Field, Input, Select, Textarea } from "@/shared/ui/form";
+import { Field, Input, Textarea } from "@/shared/ui/form";
+import { Tag } from "@/shared/ui/tag";
+import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
+import { slugify } from "@/shared/lib/slugify";
+import { formatAdminDate, todayIsoDate } from "@/shared/lib/date-format";
 
 export interface PostEditorPageProps {
     /** Absent for "create new"; present (already-saved) for "edit". */
     initialPost?: AdminPostDetail;
+    /** Every distinct English category already in use, for `CategoryPicker`'s chips — see `getDistinctPostCategories` (backend). */
+    existingCategories: string[];
 }
 
 interface FormState {
     slug: string;
-    date: string;
-    dateLabel: string;
     title: string;
     category: string;
     readMins: string;
@@ -26,6 +30,11 @@ interface FormState {
     status: PostStatus;
     relatedWorkSlug: string;
 }
+
+const STATUS_OPTIONS: StatusToggleOption<PostStatus>[] = [
+    { value: "published", label: "Published", tone: "success" },
+    { value: "upcoming", label: "Upcoming", tone: "warning" },
+];
 
 /**
  * English-only form — see the migration plan's "перевод — отдельная
@@ -39,8 +48,6 @@ interface FormState {
 function toFormState(post?: AdminPostDetail): FormState {
     return {
         slug: post?.slug ?? "",
-        date: post?.date ?? "",
-        dateLabel: post?.dateLabel ?? "",
         title: post?.title.en ?? "",
         category: post?.category.en ?? "",
         readMins: post ? String(post.readMins) : "",
@@ -50,11 +57,18 @@ function toFormState(post?: AdminPostDetail): FormState {
     };
 }
 
-export function PostEditorPage({ initialPost }: PostEditorPageProps) {
+export function PostEditorPage({ initialPost, existingCategories }: PostEditorPageProps) {
     const router = useRouter();
     const isEditing = Boolean(initialPost);
 
     const [form, setForm] = React.useState<FormState>(() => toFormState(initialPost));
+    // Only a NEW post's slug follows the title — an existing post already
+    // has a real, possibly-linked-to URL; retitling it must never silently
+    // change that. `useState(isEditing)`: for an existing post this starts
+    // (and stays) "touched" from the very first render, for a new one it
+    // starts "untouched" so the very first keystroke in Title already
+    // fills Slug, without the admin having typed a slug themselves first.
+    const [slugTouched, setSlugTouched] = React.useState(isEditing);
     const blockEditorRef = React.useRef<BlockEditorHandle>(null);
     const [error, setError] = React.useState<string | null>(null);
     const [submitting, setSubmitting] = React.useState(false);
@@ -64,14 +78,25 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
         setForm((prev) => ({ ...prev, [key]: value }));
     }
 
+    function updateTitle(title: string) {
+        setForm((prev) => ({
+            ...prev,
+            title,
+            slug: slugTouched ? prev.slug : slugify(title),
+        }));
+    }
+
+    function updateSlugManually(slug: string) {
+        setSlugTouched(true);
+        update("slug", slug);
+    }
+
     async function handleSubmit(event: React.FormEvent) {
         event.preventDefault();
         setError(null);
 
         const input: PostInput = {
             slug: form.slug.trim(),
-            date: form.date.trim(),
-            dateLabel: form.dateLabel.trim() || null,
             title: form.title.trim(),
             category: form.category.trim(),
             readMins: Number(form.readMins) || 0,
@@ -113,8 +138,18 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col gap-lg pb-4xl">
-            <div className="flex items-center justify-between">
-                <Text as="h1" variant="h3">{isEditing ? `Edit post: ${ initialPost?.slug }` : "New post"}</Text>
+            <div className="flex items-start justify-between gap-md flex-wrap">
+                <div className="flex flex-col gap-sm">
+                    <Text as="h1" variant="h3">{isEditing ? `Edit post: ${ initialPost?.slug }` : "New post"}</Text>
+                    <div className="flex items-center gap-sm flex-wrap">
+                        <StatusToggle value={form.status} onChange={(status) => update("status", status)} options={STATUS_OPTIONS} />
+                        <Text variant="caption" tone="faint" className="font-mono">
+                            {isEditing
+                                ? `Created ${ formatAdminDate(initialPost!.date) }`
+                                : `Will be dated ${ formatAdminDate(todayIsoDate()) } — set automatically on save`}
+                        </Text>
+                    </div>
+                </div>
                 <div className="flex items-center gap-sm">
                     {isEditing && (
                         <Button type="button" variant="secondary" size="sm" onClick={() => router.push(`/admin/journal/${ initialPost?.slug }/translate`)}>
@@ -130,23 +165,15 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
             </div>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
+                <Field label="Title" htmlFor="title">
+                    <Input id="title" required value={form.title} onChange={(e) => updateTitle(e.target.value)} />
+                </Field>
+                <Field label="Slug" htmlFor="slug" hint="Auto-generated from the title — edit if you want a different URL.">
+                    <Input id="slug" required value={form.slug} onChange={(e) => updateSlugManually(e.target.value)} />
+                </Field>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                    <Field label="Slug" htmlFor="slug" hint="URL segment — lowercase, hyphen-separated.">
-                        <Input id="slug" required value={form.slug} onChange={(e) => update("slug", e.target.value)} />
-                    </Field>
-                    <Field label="Status" htmlFor="status">
-                        <Select id="status" value={form.status} onChange={(e) => update("status", e.target.value as PostStatus)}>
-                            <option value="published">Published</option>
-                            <option value="upcoming">Upcoming</option>
-                        </Select>
-                    </Field>
-                    <Field label="Date" htmlFor="date" hint="ISO format, e.g. 2026-07-19.">
-                        <Input id="date" required value={form.date} onChange={(e) => update("date", e.target.value)} />
-                    </Field>
-                    <Field label="Date label" htmlFor="dateLabel" hint={"Optional override shown for upcoming posts, e.g. \"This spring\"."}>
-                        <Input id="dateLabel" value={form.dateLabel} onChange={(e) => update("dateLabel", e.target.value)} />
-                    </Field>
-                    <Field label="Read minutes" htmlFor="readMins">
+                    <Field label="Read minutes" htmlFor="readMins" hint={"Shown as \"X min read\" on the published post."}>
                         <Input id="readMins" type="number" min={0} required value={form.readMins} onChange={(e) => update("readMins", e.target.value)} />
                     </Field>
                     <Field label="Related work slug" htmlFor="relatedWorkSlug" hint="Optional — links this post to a work item.">
@@ -154,13 +181,17 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
                     </Field>
                 </div>
 
-                <Field label="Title" htmlFor="title">
-                    <Input id="title" required value={form.title} onChange={(e) => update("title", e.target.value)} />
-                </Field>
-                <Field label="Category" htmlFor="category">
-                    <Input id="category" required value={form.category} onChange={(e) => update("category", e.target.value)} />
-                </Field>
-                <Field label="Excerpt" htmlFor="excerpt">
+                <CategoryPicker
+                    value={form.category}
+                    onChange={(category) => update("category", category)}
+                    existingCategories={existingCategories}
+                />
+
+                <Field
+                    label="Excerpt"
+                    htmlFor="excerpt"
+                    hint="Short teaser shown on the /journal list page, under the title — not shown on the post itself."
+                >
                     <Textarea id="excerpt" required rows={2} value={form.excerpt} onChange={(e) => update("excerpt", e.target.value)} />
                 </Field>
             </Card>
@@ -179,5 +210,46 @@ export function PostEditorPage({ initialPost }: PostEditorPageProps) {
                 <Button type="button" variant="secondary" onClick={() => router.push("/admin/journal")}>Cancel</Button>
             </div>
         </form>
+    );
+}
+
+/**
+ * Chips for every category already used elsewhere (click to fill the
+ * field below with it) plus a plain text input for a brand new one — NOT
+ * a multi-select tag input: a post has exactly one category, same as
+ * before, this only changes HOW that one value gets picked. The input is
+ * the actual source of truth (`value`/`onChange` go straight to
+ * `form.category`); the chips are just a shortcut that fills it, so
+ * typing a category that isn't in the list yet always works too.
+ */
+function CategoryPicker({
+    value,
+    onChange,
+    existingCategories,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    existingCategories: string[];
+}) {
+    return (
+        <div className="flex flex-col gap-xs">
+            <span className="text-caption font-medium text-text-secondary">Category</span>
+            {existingCategories.length > 0 && (
+                <div className="flex flex-wrap gap-xs">
+                    {existingCategories.map((category) => (
+                        <button key={category} type="button" onClick={() => onChange(category)}>
+                            <Tag variant={value === category ? "accent" : "neutral"}>{category}</Tag>
+                        </button>
+                    ))}
+                </div>
+            )}
+            <Input
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder="Or type a new category"
+                required
+                aria-label="Category"
+            />
+        </div>
     );
 }

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import type { ConfigContent } from "@portfolio/backend";
 import { Nav } from "@/widgets/nav";
 import { Footer } from "@/widgets/footer";
 import { BackToTop } from "@/shared/ui/back-to-top";
@@ -34,16 +35,21 @@ function useScrollToLocation() {
     }, [pathname]);
 }
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export interface AppLayoutProps {
+    children: React.ReactNode;
+    config: ConfigContent;
+}
+
+export function AppLayout({ children, config }: AppLayoutProps) {
     useScrollToLocation();
 
     return (
         <div className="min-h-screen bg-bg-app text-text-primary flex flex-col">
-            <Nav />
+            <Nav config={config} />
             <div className="flex-1">
                 {children}
             </div>
-            <Footer />
+            <Footer config={config} />
             <BackToTop />
         </div>
     );

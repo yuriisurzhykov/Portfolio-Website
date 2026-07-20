@@ -1,4 +1,4 @@
-import { getJournalEntries } from "@portfolio/backend";
+import { getJournalEntries, getSiteContent } from "@portfolio/backend";
 import { JournalListPage } from "@/views/journal-list";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
     return renderOrServiceUnavailable(
-        () => getJournalEntries(),
-        (entries) => <JournalListPage entries={entries} />,
+        () => Promise.all([getJournalEntries(), getSiteContent("journalPage")]),
+        ([entries, journalPage]) => <JournalListPage entries={entries} journalPage={journalPage} />,
     );
 }

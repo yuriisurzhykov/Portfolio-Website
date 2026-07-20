@@ -1,4 +1,4 @@
-import { getFeaturedWork, getLatestPublishedPost } from "@portfolio/backend";
+import { getFeaturedWork, getLatestPublishedPost, getSiteContent } from "@portfolio/backend";
 import { LandingPage } from "@/views/landing";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 
@@ -19,7 +19,26 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
     return renderOrServiceUnavailable(
-        () => Promise.all([getFeaturedWork(), getLatestPublishedPost()]),
-        ([featuredWork, latestPost]) => <LandingPage featuredWork={featuredWork} latestPost={latestPost} />,
+        () =>
+            Promise.all([
+                getFeaturedWork(),
+                getLatestPublishedPost(),
+                getSiteContent("hero"),
+                getSiteContent("contact"),
+                getSiteContent("principles"),
+                getSiteContent("techStack"),
+                getSiteContent("config"),
+            ]),
+        ([featuredWork, latestPost, hero, contact, principles, techStack, config]) => (
+            <LandingPage
+                featuredWork={featuredWork}
+                latestPost={latestPost}
+                hero={hero}
+                contact={contact}
+                principles={principles}
+                techStack={techStack}
+                config={config}
+            />
+        ),
     );
 }

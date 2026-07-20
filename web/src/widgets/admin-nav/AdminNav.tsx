@@ -11,6 +11,7 @@ import { adminApi } from "@/shared/lib/admin-api";
 const links = [
     { href: "/admin/journal", label: "Journal" },
     { href: "/admin/work", label: "Work" },
+    { href: "/admin/settings", label: "Settings" },
 ];
 
 function navLinkClass(isActive: boolean) {

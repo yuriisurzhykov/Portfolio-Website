@@ -1,16 +1,21 @@
 "use client";
 
 import * as React from "react";
+import type { HeroContent, LocalizedText } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Tag } from "@/shared/ui/tag";
 import { LinkButton } from "@/shared/ui/button";
 import { useTranslation } from "@/shared/i18n";
-import { site } from "@/data/config";
-import { hero } from "@/data/hero";
 import { cn } from "@/shared/lib/utils";
 
-export function Hero() {
+export interface HeroProps {
+    hero: HeroContent;
+    /** Just `config.role`, not the whole `ConfigContent` — this is the only piece of site config the hero section actually renders (Interface Segregation over threading the full object down for one field). */
+    role: LocalizedText;
+}
+
+export function Hero({ hero, role }: HeroProps) {
     const { ln, pick } = useTranslation();
 
     return (
@@ -35,7 +40,7 @@ export function Hero() {
             <div className="relative grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-[48px] items-center">
                 <div>
                     <Eyebrow tone="accent" className="mb-[18px]">
-                        {pick(site.role)}
+                        {pick(role)}
                     </Eyebrow>
 
                     <h1 className="m-0 mb-[22px] font-extrabold text-[clamp(40px,5.5vw,64px)] leading-[1.02] tracking-tight text-text-primary">

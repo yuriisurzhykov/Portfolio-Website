@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
-import { getJournalEntries, getLatestPublishedPost, getPostBySlug } from "./posts";
+import { getDistinctPostCategories, getJournalEntries, getLatestPublishedPost, getPostBySlug } from "./posts";
 
 async function makeDocument(blocks: { type: string; text?: string; data?: object }[]) {
     const document = await prisma.document.create({ data: {} });
@@ -118,5 +118,34 @@ describe("getPostBySlug", () => {
 
         const ru = await getPostBySlug("untranslated", "ru");
         expect(ru?.body[0]).toMatchObject({ text: "English only" });
+    });
+});
+
+describe("getDistinctPostCategories", () => {
+    it("returns every distinct English category, alphabetically, with no duplicates", async () => {
+        await prisma.post.create({
+            data: {
+                slug: "a", date: "2026-01-01", title: { en: "a", ru: "" }, category: { en: "Process", ru: "" },
+                readMins: 1, excerpt: { en: "a", ru: "" }, status: "published",
+            },
+        });
+        await prisma.post.create({
+            data: {
+                slug: "b", date: "2026-01-02", title: { en: "b", ru: "" }, category: { en: "Architecture", ru: "" },
+                readMins: 1, excerpt: { en: "b", ru: "" }, status: "published",
+            },
+        });
+        await prisma.post.create({
+            data: {
+                slug: "c", date: "2026-01-03", title: { en: "c", ru: "" }, category: { en: "Process", ru: "" },
+                readMins: 1, excerpt: { en: "c", ru: "" }, status: "published",
+            },
+        });
+
+        expect(await getDistinctPostCategories()).toEqual(["Architecture", "Process"]);
+    });
+
+    it("returns [] when there are no posts at all", async () => {
+        expect(await getDistinctPostCategories()).toEqual([]);
     });
 });

@@ -8,8 +8,8 @@ export type PostStatus = "published" | "upcoming";
 
 export interface PostSummary {
     slug: string;
+    /** Set once, automatically, when the post is created (`createPost`) — never editable through the admin UI. See content/README.md's dated entry on why `dateLabel` (a free-text override) was removed rather than kept alongside this. */
     date: string;
-    dateLabel: string | null;
     title: LocalizedText;
     category: LocalizedText;
     readMins: number;
@@ -27,7 +27,6 @@ export interface PostDetail extends PostSummary {
 export function toPostSummary(row: {
     slug: string;
     date: string;
-    dateLabel: string | null;
     title: unknown;
     category: unknown;
     readMins: number;
@@ -38,7 +37,6 @@ export function toPostSummary(row: {
     return {
         slug: row.slug,
         date: row.date,
-        dateLabel: row.dateLabel,
         title: localizedTextSchema.parse(row.title),
         category: localizedTextSchema.parse(row.category),
         readMins: row.readMins,
@@ -59,6 +57,29 @@ export function toPostSummary(row: {
 export async function getJournalEntries(): Promise<PostSummary[]> {
     const rows = await prisma.post.findMany({ orderBy: { date: "desc" } });
     return rows.map(toPostSummary);
+}
+
+/**
+ * Every distinct English `category` already in use, alphabetically —
+ * what the admin post editor renders as clickable chips (see
+ * `PostEditorPage`'s `CategoryPicker`) so writing a new post means
+ * picking from what already exists instead of guessing whether "Process"
+ * or "process" or "Workflow" is the category five other posts already
+ * used. A plain `findMany` + dedupe in JS, not a SQL-level `DISTINCT`:
+ * `category` is a `Json` column (`{en, ru}`), and distinct-on-a-JSON-path
+ * needs a raw query for what a personal blog's post count (tens, not
+ * millions of rows) doesn't come close to needing.
+ */
+export async function getDistinctPostCategories(): Promise<string[]> {
+    const rows = await prisma.post.findMany({ select: { category: true } });
+    const categories = new Set<string>();
+    for (const row of rows) {
+        const category = localizedTextSchema.parse(row.category).en.trim();
+        if (category) {
+            categories.add(category);
+        }
+    }
+    return [...categories].sort((a, b) => a.localeCompare(b));
 }
 
 /** The single most recent PUBLISHED post — landing page's "From the Journal" preview never shows an upcoming stub. */

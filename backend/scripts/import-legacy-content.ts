@@ -301,7 +301,6 @@ const testingCultureBody: BlockInput[] = [
 interface JournalSeed {
     slug: string;
     date: string;
-    dateLabel?: string;
     title: Localized;
     category: Localized;
     readMins: number;
@@ -382,7 +381,6 @@ const journalSeeds: JournalSeed[] = [
     {
         slug: "onvif-camera-notes",
         date: "2026-04-01",
-        dateLabel: "2026-04",
         title: {
             en: "Notes from the ONVIF Camera Library — draft",
             ru: "Заметки о библиотеке ONVIF-камер — черновик",
@@ -941,7 +939,6 @@ async function importJournal() {
             data: {
                 slug: seed.slug,
                 date: seed.date,
-                dateLabel: seed.dateLabel,
                 title: seed.title,
                 category: seed.category,
                 readMins: seed.readMins,
