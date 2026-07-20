@@ -44,3 +44,36 @@ time you need it (disaster recovery, new server). See the repo's
   is a security invariant, not a nice-to-have, so the script exits non-zero
   (refuses to continue) rather than warning-and-proceeding if either check
   fails.
+- `02-postgres-db.sh` — creates the dedicated `portfolio` role + database
+  (not a superuser, no `CREATEDB`/`CREATEROLE`) that the app connects as.
+  Reads the new role's password from `PORTFOLIO_DB_PASSWORD` (generate with
+  `openssl rand -hex 32` — hex, not base64, so it never needs URL-encoding
+  inside a `postgresql://` connection string) rather than hardcoding a
+  secret in a committed file. Never resets an existing role's password on
+  re-run.
+- `03-nodejs-install.sh` — installs Node.js 20 LTS via NodeSource, matching
+  the `node-version: 20` used by
+  `.github/workflows/backend-web-checks.yml`. Ubuntu's default apt repo
+  version (18.x) is deliberately not used — same "match CI/dev exactly"
+  reasoning as the Postgres major-version pin above.
+- `04-app-user.sh` — creates the `nextapp` system account (no shell, no
+  home, not in `sudo`) that the systemd service runs as — kept separate
+  from the SSH/deploy account (`yuriisoft`, which has `sudo`) so that a
+  compromised app process can't reach root via `sudo`.
+- `05-app-dirs.sh` — creates `/srv/apps/yuriisoft-web/{releases,shared}`,
+  parallel to the existing `/srv/apps/yuriisoft` (frontend static site,
+  untouched until cutover). `shared/` (mode 700, owned by `nextapp`) is
+  where the persistent `.env` lives across every future release — see
+  `06-app-env.sh`.
+- `06-app-env.sh` — writes `shared/.env` (`DATABASE_URL`,
+  `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`) from env vars passed at run
+  time, owned by `nextapp`, mode 600 (unreadable to the deploy account
+  itself). Refuses to overwrite an existing file — resetting these values
+  by accident invalidates every live session or breaks the DB connection
+  silently.
+- `07-swap.sh` — adds a 2 GiB swapfile. The VPS has 1.8 GiB RAM and shipped
+  with zero swap — without it, a brief memory spike (npm installing native
+  deps, a build, a traffic burst) gets hard-killed by the OOM killer
+  instead of just running slower. Not in the plan's Phase 6 bullet list
+  verbatim, but squarely "VPS hardening" and cheap (disk is not scarce
+  here).

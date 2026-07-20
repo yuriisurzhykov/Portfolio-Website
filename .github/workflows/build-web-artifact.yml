@@ -1,0 +1,77 @@
+name: Build web/ deploy artifact (manual)
+
+# Manual-only (workflow_dispatch) builder for web/ + backend/, producing a
+# downloadable production artifact — deliberately NOT wired to any deploy
+# step yet. This exists to get a real Linux-built artifact onto the VPS for
+# manual, hands-on verification (systemd unit, nginx proxy, migrations)
+# during Phase 6, without touching deploy_release.yaml (which keeps
+# deploying frontend/ unchanged) or risking an automated push to the
+# production VPS before the pipeline has been proven manually end-to-end.
+# See .cursor/plans/database-backed_cms_migration_59a172e7.plan.md, Phase 6.
+#
+# Why the build can't just happen on the VPS: verified live against the
+# real box (Ubuntu 24.04, 1.8 GiB RAM, 2 vCPU) — a plain `npm ci` alone
+# already pushed memory to ~100% and over 1 GiB into swap, before even
+# starting `next build`. Building only ever happens here, in CI.
+
+on:
+  workflow_dispatch: {}
+  # workflow_dispatch's "Run workflow" button only appears in the GitHub UI
+  # once a workflow file exists on the repo's default branch — this repo is
+  # mid-Phase-6 work on a feature branch, not master yet. Scoped `push`
+  # trigger (this branch only, not a wildcard) sidesteps that, so a normal
+  # `git push` is enough to run it during this phase.
+  # Runs on every push to this branch for the rest of Phase 6 (cheap on a
+  # personal repo's free CI minutes) — delete this workflow file once the
+  # real deploy pipeline (.scripts/deploy.sh + deploy_release.yaml) takes
+  # over the build step instead.
+  push:
+    branches: [feature/postgres-and-auth-foundation]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      # Full install (including devDependencies) — the Prisma CLI needed
+      # for `prisma migrate deploy` on the VPS is a devDependency on
+      # purpose (see backend/README.md's dependency-hygiene note), so this
+      # artifact intentionally carries it rather than using `--omit=dev`.
+      - name: Install workspace dependencies (web/ + backend/)
+        run: npm ci
+
+      - name: Build web (Next.js)
+        working-directory: web
+        run: npm run build
+
+      # web/.next/cache is Next.js's own incremental-build cache — large,
+      # rebuilt fresh by CI every time, never read at runtime by `next
+      # start`. Excluded to keep the artifact smaller.
+      - name: Package artifact
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='frontend' \
+            --exclude='web/.next/cache' \
+            -czf release.tar.gz \
+            package.json package-lock.json node_modules backend web
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: release.tar.gz
+          retention-days: 7
