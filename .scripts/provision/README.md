@@ -105,6 +105,17 @@ time you need it (disaster recovery, new server). See the repo's
   Certbot cert for `DOMAIN`. Never runs `nginx -t`/reload itself —
   verifying and reloading stays an explicit, separate step every time.
 
+- `11-pg-backup.sh` — nightly `pg_dump` (via `/root/.pgpass`, no password
+  on the command line) → gzip → 14-day local rotation →
+  `rclone sync` to Google Drive, wired into `/etc/cron.d/pg-backup` (3am
+  daily). Requires `rclone config` to have been run once already (see the
+  script's own header) — that step is interactive/one-time and
+  deliberately not automated. **Known follow-up**: currently uses
+  rclone's shared Google Drive `client_id`, which rclone's own CLI warns
+  is being retired during 2026 — deferred to get production live first;
+  replace with a self-created OAuth client_id
+  (https://rclone.org/drive/#making-your-own-client-id) before then.
+
 ## Dev/staging rehearsal environment
 
 Before ever running a migration or a first `next start` against the real
