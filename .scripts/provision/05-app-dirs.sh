@@ -1,24 +1,31 @@
 #!/usr/bin/env bash
-# Creates the directory layout for the new Next.js app, parallel to the
-# existing /srv/apps/yuriisoft (frontend/ static site) — that directory is
-# untouched, the site keeps serving from there until the Phase 6 cutover
-# step.
+# Creates the directory layout for a Next.js app deployment target,
+# parallel to the existing /srv/apps/yuriisoft (frontend/ static site) —
+# that directory is untouched, the site keeps serving from there until the
+# Phase 6 cutover step.
 #
-#   /srv/apps/yuriisoft-web/releases/  — one new timestamped folder per
-#     deploy (owned by the deploy user, "yuriisoft" — same account that
-#     already unpacks frontend releases today).
-#   /srv/apps/yuriisoft-web/shared/    — the ONE thing that survives every
-#     release: backend/.env (DATABASE_URL, JWT secrets). Owned by
-#     "nextapp", mode 700, so it's unreadable to every other account,
-#     including the deploy user itself (deploy.sh has to use sudo to touch
-#     it — see 06-app-env.sh).
+# Parameterized via APP_BASE_DIR so the same script provisions both the
+# eventual production target (/srv/apps/yuriisoft-web, the default) and a
+# separate dev/staging rehearsal target (/srv/apps/yuriisoft-web-dev) —
+# used to prove the whole pipeline (migrations, systemd, nginx) against
+# dev.yuriisoft.me + a real-but-separate database before ever touching
+# production. See .scripts/provision/README.md.
+#
+#   ${APP_BASE_DIR}/releases/  — one new timestamped folder per deploy
+#     (owned by the deploy user, "yuriisoft" — same account that already
+#     unpacks frontend releases today).
+#   ${APP_BASE_DIR}/shared/    — the ONE thing that survives every release:
+#     backend/.env (DATABASE_URL, JWT secrets). Owned by "nextapp", mode
+#     700, so it's unreadable to every other account, including the
+#     deploy user itself (deploy.sh has to use sudo to touch it — see
+#     06-app-env.sh).
 #
 # Idempotent: `mkdir -p`/`chown`/`chmod` are naturally safe to re-run.
 #
 # Verified manually against the real VPS before being written here.
 set -euo pipefail
 
-BASE_DIR="/srv/apps/yuriisoft-web"
+BASE_DIR="${APP_BASE_DIR:-/srv/apps/yuriisoft-web}"
 DEPLOY_USER="yuriisoft"
 APP_USER="nextapp"
 

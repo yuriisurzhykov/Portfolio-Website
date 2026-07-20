@@ -60,17 +60,36 @@ time you need it (disaster recovery, new server). See the repo's
   home, not in `sudo`) that the systemd service runs as — kept separate
   from the SSH/deploy account (`yuriisoft`, which has `sudo`) so that a
   compromised app process can't reach root via `sudo`.
-- `05-app-dirs.sh` — creates `/srv/apps/yuriisoft-web/{releases,shared}`,
-  parallel to the existing `/srv/apps/yuriisoft` (frontend static site,
-  untouched until cutover). `shared/` (mode 700, owned by `nextapp`) is
-  where the persistent `.env` lives across every future release — see
-  `06-app-env.sh`.
-- `06-app-env.sh` — writes `shared/.env` (`DATABASE_URL`,
+- `05-app-dirs.sh` — creates `${APP_BASE_DIR}/{releases,shared}` (default
+  `/srv/apps/yuriisoft-web`), parallel to the existing `/srv/apps/yuriisoft`
+  (frontend static site, untouched until cutover). `shared/` (mode 700,
+  owned by `nextapp`) is where the persistent `.env` lives across every
+  future release — see `06-app-env.sh`. Parameterized via `APP_BASE_DIR` so
+  the same script also provisions a separate dev/staging rehearsal target
+  (`APP_BASE_DIR=/srv/apps/yuriisoft-web-dev`) — see "Dev/staging rehearsal
+  environment" below.
+- `06-app-env.sh` — writes `${APP_BASE_DIR}/shared/.env` (`DATABASE_URL`,
   `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`) from env vars passed at run
   time, owned by `nextapp`, mode 600 (unreadable to the deploy account
   itself). Refuses to overwrite an existing file — resetting these values
   by accident invalidates every live session or breaks the DB connection
-  silently.
+  silently. Also parameterized via `DB_NAME` (default `portfolio`) for the
+  same dev/staging reason.
+
+## Dev/staging rehearsal environment
+
+Before ever running a migration or a first `next start` against the real
+production database, the whole pipeline (migrate → systemd → nginx) is
+proven end-to-end against `dev.yuriisoft.me` first — an already-existing
+domain/vhost, with its own Let's Encrypt cert, currently serving a static
+preview build. It gets its own real (not fake/local) Postgres database
+(`portfolio_dev`, same non-superuser `portfolio` role, just a second
+database), its own `.env` (own JWT secrets — dev and prod never share
+one), its own release directory (`/srv/apps/yuriisoft-web-dev`), and its
+own Next.js process on a different port (3001, vs. 3000 for production) —
+so a broken rehearsal run can never touch real content or the live site.
+`05-app-dirs.sh`/`06-app-env.sh` take `APP_BASE_DIR`/`DB_NAME` precisely so
+this doesn't require a duplicate set of scripts.
 - `07-swap.sh` — adds a 2 GiB swapfile. The VPS has 1.8 GiB RAM and shipped
   with zero swap — without it, a brief memory spike (npm installing native
   deps, a build, a traffic burst) gets hard-killed by the OOM killer
