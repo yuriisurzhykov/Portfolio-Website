@@ -1,0 +1,4 @@
+[![Deploy web/ (Next.js)](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/deploy-web.yaml/badge.svg)](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/deploy-web.yaml)
+[![Visual & Accessibility Tests](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/visual-tests.yml/badge.svg)](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/visual-tests.yml)
+[![Backend & Web Checks](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/backend-web-checks.yml/badge.svg)](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/backend-web-checks.yml)
+[![CodeQL](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/yuriisurzhykov/Portfolio-Website/actions/workflows/github-code-scanning/codeql)
