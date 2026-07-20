@@ -35,6 +35,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # `prisma generate` (runs automatically via backend's `postinstall`
+    # script) loads backend/prisma.config.ts, which calls
+    # `env("DATABASE_URL")` and throws if that variable is unset — even
+    # though `generate` itself never actually connects to a database, only
+    # `migrate`/`db push` do. These are build-time placeholders, never used
+    # for a real connection; the real values live only in the VPS's
+    # shared/.env (see .scripts/provision/06-app-env.sh).
+    env:
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      JWT_ACCESS_SECRET: build-time-placeholder-not-for-real-use
+      JWT_REFRESH_SECRET: build-time-placeholder-not-for-real-use
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
