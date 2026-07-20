@@ -76,6 +76,12 @@ time you need it (disaster recovery, new server). See the repo's
   silently. Also parameterized via `DB_NAME` (default `portfolio`) for the
   same dev/staging reason.
 
+- `07-swap.sh` — adds a 2 GiB swapfile. The VPS has 1.8 GiB RAM and shipped
+  with zero swap — without it, a brief memory spike (npm installing native
+  deps, a build, a traffic burst) gets hard-killed by the OOM killer
+  instead of just running slower. Not in the plan's Phase 6 bullet list
+  verbatim, but squarely "VPS hardening" and cheap (disk is not scarce
+  here).
 - `08-systemd-service.sh` — installs/enables a systemd unit for one Next.js
   target (`SERVICE_NAME`/`APP_BASE_DIR`/`PORT` params). Hardening
   directives (`NoNewPrivileges`, `PrivateTmp`, `ProtectHome`,
@@ -98,9 +104,3 @@ own Next.js process on a different port (3001, vs. 3000 for production) —
 so a broken rehearsal run can never touch real content or the live site.
 `05-app-dirs.sh`/`06-app-env.sh` take `APP_BASE_DIR`/`DB_NAME` precisely so
 this doesn't require a duplicate set of scripts.
-- `07-swap.sh` — adds a 2 GiB swapfile. The VPS has 1.8 GiB RAM and shipped
-  with zero swap — without it, a brief memory spike (npm installing native
-  deps, a build, a traffic burst) gets hard-killed by the OOM killer
-  instead of just running slower. Not in the plan's Phase 6 bullet list
-  verbatim, but squarely "VPS hardening" and cheap (disk is not scarce
-  here).
