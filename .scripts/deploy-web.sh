@@ -31,27 +31,23 @@ echo "📦 Unpacking..."
 mkdir -p "$RELEASE_PATH"
 tar -xzf "$RELEASE_TAR" -C "$RELEASE_PATH"
 
-# shared/.env persists across every release (see .scripts/provision/06-app-env.sh) —
-# copied fresh into each new release rather than living inside releases/
-# itself, so a deploy never needs to know/re-enter secrets.
-echo "🔐 Wiring persistent secrets..."
-sudo cp "${BASE_DIR}/shared/.env" "${RELEASE_PATH}/backend/.env"
-sudo chown nextapp:nextapp "${RELEASE_PATH}/backend/.env"
-sudo chmod 600 "${RELEASE_PATH}/backend/.env"
+# Note: the `current` symlink switch itself happens INSIDE
+# deploy-web-finish.sh (after migrations succeed, before the restart) —
+# not here, and not standalone — because BASE_DIR itself is root-owned
+# (unlike releases/ and shared/ inside it), so switching it needs the
+# same root privilege as everything else below anyway. Keeping it in the
+# same script also means: if migrations fail, `current` never gets
+# pointed at a half-migrated release in the first place.
 
-# Runs as nextapp, not the deploy user: only nextapp can read backend/.env
-# (mode 600), and this is the same account that will run the app itself.
-echo "🗄️  Applying database migrations..."
-(cd "${RELEASE_PATH}/backend" && sudo -u nextapp npx prisma migrate deploy)
-
-echo "🔗 Switching symlink..."
-ln -sfn "$RELEASE_PATH" "${BASE_DIR}/current"
-
-echo "♻️  Restarting ${SERVICE_NAME}..."
-sudo systemctl restart "${SERVICE_NAME}"
-sleep 2
-if ! sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
-    echo "❌ ${SERVICE_NAME} failed to start after restart. Check: sudo journalctl -u ${SERVICE_NAME} -n 50"
+# Everything below needs root (wiring shared/.env into the release,
+# running migrations as nextapp, restarting the service) — delegated to
+# ONE narrow, fixed-behavior script rather than granting the deploy
+# account passwordless sudo over general-purpose tools (cp/chown/chmod/
+# npx) directly. See deploy-web-finish.sh's own header for why that
+# distinction matters.
+echo "🔐 Wiring secrets, applying migrations, restarting ${SERVICE_NAME}..."
+if ! sudo /usr/local/bin/deploy-web-finish.sh "$BASE_DIR" "$RELEASE_PATH" "$SERVICE_NAME"; then
+    echo "❌ deploy-web-finish.sh failed. Check: sudo journalctl -u ${SERVICE_NAME} -n 50"
     exit 1
 fi
 
