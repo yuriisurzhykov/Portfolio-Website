@@ -4,6 +4,7 @@ import { SlugAlreadyExistsError } from "../errors";
 import { blockInputSchema, type Block } from "./blocks";
 import { getDocumentBlocks, replaceDocumentContent } from "./document";
 import { localizedTextSchema, type LocalizedText } from "./localized-text";
+import { estimateReadMins } from "./reading-time";
 import { slugSchema } from "./slug";
 import { toPostSummary, type PostStatus, type PostSummary } from "./posts";
 
@@ -16,16 +17,17 @@ import { toPostSummary, type PostStatus, type PostSummary } from "./posts";
  * Russian side is exclusively `translatePostInputSchema`/`translatePost`'s
  * job, below.
  *
- * No `date`/`dateLabel` here at all — `date` is set once, automatically,
- * by `createPost` (never by the admin), and `dateLabel` (a free-text
- * override for imprecise/upcoming dates) has been removed outright, not
- * just hidden from this schema — see content/README.md's dated entry.
+ * No `date`/`dateLabel`/`readMins` here at all — `date` is set once,
+ * automatically, by `createPost` (never by the admin); `dateLabel` (a
+ * free-text override for imprecise/upcoming dates) has been removed
+ * outright; `readMins` is recomputed from `blocks` on every save (see
+ * `estimateReadMins`, `reading-time.ts`) — all three are things the
+ * server derives, not things a form field should ask a human to type in.
  */
 export const postInputSchema = z.object({
     slug: slugSchema,
     title: z.string().min(1),
     category: z.string().min(1),
-    readMins: z.number().int().min(0),
     excerpt: z.string().min(1),
     status: z.enum(["published", "upcoming"] satisfies PostStatus[]),
     relatedWorkSlug: z.string().nullish(),
@@ -42,7 +44,9 @@ export type PostInput = z.infer<typeof postInputSchema>;
  * all. `slug`/`date`/`readMins`/`status`/`relatedWorkSlug` aren't
  * translated, they're the same record either way, so they simply don't
  * appear here — there is no way to accidentally overwrite them from this
- * screen, not just a documented one.
+ * screen, not just a documented one. (`readMins` specifically: it's
+ * derived from the ENGLISH body only — see `createPost`/`updatePost` —
+ * a Russian translation being longer or shorter never changes it.)
  */
 export const translatePostInputSchema = z.object({
     title: z.string(),
@@ -120,7 +124,7 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
             date: new Date().toISOString().slice(0, 10),
             title: { en: input.title, ru: "" },
             category: { en: input.category, ru: "" },
-            readMins: input.readMins,
+            readMins: estimateReadMins(input.blocks),
             excerpt: { en: input.excerpt, ru: "" },
             status: input.status,
             relatedWorkSlug: input.relatedWorkSlug ?? null,
@@ -140,7 +144,9 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
  * work. The Russian body Document (`bodyDocumentIdRu`) isn't touched at
  * all here — only `translatePost` below ever writes to it. `date` isn't
  * in `data` at all — it's set once, by `createPost`, and never changes
- * again, editing included.
+ * again, editing included. `readMins`, unlike `date`, IS recomputed here
+ * every time — it tracks the body's current length, not a fixed point in
+ * time.
  */
 export async function updatePost(slug: string, input: PostInput): Promise<PostSummary | null> {
     const existing = await prisma.post.findUnique({ where: { slug } });
@@ -161,7 +167,7 @@ export async function updatePost(slug: string, input: PostInput): Promise<PostSu
             slug: input.slug,
             title: { ...existingTitle, en: input.title },
             category: { ...existingCategory, en: input.category },
-            readMins: input.readMins,
+            readMins: estimateReadMins(input.blocks),
             excerpt: { ...existingExcerpt, en: input.excerpt },
             status: input.status,
             relatedWorkSlug: input.relatedWorkSlug ?? null,

@@ -25,7 +25,6 @@ interface FormState {
     slug: string;
     title: string;
     category: string;
-    readMins: string;
     excerpt: string;
     status: PostStatus;
     relatedWorkSlug: string;
@@ -50,7 +49,6 @@ function toFormState(post?: AdminPostDetail): FormState {
         slug: post?.slug ?? "",
         title: post?.title.en ?? "",
         category: post?.category.en ?? "",
-        readMins: post ? String(post.readMins) : "",
         excerpt: post?.excerpt.en ?? "",
         status: post?.status ?? "published",
         relatedWorkSlug: post?.relatedWorkSlug ?? "",
@@ -99,7 +97,6 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
             slug: form.slug.trim(),
             title: form.title.trim(),
             category: form.category.trim(),
-            readMins: Number(form.readMins) || 0,
             excerpt: form.excerpt.trim(),
             status: form.status,
             relatedWorkSlug: form.relatedWorkSlug.trim() || null,
@@ -148,6 +145,11 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
                                 ? `Created ${ formatAdminDate(initialPost!.date) }`
                                 : `Will be dated ${ formatAdminDate(todayIsoDate()) } — set automatically on save`}
                         </Text>
+                        <Text variant="caption" tone="faint" className="font-mono" title="Estimated automatically from the body's word count — recalculated every time you save, not editable here.">
+                            {isEditing
+                                ? `~${ initialPost!.readMins } min read`
+                                : "Read time — estimated automatically on save"}
+                        </Text>
                     </div>
                 </div>
                 <div className="flex items-center gap-sm">
@@ -172,14 +174,9 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
                     <Input id="slug" required value={form.slug} onChange={(e) => updateSlugManually(e.target.value)} />
                 </Field>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                    <Field label="Read minutes" htmlFor="readMins" hint={"Shown as \"X min read\" on the published post."}>
-                        <Input id="readMins" type="number" min={0} required value={form.readMins} onChange={(e) => update("readMins", e.target.value)} />
-                    </Field>
-                    <Field label="Related work slug" htmlFor="relatedWorkSlug" hint="Optional — links this post to a work item.">
-                        <Input id="relatedWorkSlug" value={form.relatedWorkSlug} onChange={(e) => update("relatedWorkSlug", e.target.value)} />
-                    </Field>
-                </div>
+                <Field label="Related work slug" htmlFor="relatedWorkSlug" hint="Optional — links this post to a work item.">
+                    <Input id="relatedWorkSlug" value={form.relatedWorkSlug} onChange={(e) => update("relatedWorkSlug", e.target.value)} />
+                </Field>
 
                 <CategoryPicker
                     value={form.category}

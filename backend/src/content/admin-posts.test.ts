@@ -17,7 +17,6 @@ const basePostInput: PostInput = {
     slug: "test-post",
     title: "Test Post",
     category: "Notes",
-    readMins: 3,
     excerpt: "An excerpt.",
     status: "published",
     relatedWorkSlug: null,
@@ -180,6 +179,29 @@ describe("createPost/updatePost — date is server-generated, never form input",
         const updated = await updatePost("test-post", { ...basePostInput, title: "Updated Title" });
 
         expect(updated?.date).toBe(created.date);
+    });
+});
+
+describe("createPost/updatePost — readMins is derived from the body, never form input", () => {
+    it("createPost estimates readMins from the blocks, ignoring any readMins-shaped field (there's no such field anymore)", async () => {
+        const manyWords = Array.from({ length: 400 }, (_, i) => `word${ i }`).join(" ");
+        const created = await createPost({ ...basePostInput, blocks: [{ type: "paragraph", text: manyWords }] });
+
+        expect(created.readMins).toBe(2); // 400 words / 200 wpm
+    });
+
+    it("createPost gives a body-less upcoming stub readMins: 0", async () => {
+        const created = await createPost({ ...basePostInput, status: "upcoming", blocks: [] });
+        expect(created.readMins).toBe(0);
+    });
+
+    it("updatePost recomputes readMins from the NEW blocks, not the old ones", async () => {
+        await createPost(basePostInput); // "Lead." — a couple of words, readMins 0 or 1
+
+        const manyWords = Array.from({ length: 600 }, (_, i) => `word${ i }`).join(" ");
+        const updated = await updatePost("test-post", { ...basePostInput, blocks: [{ type: "paragraph", text: manyWords }] });
+
+        expect(updated?.readMins).toBe(3); // 600 words / 200 wpm
     });
 });
 
