@@ -32,10 +32,52 @@ const contactContentSchema = z.object({
     description: localizedTextSchema,
 });
 
+/**
+ * A per-item icon, shared across any list-shaped section that ever wants
+ * one (currently just `principles`) — named `IconRef` rather than e.g.
+ * `PrincipleIcon` for exactly that reason. `"none"` is a real, explicit
+ * variant rather than an absent/optional `icon` key, so every call site
+ * (the admin form, the landing card) switches on one closed set of three
+ * states instead of also having to handle "key is missing" as a fourth,
+ * implicit case.
+ *
+ * `"url"` is a plain string, not `z.string().url()` — same convention
+ * `configContentSchema`'s `email`/`social.github`/`social.linkedin` below
+ * already use (stricter format validation isn't worth the false negatives
+ * on the handful of real-world URL shapes `.url()` rejects, e.g. some
+ * relative paths a self-hosted admin might legitimately want).
+ *
+ * `"icon"`'s `value` is a kebab-case name meant to be validated against
+ * `lucide-react/dynamic`'s real `iconNames` list on the frontend (see
+ * `web/src/shared/ui/icon-picker/README.md`) — this schema deliberately
+ * does NOT re-validate it against that list here. Baking a snapshot of
+ * lucide's icon names into backend validation would silently go stale
+ * every time the pinned `lucide-react` version changes, rejecting
+ * perfectly valid new icon names for no real reason; an unrecognized name
+ * degrades gracefully to the existing placeholder on render (see
+ * `IconRefPreview`), which is a cheap enough failure mode not to need a
+ * second source of truth to prevent.
+ */
+export const iconRefSchema = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("none") }),
+    z.object({ type: z.literal("url"), value: z.string() }),
+    z.object({ type: z.literal("icon"), value: z.string() }),
+]);
+
+export type IconRef = z.infer<typeof iconRefSchema>;
+
 const principlesContentSchema = z.array(
     z.object({
         title: localizedTextSchema,
         description: localizedTextSchema,
+        // `.default(...)` (not `.optional()`) means a row already sitting in
+        // the database from before this field existed — whose JSON simply
+        // has no `icon` key at all — keeps parsing successfully as "no icon
+        // set yet" with zero migration/backfill needed, the same reasoning
+        // `getSiteContent` below already applies one level up (a missing
+        // *row* falls back to `SITE_CONTENT_DEFAULTS`; this is a missing
+        // *key inside* a row falling back the same way).
+        icon: iconRefSchema.default({ type: "none" }),
     }),
 );
 

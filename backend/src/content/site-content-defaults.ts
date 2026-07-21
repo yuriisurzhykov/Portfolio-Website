@@ -72,6 +72,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
                 en: "I design the structure so nobody downstream has to think about it.",
                 ru: "Я закладываю структуру так, чтобы никому ниже по цепочке не пришлось об этом думать.",
             },
+            icon: { type: "icon", value: "layout-grid" },
         },
         {
             title: { en: "Simplify ruthlessly", ru: "Простота без компромиссов" },
@@ -79,6 +80,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
                 en: "Every abstraction earns its complexity, or it gets cut.",
                 ru: "Каждая абстракция обязана окупать свою сложность — или её вырезают.",
             },
+            icon: { type: "icon", value: "scissors" },
         },
         {
             title: { en: "Own the whole pipe", ru: "Отвечаю за весь путь" },
@@ -86,6 +88,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
                 en: "From the camera driver to the UI thread — I trace the entire path, not just my layer.",
                 ru: "От драйвера камеры до UI-потока — я прохожу весь путь, а не только свой слой.",
             },
+            icon: { type: "icon", value: "git-branch" },
         },
         {
             title: { en: "Ship, then harden", ru: "Сначала запуск, потом закалка" },
@@ -93,6 +96,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
                 en: "Working software first. Resilience isn't optional — it just comes right after.",
                 ru: "Сначала — работающий продукт. Надёжность не опциональна, она просто идёт следом.",
             },
+            icon: { type: "icon", value: "shield-check" },
         },
     ],
 
