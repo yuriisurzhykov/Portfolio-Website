@@ -75,6 +75,20 @@ storage — `SiteContent` stores the whole array as one JSON value), an
 acceptable trade for a single admin editing a handful of rows
 infrequently.
 
+## 2026-07-21 — `PrinciplesSettingsForm` получает `IconPickerField`
+
+Каждая строка `ListEditor` для `principles` теперь начинается с
+`IconPickerField` (`web/src/shared/ui/icon-picker/`) — None/Link/Icon
+переключатель + живой preview, для причин/деталей самого компонента см.
+его собственный README, а не дублировать здесь. Единственное, что
+специфично этой форме: `createItem` инициализирует новую строку с `icon:
+{ type: "none" }` (та же логика, что уже применена к
+`title`/`description` — пустые, но валидные значения, не `undefined`), а
+`handleSubmit` тримит `icon.value` (для `"url"`/`"icon"`) той же ручной
+логикой, что уже применена к `title.en`/`description.en` — `IconRef`
+достаточно мал, чтобы не заводить для этого отдельную общую утилиту
+за пределами этого файла.
+
 ## Тесты и проверка
 
 No component-level tests here — every field in these forms is a plain
