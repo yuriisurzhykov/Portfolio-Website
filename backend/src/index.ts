@@ -15,11 +15,12 @@ export type { Block, BlockInput, BlockType } from "./content/blocks";
 export type { LocalizedText } from "./content/localized-text";
 export type { ContentLocale } from "./content/locale";
 
-export { getSiteContent, isSiteContentKey, SITE_CONTENT_KEYS, siteContentSchemas, updateSiteContent } from "./content/site-content";
+export { getSiteContent, iconRefSchema, isSiteContentKey, SITE_CONTENT_KEYS, siteContentSchemas, updateSiteContent } from "./content/site-content";
 export type {
     ConfigContent,
     ContactContent,
     HeroContent,
+    IconRef,
     JournalPageContent,
     PrinciplesContent,
     SiteContentDataMap,

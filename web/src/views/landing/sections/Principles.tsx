@@ -6,6 +6,7 @@ import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { useTranslation } from "@/shared/i18n";
+import { IconRefPreview } from "@/shared/ui/icon-picker";
 
 export interface PrinciplesProps {
     principles: PrinciplesContent;
@@ -20,7 +21,7 @@ export function Principles({ principles }: PrinciplesProps) {
             <div className="grid gap-[20px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
                 {principles.map((principle) => (
                     <Card key={pick(principle.title)} className="p-[28px]">
-                        <div className="w-[34px] h-[34px] rounded-md bg-surface-icon mb-[16px]" />
+                        <IconRefPreview icon={principle.icon} className="w-[34px] h-[34px] mb-[16px]" />
                         <Text as="h3" variant="h3" className="mb-[10px]">
                             {pick(principle.title)}
                         </Text>

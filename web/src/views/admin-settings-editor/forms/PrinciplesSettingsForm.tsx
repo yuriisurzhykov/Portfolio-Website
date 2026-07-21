@@ -1,11 +1,17 @@
 "use client";
 
 import * as React from "react";
-import type { PrinciplesContent } from "@portfolio/backend";
+import type { IconRef, PrinciplesContent } from "@portfolio/backend";
+import { IconPickerField } from "@/shared/ui/icon-picker";
 import { BilingualField } from "../fields/BilingualField";
 import { ListEditor } from "../fields/ListEditor";
 import { SettingsFormFooter } from "../fields/SettingsFormFooter";
 import { useSiteContentForm } from "../useSiteContentForm";
+
+/** `IconRef.value` (the URL or the icon name) is the only icon field free-text enough to need trimming — `type`/absence of `value` on `"none"` need no trimming at all. */
+function trimIcon(icon: IconRef): IconRef {
+    return icon.type === "none" ? icon : { type: icon.type, value: icon.value.trim() };
+}
 
 export function PrinciplesSettingsForm({ initialData }: { initialData: PrinciplesContent }) {
     const [items, setItems] = React.useState<PrinciplesContent>(initialData);
@@ -17,6 +23,7 @@ export function PrinciplesSettingsForm({ initialData }: { initialData: Principle
             items.map((item) => ({
                 title: { en: item.title.en.trim(), ru: item.title.ru.trim() },
                 description: { en: item.description.en.trim(), ru: item.description.ru.trim() },
+                icon: trimIcon(item.icon),
             })),
         );
     }
@@ -28,10 +35,11 @@ export function PrinciplesSettingsForm({ initialData }: { initialData: Principle
                 hint="Order = display order on the landing page."
                 items={items}
                 onChange={setItems}
-                createItem={() => ({ title: { en: "", ru: "" }, description: { en: "", ru: "" } })}
+                createItem={() => ({ title: { en: "", ru: "" }, description: { en: "", ru: "" }, icon: { type: "none" as const } })}
                 addLabel="Add principle"
                 renderItem={(item, index, update) => (
                     <div className="flex flex-col gap-sm">
+                        <IconPickerField idPrefix={`principle-icon-${index}`} value={item.icon} onChange={(icon) => update({ icon })} />
                         <BilingualField
                             label="Title"
                             idPrefix={`principle-title-${index}`}
