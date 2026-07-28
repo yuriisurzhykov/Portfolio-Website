@@ -4,6 +4,7 @@ import { getSiteContent, isSiteContentKey } from "@portfolio/backend";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { SettingsEditorPage, SITE_CONTENT_SECTIONS, type SettingsEditorPageProps } from "@/views/admin-settings-editor";
 import { Text } from "@/shared/ui/text";
+import { requirePage } from "@/shared/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,9 @@ interface PageProps {
     params: Promise<{ key: string }>;
 }
 
+/** `requirePage()` here, not just in the shared layout — see `journal/[slug]/edit/page.tsx`'s comment for why. */
 export default async function Page({ params }: PageProps) {
+    await requirePage();
     const { key } = await params;
     if (!isSiteContentKey(key)) {
         notFound();
