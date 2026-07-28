@@ -38,16 +38,92 @@ export class AdminApiError extends Error {
     }
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-    const response = await fetch(url, {
+/**
+ * Thrown instead of a plain `AdminApiError` when a 401 survives a silent
+ * refresh attempt (see `request()` below) — i.e. the refresh token itself
+ * is gone, not just the access token. Callers that want to redirect to
+ * `/admin/login` on session death, rather than showing "Something went
+ * wrong" like any other error, can check for this specific type. `request()`
+ * itself already does that redirect (see below) before this ever reaches a
+ * caller in practice — exported mainly so a caller CAN distinguish it if it
+ * ever needs to (e.g. to skip showing its own generic error banner).
+ */
+export class SessionExpiredError extends AdminApiError {
+    constructor() {
+        super(401, "Your session has expired. Please sign in again.");
+        this.name = "SessionExpiredError";
+    }
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+/**
+ * Calls `/api/auth/refresh` at most once concurrently — if several
+ * requests hit a dead access token around the same time (e.g. a page with
+ * multiple parallel fetches), they share one refresh attempt instead of
+ * each independently racing to rotate the SAME refresh token (rotation is
+ * single-use — see `backend/src/auth/session.ts` — a second concurrent
+ * rotation attempt against an already-rotated token would itself look like
+ * a compromised/replayed token and fail).
+ */
+function refreshSessionOnce(): Promise<boolean> {
+    if (!refreshInFlight) {
+        refreshInFlight = fetch("/api/auth/refresh", { method: "POST" })
+            .then((response) => response.ok)
+            .catch(() => false)
+            .finally(() => {
+                refreshInFlight = null;
+            });
+    }
+    return refreshInFlight;
+}
+
+function redirectToLogin(): void {
+    const from = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.assign(`/admin/login?from=${ from }`);
+}
+
+async function parseErrorMessage(response: Response): Promise<string> {
+    const payload: unknown = await response.json().catch(() => null);
+    return (payload as { error?: string } | null)?.error ?? `Request failed with status ${ response.status }.`;
+}
+
+async function doFetch(method: string, url: string, body: unknown | undefined): Promise<Response> {
+    return fetch(url, {
         method,
         headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+}
+
+/**
+ * On a 401: try ONE silent refresh, then retry the original request ONCE.
+ * This is the reactive half of session resilience — the proactive half
+ * (`useSessionKeepAlive`, `session-keepalive.tsx`) refreshes ahead of
+ * expiry so this path should rarely trigger in practice, but covers
+ * whatever the proactive timer missed (laptop asleep through the refresh
+ * window, a request in flight exactly as the access token expired, ...).
+ * If the retry ALSO 401s, the refresh token itself is dead — this is the
+ * fix for "the admin is left on the page thinking something broke" rather
+ * than being sent back to sign in: an explicit, hard redirect to
+ * `/admin/login?from=<path>`, not a silently swallowed error.
+ */
+async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+    let response = await doFetch(method, url, body);
+
+    if (response.status === 401) {
+        const refreshed = await refreshSessionOnce();
+        if (refreshed) {
+            response = await doFetch(method, url, body);
+        }
+    }
 
     if (!response.ok) {
-        const payload: unknown = await response.json().catch(() => null);
-        const message = (payload as { error?: string } | null)?.error ?? `Request failed with status ${ response.status }.`;
+        if (response.status === 401) {
+            redirectToLogin();
+            throw new SessionExpiredError();
+        }
+        const message = await parseErrorMessage(response);
         throw new AdminApiError(response.status, message);
     }
 
@@ -64,6 +140,20 @@ export interface AdminLoginResult {
 export const adminApi = {
     login: (email: string, password: string) => request<AdminLoginResult>("POST", "/api/auth/login", { email, password }),
     logout: () => request<{ ok: true }>("POST", "/api/auth/logout"),
+    // Used by `useSessionKeepAlive` for its proactive heartbeat —
+    // deliberately NOT routed through `request()` above: refreshing IS the
+    // recovery mechanism `request()` itself calls on a 401, so this needs
+    // to be the plain, un-intercepted call it wraps (shared via
+    // `refreshSessionOnce`'s single-flight guard), or a failed heartbeat
+    // refresh would recurse into trying to refresh again. Throws (rather
+    // than returning a boolean) so callers can use a plain `try/catch`,
+    // matching every other method here.
+    refresh: async () => {
+        const ok = await refreshSessionOnce();
+        if (!ok) {
+            throw new SessionExpiredError();
+        }
+    },
 
     createPost: (input: PostInput) => request<PostSummary>("POST", "/api/admin/posts", input),
     updatePost: (slug: string, input: PostInput) => request<PostSummary>("PUT", `/api/admin/posts/${ encodeURIComponent(slug) }`, input),

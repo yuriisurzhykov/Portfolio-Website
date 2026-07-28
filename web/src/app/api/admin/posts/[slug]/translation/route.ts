@@ -1,9 +1,10 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { getPostTranslationForAdmin, translatePost, translatePostInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
 interface RouteParams {
-    params: Promise<{ slug: string }>;
+    slug: string;
 }
 
 /**
@@ -16,7 +17,7 @@ interface RouteParams {
  * loop back through its own HTTP API for reads); this route exists so the
  * full JSON contract exists too.
  */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {
         const { slug } = await params;
         const translation = await getPostTranslationForAdmin(slug);
@@ -27,9 +28,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => {
     try {
         const { slug } = await params;
         const body = await request.json();
@@ -42,4 +43,4 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});

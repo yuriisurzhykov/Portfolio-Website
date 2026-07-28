@@ -1,9 +1,10 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { deleteWork, getWorkBySlug, updateWork, workInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
 interface RouteParams {
-    params: Promise<{ slug: string }>;
+    slug: string;
 }
 
 /**
@@ -11,7 +12,7 @@ interface RouteParams {
  * `getWorkForAdmin` exists; see admin-work.ts's top-of-file comment for
  * why `Work` doesn't need the admin-only read function `Post` does.
  */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {
         const { slug } = await params;
         const item = await getWorkBySlug(slug);
@@ -22,9 +23,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => {
     try {
         const { slug } = await params;
         const body = await request.json();
@@ -37,9 +38,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});
 
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export const DELETE = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {
         const { slug } = await params;
         const deleted = await deleteWork(slug);
@@ -50,4 +51,4 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});

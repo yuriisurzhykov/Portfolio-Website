@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { createPost, getJournalEntries, postInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
 /**
  * GET here is what a future mobile client (or a script) would call to
@@ -12,16 +13,16 @@ import { toErrorResponse } from "@/shared/lib/api-error-response";
  * reusable, per the migration plan's Phase 4 goal — not because the web UI
  * itself needs to fetch its own API for a plain read.
  */
-export async function GET() {
+export const GET = defineAdminRoute(async () => {
     try {
         const entries = await getJournalEntries();
         return NextResponse.json(entries);
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = defineAdminRoute(async (request) => {
     try {
         const body = await request.json();
         const input = postInputSchema.parse(body);
@@ -30,4 +31,4 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});

@@ -1,13 +1,14 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { getWorkTranslationForAdmin, translateWork, translateWorkInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
 interface RouteParams {
-    params: Promise<{ slug: string }>;
+    slug: string;
 }
 
 /** See posts/[slug]/translation/route.ts's top comment — same separation, same reasoning, applied to `Work`. */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {
         const { slug } = await params;
         const translation = await getWorkTranslationForAdmin(slug);
@@ -18,9 +19,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => {
     try {
         const { slug } = await params;
         const body = await request.json();
@@ -33,4 +34,4 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});

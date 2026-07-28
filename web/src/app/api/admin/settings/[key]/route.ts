@@ -1,9 +1,10 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { getSiteContent, isSiteContentKey, updateSiteContent } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
 interface RouteParams {
-    params: Promise<{ key: string }>;
+    key: string;
 }
 
 /**
@@ -15,7 +16,7 @@ interface RouteParams {
  */
 
 /** 404 for a syntactically-valid-but-unknown `key` (e.g. `/api/admin/settings/nonsense`) — same shape as a missing slug elsewhere, not a 400 (the URL itself is well-formed). */
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {
         const { key } = await params;
         if (!isSiteContentKey(key)) {
@@ -26,9 +27,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => {
     try {
         const { key } = await params;
         if (!isSiteContentKey(key)) {
@@ -46,4 +47,4 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});

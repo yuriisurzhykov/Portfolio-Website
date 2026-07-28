@@ -1,26 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkLoginRateLimit, login, recordFailedLogin, resetLoginRateLimit } from "@portfolio/backend";
+import { checkLoginRateLimit, login, resetLoginRateLimit } from "@portfolio/backend";
 import { setAuthCookies } from "@/shared/lib/auth-cookies";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { getClientIp } from "@/shared/lib/client-ip";
+import { definePublicRoute } from "@/shared/lib/auth/guard";
 
-/** Best-effort client IP: trusts `x-forwarded-for` since nginx sits in front of this app in production (see deploy plan, Phase 6). Falls back to a constant key locally, where there's no proxy setting that header. */
-function getClientKey(request: NextRequest): string {
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    return forwardedFor?.split(",")[0]?.trim() ?? "local-dev";
-}
-
-export async function POST(request: NextRequest) {
-    const clientKey = getClientKey(request);
+/**
+ * Two independent rate-limit dimensions, both must pass — an attacker
+ * spraying one password across many accounts from one IP is caught by the
+ * `ip:` key, an attacker distributing guesses for ONE account across many
+ * IPs (botnet, proxy rotation) is caught by the `account:` key. Neither
+ * alone catches both shapes of attack. `checkLoginRateLimit` counts this
+ * call itself (every attempt, not just failures — see its doc comment in
+ * backend/src/auth/rate-limit.ts), so no separate "record" call is needed
+ * below; a successful login resets both dimensions instead.
+ */
+export const POST = definePublicRoute(async (request: NextRequest) => {
+    const clientIp = getClientIp(request);
 
     try {
-        const rateLimit = checkLoginRateLimit(clientKey);
-        if (!rateLimit.allowed) {
-            return NextResponse.json(
-                { error: "Too many failed login attempts. Try again later." },
-                { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds ?? 60) } },
-            );
-        }
-
         let body: unknown;
         try {
             body = await request.json();
@@ -32,18 +30,31 @@ export async function POST(request: NextRequest) {
         if (typeof email !== "string" || typeof password !== "string") {
             return NextResponse.json({ error: "email and password are required." }, { status: 400 });
         }
+        const accountKey = `account:${ email.trim().toLowerCase() }`;
+        const ipKey = `ip:${ clientIp }`;
+
+        const [ipLimit, accountLimit] = await Promise.all([
+            checkLoginRateLimit(ipKey),
+            checkLoginRateLimit(accountKey),
+        ]);
+        if (!ipLimit.allowed || !accountLimit.allowed) {
+            const retryAfterSeconds = Math.max(ipLimit.retryAfterSeconds ?? 0, accountLimit.retryAfterSeconds ?? 0);
+            return NextResponse.json(
+                { error: "Too many login attempts. Try again later." },
+                { status: 429, headers: { "Retry-After": String(retryAfterSeconds || 60) } },
+            );
+        }
 
         const result = await login(email, password, {
             userAgent: request.headers.get("user-agent") ?? undefined,
-            ip: clientKey,
+            ip: clientIp,
         });
 
         if (!result) {
-            recordFailedLogin(clientKey);
             return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
         }
 
-        resetLoginRateLimit(clientKey);
+        await Promise.all([resetLoginRateLimit(ipKey), resetLoginRateLimit(accountKey)]);
 
         // Tokens go both into httpOnly cookies (what the browser-based admin UI
         // actually uses) AND the JSON body (so a non-browser client — a future
@@ -59,4 +70,4 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});

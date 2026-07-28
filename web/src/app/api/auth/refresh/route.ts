@@ -3,6 +3,7 @@ import { refreshSession } from "@portfolio/backend";
 import { REFRESH_TOKEN_COOKIE } from "@/shared/lib/auth-constants";
 import { clearAuthCookies, setAuthCookies } from "@/shared/lib/auth-cookies";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { definePublicRoute } from "@/shared/lib/auth/guard";
 
 async function getRefreshToken(request: NextRequest): Promise<string | undefined> {
     const cookieToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
@@ -18,7 +19,15 @@ async function getRefreshToken(request: NextRequest): Promise<string | undefined
     }
 }
 
-export async function POST(request: NextRequest) {
+/**
+ * Public at the `defineRoute` layer on purpose — the whole point of this
+ * route is to mint a new access token when the old one is gone/expired, so
+ * requiring a valid access token to call it would be circular. Its real
+ * security boundary is the refresh token itself (opaque, hashed at rest,
+ * single-use via rotation — see `backend/src/auth/session.ts`), not
+ * anything checked here.
+ */
+export const POST = definePublicRoute(async (request: NextRequest) => {
     try {
         const refreshToken = await getRefreshToken(request);
         if (!refreshToken) {
@@ -46,4 +55,4 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});

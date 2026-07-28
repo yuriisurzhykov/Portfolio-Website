@@ -76,6 +76,21 @@ time you need it (disaster recovery, new server). See the repo's
   silently. Also parameterized via `DB_NAME` (default `portfolio`) for the
   same dev/staging reason.
 
+  **Adding/updating a key later** (e.g. `UPSTASH_REDIS_REST_URL`/`_TOKEN`
+  for `backend/src/auth/rate-limit.ts`, added after this file already
+  exists) is a different operation — not "run 06 again" (it refuses on
+  purpose), and not something the deploy account can do by hand either:
+  `shared/` is mode 700 owned by `nextapp` — `yuriisoft` has no access to
+  it at all, not even to list the directory. That restriction is
+  deliberate and applies the same way to CI as to a human — neither gets
+  more than a narrow sudoers grant over one fixed root script. See
+  `12-set-app-env-helper.sh` below (installs that grant, one time) and
+  `../set-app-env-finish.sh` (the script the grant covers). The **primary**
+  way this gets invoked day to day is `.github/workflows/deploy-web.yaml`'s
+  "Sync optional env vars" steps, automatically, on every deploy, from
+  GitHub Actions secrets — `../set-app-env.sh` (run from your own machine)
+  is a manual fallback for a one-off value, not the normal path.
+
 - `07-swap.sh` — adds a 2 GiB swapfile. The VPS has 1.8 GiB RAM and shipped
   with zero swap — without it, a brief memory spike (npm installing native
   deps, a build, a traffic burst) gets hard-killed by the OOM killer
@@ -104,6 +119,21 @@ time you need it (disaster recovery, new server). See the repo's
   `/api/auth/login` location from the zone above. Assumes an existing
   Certbot cert for `DOMAIN`. Never runs `nginx -t`/reload itself —
   verifying and reloading stays an explicit, separate step every time.
+
+- `12-set-app-env-helper.sh` — installs `/usr/local/bin/
+  set-app-env-finish.sh` (root-owned, from `../set-app-env-finish.sh`) and a
+  narrow sudoers NOPASSWD rule (`/etc/sudoers.d/set-app-env`) letting
+  `yuriisoft` run exactly that one binary — the same privilege-split
+  reasoning as `deploy-web-finish.sh`'s own sudoers rule (one fixed,
+  auditable script instead of broad sudo over `cp`/`chown`/`systemctl`).
+  **Must be run with real (not narrowly-scoped) sudo** — it's the thing
+  that CREATES the narrow grant, so the narrow grant can't bootstrap it.
+  One-time step per box; every `../set-app-env.sh` call afterwards goes
+  through this grant instead of needing a human with real sudo each time.
+  Validates the generated sudoers file with `visudo -c` before it ever
+  touches `/etc/sudoers.d/` — a syntax error dropped straight into that
+  directory can break `sudo` for every user on the box, including root's
+  own way of fixing it.
 
 - `11-pg-backup.sh` — nightly `pg_dump` (via `/root/.pgpass`, no password
   on the command line) → gzip → 14-day local rotation →

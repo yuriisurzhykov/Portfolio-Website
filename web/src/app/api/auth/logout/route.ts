@@ -3,8 +3,17 @@ import { logout } from "@portfolio/backend";
 import { REFRESH_TOKEN_COOKIE } from "@/shared/lib/auth-constants";
 import { clearAuthCookies } from "@/shared/lib/auth-cookies";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { definePublicRoute } from "@/shared/lib/auth/guard";
 
-export async function POST(request: NextRequest) {
+/**
+ * Public at the `defineRoute` layer — deliberately, not an oversight. This
+ * must keep working even when the access token has ALREADY expired (the
+ * single most common real reason someone hits "sign out": they're clearing
+ * a stuck/expired session), so requiring one here would defeat its own
+ * purpose. It reads and revokes the refresh token directly; there's no
+ * scenario where "an expired access token" should block this request.
+ */
+export const POST = definePublicRoute(async (request: NextRequest) => {
     try {
         const cookieToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
 
@@ -28,4 +37,4 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         return toErrorResponse(error);
     }
-}
+});
