@@ -109,17 +109,26 @@ describe("InMemoryRateLimiter", () => {
 });
 
 describe("UpstashRateLimiter", () => {
-    function createMockRedis(): RedisCommands & { store: Map<string, number> } {
+    /**
+     * Mimics the real INCR-and-EXPIRE Lua script's atomic semantics in
+     * plain JS: expiry is only ever "set" (tracked here via `expiryCalls`,
+     * since there's no real TTL clock in this mock) on the exact call where
+     * the counter goes from absent to 1, folded into the same `eval` call —
+     * never as a separate step a caller could observe or skip.
+     */
+    function createMockRedis(): RedisCommands & { store: Map<string, number>; expiryCalls: number } {
         const store = new Map<string, number>();
-        return {
+        const mock = {
             store,
-            async incr(key: string) {
+            expiryCalls: 0,
+            async eval<TData>(_script: string, keys: string[], args: unknown[]): Promise<TData> {
+                const [key] = keys;
                 const next = (store.get(key) ?? 0) + 1;
                 store.set(key, next);
-                return next;
-            },
-            async expire() {
-                return 1;
+                if (next === 1) {
+                    mock.expiryCalls += 1;
+                }
+                return next as TData;
             },
             async ttl() {
                 return 42;
@@ -130,6 +139,7 @@ describe("UpstashRateLimiter", () => {
                 return existed ? 1 : 0;
             },
         };
+        return mock;
     }
 
     it("allows requests up to the limit and blocks past it", async () => {
@@ -147,7 +157,6 @@ describe("UpstashRateLimiter", () => {
 
     it("sets expiry only on the first increment, not every call", async () => {
         const redis = createMockRedis();
-        const expireSpy = vi.spyOn(redis, "expire");
         const limiter = new UpstashRateLimiter(redis);
         const key = uniqueKey();
 
@@ -155,8 +164,31 @@ describe("UpstashRateLimiter", () => {
         await limiter.checkAndRecord(key, 5, 60);
         await limiter.checkAndRecord(key, 5, 60);
 
-        expect(expireSpy).toHaveBeenCalledTimes(1);
-        expect(expireSpy).toHaveBeenCalledWith(key, 60);
+        expect(redis.expiryCalls).toBe(1);
+    });
+
+    /**
+     * Pins the actual security-relevant behavior a PR review flagged: the
+     * increment and its expiry must be ONE atomic Redis round trip (a Lua
+     * `eval`), not two separate `incr` + `expire` calls — the two-call
+     * version leaves a real window where a crash/network failure between
+     * them permanently blocks a key with no TTL to ever reset it. Asserts
+     * the actual mechanism (single `eval` call, correct key/window
+     * arguments), not just the externally-observable count/expiry outcome
+     * already covered above — a call-count assertion is what would catch a
+     * regression back to two separate calls, since the outcome-only tests
+     * above would still pass even if `incr`+`expire` were reintroduced.
+     */
+    it("increments and sets expiry via a single atomic eval call, not separate commands", async () => {
+        const redis = createMockRedis();
+        const evalSpy = vi.spyOn(redis, "eval");
+        const limiter = new UpstashRateLimiter(redis);
+        const key = uniqueKey();
+
+        await limiter.checkAndRecord(key, 5, 60);
+
+        expect(evalSpy).toHaveBeenCalledTimes(1);
+        expect(evalSpy).toHaveBeenCalledWith(expect.any(String), [key], [60]);
     });
 
     it("reset deletes the counter", async () => {

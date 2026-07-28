@@ -4,9 +4,12 @@ name: Backend & Web Checks
 # the Vitest suite in backend/ (unit + integration tests against a real,
 # ephemeral Postgres service container — mirrors the local dev setup in
 # docker-compose.yml, just ephemeral per run instead of persistent), and a
-# full `next build` of web/ to catch build-breaking changes early. This is
-# the equivalent of visual-tests.yml, but for the Next.js/Postgres/Prisma
-# side of the repo (web/ + backend/) rather than the legacy frontend/ SPA.
+# full `next build` of frontend/ to catch build-breaking changes early. This
+# is the equivalent of visual-tests.yml, but for the Next.js/Postgres/Prisma
+# side of the repo (frontend/ + backend/) rather than the legacy Vite
+# frontend/ SPA this app replaced (see
+# .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md for the
+# rename that gave both apps the same directory name at different times).
 
 on:
   pull_request:
@@ -46,7 +49,7 @@ jobs:
       # intentionally does not exist here) — these are already real
       # environment variables, so backend/vitest.setup.ts's dotenv call is a
       # no-op (it never overwrites an already-set variable) and
-      # web/next.config.ts's dotenv call is too (same reason), which is
+      # frontend/next.config.ts's dotenv call is too (same reason), which is
       # exactly the point of both being written that way.
       DATABASE_URL: postgresql://portfolio:portfolio_ci@localhost:5432/portfolio_test
       JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
@@ -67,7 +70,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
 
-      - name: Install workspace dependencies (web/ + backend/)
+      - name: Install workspace dependencies (frontend/ + backend/)
         run: npm ci
 
       - name: Typecheck backend
@@ -86,14 +89,14 @@ jobs:
         working-directory: backend
         run: npm run test:mutation
 
-      - name: Run web test suite
-        working-directory: web
+      - name: Run frontend test suite
+        working-directory: frontend
         run: npm test
 
-      - name: Run web mutation tests
-        working-directory: web
+      - name: Run frontend mutation tests
+        working-directory: frontend
         run: npm run test:mutation
 
-      - name: Build web (Next.js)
-        working-directory: web
+      - name: Build frontend (Next.js)
+        working-directory: frontend
         run: npm run build

@@ -63,14 +63,32 @@ export class InMemoryRateLimiter implements RateLimiter {
  * A minimal shape of `@upstash/redis`'s client — declared explicitly so
  * `UpstashRateLimiter` can be unit-tested against a plain mock object
  * instead of a real (or even a fake-but-still-network-shaped) Redis
- * client. Only the four commands this file actually issues.
+ * client. Only the commands this file actually issues.
  */
 export interface RedisCommands {
-    incr(key: string): Promise<number>;
-    expire(key: string, seconds: number): Promise<number>;
+    eval<TData = unknown>(script: string, keys: string[], args: unknown[]): Promise<TData>;
     ttl(key: string): Promise<number>;
     del(key: string): Promise<number>;
 }
+
+/**
+ * Increments the counter and sets its expiry as ONE atomic Redis operation
+ * (a Lua script runs entirely server-side, in a single round trip) —
+ * NOT two separate `incr` + `expire` calls. Two separate calls leave a real
+ * gap: if the process is interrupted, or the `expire` request itself fails
+ * over the network, after `incr` already succeeded, Redis is left with a
+ * counter that has NO expiry at all. Every later call keeps incrementing
+ * that same key forever with no TTL to reset it, permanently blocking
+ * whatever key crossed the limit at that moment — found via a real PR
+ * review comment, not hypothetically; see backend/src/auth/README.md.
+ */
+const INCR_AND_EXPIRE_SCRIPT = `
+local count = redis.call("INCR", KEYS[1])
+if count == 1 then
+  redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return count
+`;
 
 /**
  * The real implementation — one shared counter in Redis, reachable from
@@ -86,14 +104,12 @@ export class UpstashRateLimiter implements RateLimiter {
     constructor(private readonly redis: RedisCommands) {}
 
     async checkAndRecord(key: string, limit: number, windowSeconds: number): Promise<RateLimitCheck> {
-        const count = await this.redis.incr(key);
-        if (count === 1) {
-            // Only the request that just created the key sets its expiry —
-            // every subsequent increment in the same window must NOT touch
-            // it, or a steady trickle of requests would keep pushing the
-            // window out forever and the limit would never reset.
-            await this.redis.expire(key, windowSeconds);
-        }
+        // Only the request that just created the key (count === 1, checked
+        // INSIDE the script) sets its expiry — every subsequent increment in
+        // the same window must NOT touch it, or a steady trickle of requests
+        // would keep pushing the window out forever and the limit would
+        // never reset.
+        const count = await this.redis.eval<number>(INCR_AND_EXPIRE_SCRIPT, [key], [windowSeconds]);
 
         if (count > limit) {
             const ttl = await this.redis.ttl(key);
