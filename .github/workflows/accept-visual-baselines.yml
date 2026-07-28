@@ -156,7 +156,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install workspace dependencies (frontend/ + backend/)
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Apply migrations to the CI database
         working-directory: backend
