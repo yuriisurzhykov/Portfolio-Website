@@ -7,6 +7,7 @@ import {
     isDatabaseConnectionError,
     isDatabaseUnavailableError,
     isSlugAlreadyExistsError,
+    isUniqueConstraintError,
     isValidationError,
     SlugAlreadyExistsError,
 } from "./errors";
@@ -50,7 +51,11 @@ describe("isDatabaseConnectionError", () => {
 
 describe("isDatabaseUnavailableError", () => {
     it("recognizes a real DatabaseUnavailableError instance", () => {
-        expect(isDatabaseUnavailableError(new DatabaseUnavailableError())).toBe(true);
+        const error = new DatabaseUnavailableError();
+        expect(isDatabaseUnavailableError(error)).toBe(true);
+        // Found by mutation testing: nothing checked the actual message
+        // text shown to a user via the fallback UI (see web/README.md).
+        expect(error.message).toBe("The database is temporarily unavailable.");
     });
 
     /**
@@ -90,11 +95,39 @@ describe("isDatabaseUnavailableError", () => {
 
 describe("isSlugAlreadyExistsError", () => {
     it("recognizes a real SlugAlreadyExistsError instance", () => {
-        expect(isSlugAlreadyExistsError(new SlugAlreadyExistsError("my-slug"))).toBe(true);
+        const error = new SlugAlreadyExistsError("my-slug");
+        expect(isSlugAlreadyExistsError(error)).toBe(true);
+        // Found by mutation testing: nothing checked the actual message
+        // text this 409 response body sends back to the admin UI.
+        expect(error.message).toBe('A record with slug "my-slug" already exists.');
     });
 
     it("does not treat an unrelated error as a slug conflict", () => {
         expect(isSlugAlreadyExistsError(new Error("some other failure"))).toBe(false);
+    });
+});
+
+describe("isUniqueConstraintError", () => {
+    // Found by mutation testing: this function had zero tests at all before —
+    // every mutant on it showed as "NoCoverage", not "Survived".
+    it("recognizes a PrismaClientKnownRequestError with code P2002", () => {
+        const error = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+            code: "P2002",
+            clientVersion: "7.8.0",
+        });
+        expect(isUniqueConstraintError(error)).toBe(true);
+    });
+
+    it("does not treat a different PrismaClientKnownRequestError code as a unique constraint violation", () => {
+        const error = new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+            code: "P1001",
+            clientVersion: "7.8.0",
+        });
+        expect(isUniqueConstraintError(error)).toBe(false);
+    });
+
+    it("does not treat an unrelated error as a unique constraint violation", () => {
+        expect(isUniqueConstraintError(new Error("some other failure"))).toBe(false);
     });
 });
 
@@ -121,5 +154,47 @@ describe("isValidationError / formatValidationError", () => {
     it("does not treat an unrelated error as a validation error", () => {
         expect(isValidationError(new Error("some other failure"))).toBe(false);
         expect(formatValidationError(new Error("some other failure"))).toBe("Invalid input.");
+    });
+
+    /**
+     * Found by mutation testing: every prior test either passed a real
+     * ZodError or an unrelated Error — nothing exercised `null`/a primitive
+     * (where the `typeof`/`!== null` guards matter, since `"issues" in
+     * error` throws on those otherwise) or an object that structurally
+     * has `issues` but where it isn't an array.
+     */
+    it("safely rejects null, primitives, and an object with a non-array issues property", () => {
+        expect(isValidationError(null)).toBe(false);
+        expect(isValidationError(undefined)).toBe(false);
+        expect(isValidationError("just a string")).toBe(false);
+        expect(isValidationError({ issues: "not-an-array" })).toBe(false);
+    });
+
+    /**
+     * Found by mutation testing: the existing format test only checked
+     * single-segment paths (`slug`, `readMins`) and only that the output
+     * `.toContain()`s each field name — neither distinguishes `.join(".")`
+     * from `.join("")` (identical for a 1-element path), nor `.join("; ")`
+     * from `.join("")` between issues (never checked the literal
+     * separator), nor the `"(root)"` fallback for a path-less issue.
+     */
+    it("joins a multi-segment path with dots, not by concatenation", () => {
+        const nestedSchema = z.object({ profile: z.object({ name: z.string().min(1) }) });
+        const result = nestedSchema.safeParse({ profile: { name: "" } });
+        expect(result.success).toBe(false);
+        expect(formatValidationError(result.error).startsWith("profile.name:")).toBe(true);
+    });
+
+    it("falls back to (root) for a path-less (schema-level) issue", () => {
+        const rootSchema = z.object({ a: z.string() }).refine(() => false, { message: "root-level failure" });
+        const result = rootSchema.safeParse({ a: "ok" });
+        expect(result.success).toBe(false);
+        expect(formatValidationError(result.error).startsWith("(root):")).toBe(true);
+    });
+
+    it("joins multiple issues with '; ', not by concatenation", () => {
+        const result = schema.safeParse({ slug: "", readMins: "not a number" });
+        expect(result.success).toBe(false);
+        expect(formatValidationError(result.error).split("; ")).toHaveLength(2);
     });
 });

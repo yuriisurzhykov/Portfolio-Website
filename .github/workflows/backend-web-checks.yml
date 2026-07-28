@@ -59,7 +59,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20 like the other workflows in this repo: StrykerJS's
+          # @stryker-mutator/vitest-runner (mutation testing, see
+          # test:mutation below) requires Node >=22. Scoped to this workflow
+          # only — it's the one that runs the suites Stryker reruns.
+          node-version: 22
           cache: "npm"
           cache-dependency-path: package-lock.json
 
@@ -78,9 +82,17 @@ jobs:
         working-directory: backend
         run: npx vitest run
 
+      - name: Run backend mutation tests
+        working-directory: backend
+        run: npm run test:mutation
+
       - name: Run web test suite
         working-directory: web
         run: npm test
+
+      - name: Run web mutation tests
+        working-directory: web
+        run: npm run test:mutation
 
       - name: Build web (Next.js)
         working-directory: web

@@ -57,6 +57,77 @@ describe("parseBlock", () => {
         expect(block.type).toBe("image");
     });
 
+    /**
+     * Found by mutation testing: "quote" was never parsed at all outside of
+     * reading-time.test.ts (a different file, testing a different
+     * function) — nothing here proved `quoteCore`'s own schema (the
+     * `"quote"` literal, the optional `attribution` field) actually works.
+     */
+    it("parses a quote block, with and without an attribution", () => {
+        const withAttribution = parseBlock({
+            id: "1", order: 0, type: "quote", text: "Wise words",
+            data: {attribution: "Someone"},
+        });
+        expect(withAttribution.type === "quote" && withAttribution.data?.attribution).toBe("Someone");
+
+        const withoutAttribution = parseBlock({id: "1", order: 0, type: "quote", text: "Wise words", data: null});
+        expect(withoutAttribution.type).toBe("quote");
+    });
+
+    /**
+     * Found by mutation testing: the only existing "note" test checked
+     * REJECTION of a missing `data.variant` — never that a valid variant
+     * actually parses through, so the enum's own values were untested.
+     */
+    it("parses a note block with each valid variant", () => {
+        for (const variant of ["info", "warning", "tip"] as const) {
+            const block = parseBlock({id: "1", order: 0, type: "note", text: "x", data: {variant}});
+            expect(block.type === "note" && block.data.variant).toBe(variant);
+        }
+    });
+
+    it("rejects a note block with an invalid variant value", () => {
+        expect(() =>
+            parseBlock({id: "1", order: 0, type: "note", text: "x", data: {variant: "not-a-real-variant"}}),
+        ).toThrow();
+    });
+
+    /**
+     * Found by mutation testing: the existing image test only checked
+     * `block.type === "image"`, never that `data.src`/`data.alt` actually
+     * survive parsing.
+     */
+    it("parses an image block's data fields, not just that it's an image", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "image", text: null,
+            data: {src: "/img.png", alt: "A cat"},
+        });
+        expect(block.type === "image" && block.data.src).toBe("/img.png");
+        expect(block.type === "image" && block.data.alt).toBe("A cat");
+    });
+
+    /**
+     * Found by mutation testing: the existing approachList test only
+     * checked `items` had length 1 — never the actual title/description
+     * content, and never that fewer than 1 item (`.min(1)`) is rejected.
+     */
+    it("parses approachList item title/description content, not just the count", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "approachList", text: null,
+            data: {items: [{title: "Step 1", description: "Do the thing"}]},
+        });
+        expect(block.type === "approachList" && block.data.items[0]).toEqual({
+            title: "Step 1",
+            description: "Do the thing",
+        });
+    });
+
+    it("rejects an approachList block with zero items", () => {
+        expect(() =>
+            parseBlock({id: "1", order: 0, type: "approachList", text: null, data: {items: []}}),
+        ).toThrow();
+    });
+
     it("rejects an unknown block type", () => {
         expect(() => parseBlock({ id: "1", order: 0, type: "not-a-real-type", text: null, data: null })).toThrow();
     });

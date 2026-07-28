@@ -18,12 +18,27 @@ const WORDS_PER_MINUTE = 200;
  * its line count would make a post with one long code block look like a
  * much longer read than it actually is.
  */
-function extractProse(block: BlockInput): string {
+// Exported (not just internal), specifically so mutation testing/unit tests
+// can pin each case's exact behavior directly — see reading-time.test.ts.
+// Testing only through `estimateReadMins`'s rounded-to-the-nearest-minute
+// output hid several real gaps (mutation testing found them): e.g. an
+// off-by-one word from a missing join separator almost never moves the
+// rounded minute count, so a test asserting only the final minutes number
+// can't tell a correct implementation from several subtly wrong ones.
+export function extractProse(block: BlockInput): string {
     switch (block.type) {
         case "lead":
         case "paragraph":
         case "heading":
         case "quote":
+        // Stryker disable next-line ConditionalExpression: equivalent, not
+        // untested — "note".text is a required (non-nullish) string per
+        // blocks.ts's Zod schema, so if a mutant deletes this case's own
+        // `return`, execution falls through into "image"'s `return
+        // block.text ?? ""` instead, which produces the exact same result
+        // for any string "note".text can actually hold (`??` only ever
+        // changes behavior for `null`/`undefined`, which this field's
+        // schema rules out).
         case "note":
             return block.text;
         case "image":
@@ -35,7 +50,17 @@ function extractProse(block: BlockInput): string {
     }
 }
 
-function countWords(text: string): number {
+export function countWords(text: string): number {
+    // Both `.trim()` and `\s+` (vs `\s`) are provably redundant given the
+    // trailing `.filter(Boolean)`, so their mutants are genuinely
+    // equivalent, not untested — verified by hand, not assumed, before
+    // disabling: "  a   b  ".split(/\s/) (no trim, single-char class)
+    // produces several empty strings around every individual whitespace
+    // character (e.g. between the 3 spaces in "a   b"), and untrimmed
+    // leading/trailing runs produce leading/trailing empty strings too —
+    // `.filter(Boolean)` discards every one of them, landing on the exact
+    // same ["a", "b"] either way.
+    // Stryker disable next-line Regex,MethodExpression
     return text.trim().split(/\s+/).filter(Boolean).length;
 }
 

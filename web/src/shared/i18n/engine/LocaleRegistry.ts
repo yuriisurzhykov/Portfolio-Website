@@ -44,6 +44,12 @@ export class LocaleRegistry {
      */
     lnFor(locale: string, i18key: string, vars?: Record<string, string | number>): string {
         let string = this.locales[locale]?.[i18key] ?? i18key;
+        // Stryker disable next-line ConditionalExpression: equivalent, not
+        // untested — `vars` is either `undefined` or an object literal
+        // (never a defined-but-falsy value, since `{}` is truthy too), and
+        // `for...in` over `undefined` simply doesn't iterate — verified,
+        // not assumed. So this guard can't be observed by forcing it to
+        // always be true; the loop below is already a no-op without it.
         if (vars) {
             for (const key in vars) {
                 string = string.replaceAll(`{${key}}`, String(vars[key]));

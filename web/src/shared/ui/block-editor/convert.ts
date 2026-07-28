@@ -29,10 +29,26 @@ type InlineContent = PortfolioBlock["content"];
  * double up.
  */
 function markdownToInlineContent(parsingEditor: PortfolioEditor, text: string): InlineContent {
+    // Equivalent for the one falsy `string` value this guard can ever see
+    // (`""`, since a real `text: string` can't be `null`/`undefined` — the
+    // Zod schema behind it doesn't allow that) — verified, not assumed:
+    // `parsingEditor.tryParseMarkdownToBlocks("")` already produces a
+    // single paragraph with `content: []`, identical to this early return.
+    // Kept as a small, self-documenting skip of the parser call for the
+    // common "block has no text yet" case, not because the parser can't
+    // handle "" itself.
+    // Stryker disable next-line ConditionalExpression,BlockStatement
     if (!text) {
         return [];
     }
     const [parsed] = parsingEditor.tryParseMarkdownToBlocks(text);
+    // Stryker disable next-line ArrayDeclaration: defensive, not confirmed
+    // reachable — tried a dozen edge-case inputs by hand (whitespace-only,
+    // "---", "> ", "```", zero-width space, an HTML comment) and
+    // `tryParseMarkdownToBlocks` always returned at least one block with a
+    // defined `.content` array for every non-empty string. Kept as a type-
+    // safety fallback against `tryParseMarkdownToBlocks`'s own optional
+    // typing, not proven unreachable in general.
     return (parsed?.content as InlineContent | undefined) ?? [];
 }
 

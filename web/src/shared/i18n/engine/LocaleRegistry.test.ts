@@ -25,7 +25,10 @@ describe("LocaleRegistry", () => {
 
     it("throws when switching to a locale that wasn't bundled, instead of silently doing nothing", () => {
         const registry = new LocaleRegistry({ en: {} }, "en");
-        expect(() => registry.setLocale("fr")).toThrow();
+        // Found by mutation testing: `.toThrow()` alone doesn't check the
+        // actual message content, which is what a developer sees in a
+        // stack trace/log when this fires.
+        expect(() => registry.setLocale("fr")).toThrow("No locale bundled for code fr.");
     });
 });
 

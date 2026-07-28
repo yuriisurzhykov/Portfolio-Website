@@ -56,6 +56,53 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
         expect(result[7]).toMatchObject({ type: "approachList", data: { items: [{ title: "T", description: "D" }] } });
     });
 
+    /**
+     * Found by mutation testing: every sample block above always provided
+     * its optional/nullable field explicitly (`data.level`, `data.
+     * attribution`, a caption, a language) — none of the `?? default`
+     * fallbacks for a genuinely missing (`null`/absent) field were ever
+     * exercised.
+     */
+    it("defaults a heading with no data to level 2, and round-trips an explicit level 3", () => {
+        const blocks: Block[] = [
+            { id: "1", order: 0, type: "heading", text: "Default level", data: null },
+            { id: "2", order: 1, type: "heading", text: "Explicit level 3", data: { level: 3 } },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result[0]).toMatchObject({ type: "heading", data: { level: 2 } });
+        expect(result[1]).toMatchObject({ type: "heading", data: { level: 3 } });
+    });
+
+    it("defaults a quote with no attribution to an empty string, distinct from an omitted one on the way back", () => {
+        const blocks: Block[] = [{ id: "1", order: 0, type: "quote", text: "No attribution here.", data: null }];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result[0]).toMatchObject({ type: "quote", data: undefined });
+    });
+
+    it("defaults an image with no caption and a code block with no language", () => {
+        const blocks: Block[] = [
+            { id: "1", order: 0, type: "image", text: null, data: { src: "/x.png", alt: "alt" } },
+            { id: "2", order: 1, type: "code", data: { filename: "a.kt", code: "fun main() {}" } },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result[0]).toMatchObject({ type: "image", text: undefined });
+        expect(result[1]).toMatchObject({ type: "code", data: { language: undefined } });
+    });
+
+    it("round-trips a block with empty text as empty inline content, without needing the markdown parser to produce anything", () => {
+        const blocks: Block[] = [{ id: "1", order: 0, type: "lead", text: "" }];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result[0]).toMatchObject({ type: "lead", text: "" });
+    });
+
     it("constructs a real editor with NO initial blocks (new post/case study), without throwing", () => {
         // `blocksToPartialBlocks([])` is `[]` — passed straight to
         // `BlockNoteEditor.create()` as `initialContent`, BlockNote itself
