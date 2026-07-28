@@ -1,1 +1,0 @@
-export { WorkDetailPage } from "./WorkDetailPage";

@@ -1,1 +1,0 @@
-export { JournalListPage } from "./JournalListPage";
