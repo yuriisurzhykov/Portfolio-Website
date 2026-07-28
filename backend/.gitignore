@@ -2,3 +2,5 @@
 .env
 .env.test
 *.tsbuildinfo
+.stryker-tmp/
+/reports
