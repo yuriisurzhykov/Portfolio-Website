@@ -91,14 +91,15 @@ jobs:
                 "checking out and executing untrusted code while holding write-scoped credentials."
               );
             }
+            core.setOutput("head_sha", pr.head.sha);
+            core.setOutput("head_ref", pr.head.ref);
 
-      - name: Checkout
+      - name: Checkout PR head commit (immutable)
         uses: actions/checkout@v4
-
-      - name: Checkout PR branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr checkout ${{ github.event.issue.number }}
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ steps.guard.outputs.head_sha }}
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -137,7 +138,7 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: accept visual regression baselines (via /update-snapshots)"
-            git push
+            git push origin HEAD:${{ steps.guard.outputs.head_ref }}
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
