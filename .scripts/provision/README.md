@@ -61,8 +61,10 @@ time you need it (disaster recovery, new server). See the repo's
   from the SSH/deploy account (`yuriisoft`, which has `sudo`) so that a
   compromised app process can't reach root via `sudo`.
 - `05-app-dirs.sh` — creates `${APP_BASE_DIR}/{releases,shared}` (default
-  `/srv/apps/yuriisoft-web`), parallel to the existing `/srv/apps/yuriisoft`
-  (frontend static site, untouched until cutover). `shared/` (mode 700,
+  `/srv/apps/yuriisoft-web`), parallel to `/srv/apps/yuriisoft` (the old
+  frontend static site's release directory — cutover at nginx already
+  happened, so that directory is now dead weight pending manual removal on
+  the VPS, not something still being served). `shared/` (mode 700,
   owned by `nextapp`) is where the persistent `.env` lives across every
   future release — see `06-app-env.sh`. Parameterized via `APP_BASE_DIR` so
   the same script also provisions a separate dev/staging rehearsal target
