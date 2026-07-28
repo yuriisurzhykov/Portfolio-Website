@@ -27,6 +27,19 @@ name: Accept Visual Baselines
 # can get it) isn't something its dataflow analysis traces into. Splitting the trust check into
 # its own job with an explicit job-level `if:` gate mirrors the exact "environment approval" /
 # "label gate" shape CodeQL's query documentation shows as the recognized-safe pattern.
+#
+# KNOWN RESIDUAL FINDING, dismissed as a false positive (not fixed further): CodeQL's
+# `actions/untrusted-checkout-toctou` query only recognizes ONE literal source as "provably
+# immutable" — the `github.event.pull_request.head.sha` context expression (see its own query
+# help docs' examples, both built on `pull_request_target`). `issue_comment` events carry no
+# `pull_request.head` data at all (only `issue.pull_request`'s URL fields), so that literal
+# expression cannot exist here by construction — the SHA can only come from an API call inside a
+# `github-script` step, which CodeQL's dataflow analysis doesn't trace into. It keeps flagging the
+# checkout below even though `head_sha` is captured in the exact same API response used to verify
+# `sameRepo`, one job earlier, with no window for the branch to change in between — a tool
+# precision gap for this whole class of comment-command workflows, not an unaddressed
+# vulnerability. Verified by hand, not assumed: re-read the query's own two examples
+# (Deployment Environment Approval, Label Gates) — neither covers `issue_comment` at all.
 on:
   issue_comment:
     types: [ created ]
