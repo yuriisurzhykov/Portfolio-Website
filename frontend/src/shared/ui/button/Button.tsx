@@ -1,7 +1,7 @@
 import * as React from "react";
 import { forwardRef } from "react";
 import { cn } from "@/shared/lib";
-import type { ButtonProps, ButtonSize, ButtonVariant } from "@/shared/ui/button/Button.types.ts";
+import type { ButtonProps, ButtonSize, ButtonVariant } from "@/shared/ui/button/Button.types";
 
 export const buttonBaseStyles =
     [
@@ -66,25 +66,25 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
         return (
             <button
-                ref={ ref }
-                type={ type ?? "button" }
-                className={ cn(
+                ref={ref}
+                type={type ?? "button"}
+                className={cn(
                     buttonBaseStyles,
                     buttonSizeClasses[size],
                     buttonVariantClasses[variant],
                     fullWidth && "w-full",
                     className
-                ) }
-                disabled={ isDisabled }
-                data-loading={ loading ? "true" : "false" }
-                aria-disabled={ isDisabled }
-                { ...rest }
+                )}
+                disabled={isDisabled}
+                data-loading={loading ? "true" : "false"}
+                aria-disabled={isDisabled}
+                {...rest}
             >
-                { iconLeft && (<span className="inline-flex items-center">{ iconLeft }</span>) }
+                {iconLeft && (<span className="inline-flex items-center">{iconLeft}</span>)}
 
-                <span className="inline-flex items-center">{ children }</span>
+                <span className="inline-flex items-center">{children}</span>
 
-                { iconRight && (<span className="inline-flex items-center">{ iconRight }</span>) }
+                {iconRight && (<span className="inline-flex items-center">{iconRight}</span>)}
             </button>
         );
     }

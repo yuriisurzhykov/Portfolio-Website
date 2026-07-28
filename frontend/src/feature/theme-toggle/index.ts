@@ -1,1 +1,1 @@
-export { ThemeToggle } from "./ui/ThemeToggle.tsx";
+export { ThemeToggle } from "./ui/ThemeToggle";

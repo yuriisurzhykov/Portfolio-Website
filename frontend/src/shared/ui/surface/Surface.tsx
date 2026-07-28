@@ -1,5 +1,5 @@
 import React, { type ForwardedRef, forwardRef } from "react";
-import { cn } from "@/shared/lib/utils.ts";
+import { cn } from "@/shared/lib/utils";
 
 const defaultStyle = "bg-surface border border-border rounded-xl";
 

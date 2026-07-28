@@ -1,3 +1,5 @@
+"use client";
+
 import { useContext } from "react";
 import { I18nContext } from "./I18nContext";
 import type { I18nContextType } from "./types";

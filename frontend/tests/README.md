@@ -1,12 +1,13 @@
 # Visual Regression & Accessibility Testing — Personal Guide
 
-> Personal runbook for the screenshot / visual-regression / accessibility CI added to this
-> repository. This document is meant to be read top-to-bottom the first time, then used as a
-> reference. Section 11 and 12 are living sections — they get updated every time something in
-> this setup changes or breaks.
+> Personal runbook for the screenshot / visual-regression / accessibility suite, ported here from
+> `frontend/tests/` (the legacy Vite SPA) once `frontend/` (Next.js + Postgres) became the app that
+> actually needs this coverage. Read top-to-bottom the first time, then use as a reference.
+> Sections 11 and 12 are living sections — they get updated every time something in this setup
+> changes or breaks.
 
-Status legend used below while this guide is being filled in: `TBD` = not written yet, will be
-filled in as the corresponding implementation step lands.
+Status legend used below while parts of this guide are still being filled in: `TBD` = not written
+yet, will be filled in as the corresponding implementation step lands.
 
 ## Table of contents
 
@@ -27,16 +28,19 @@ filled in as the corresponding implementation step lands.
 
 ## 1. Overview
 
-This repo has automated screenshot (visual-regression) and accessibility testing, running on
-every pull request and on every push to `master`. It exists to catch three kinds of problems
-before they ship: unintended visual/layout regressions, broken responsiveness across
-desktop/tablet/mobile, and accessibility/contrast issues — across both the light and dark themes.
+This repo has automated screenshot (visual-regression) and accessibility testing for `frontend/`, the
+Next.js app that has replaced the legacy Vite SPA (which used to live at this same `frontend/` path,
+before it was retired and this app was renamed into its place) in production. It exists to catch
+three kinds of problems before they ship: unintended visual/layout regressions, broken
+responsiveness across desktop/tablet/mobile, and accessibility/contrast issues — across both the
+light and dark themes.
 
 **Tooling:** [Playwright](https://playwright.dev) (`@playwright/test`) for browser automation and
 pixel-diff screenshots, plus [`@axe-core/playwright`](https://github.com/dequelabs/axe-core-npm)
 for accessibility scans. Both are free and self-hosted (no third-party SaaS account needed), and
 Playwright's built-in `toHaveScreenshot()` stores baseline images as plain PNGs committed directly
-in this repo (`frontend/tests/visual-snapshots/`) — that's the "references" folder.
+in this repo (`frontend/tests/visual-snapshots/`) — that's the "references" folder. Identical tooling
+choice to the legacy Vite SPA's `frontend/tests/` — nothing here needed to change to fit Next.js.
 
 **Matrix:** every real page × light/dark theme × 3 viewports (Desktop 1440×900, Tablet 834×1194,
 Mobile 390×844), all on Chromium. Locale is fixed to `en` (the site's default) to keep the matrix
@@ -54,27 +58,62 @@ before you merge. See section 8.
 published to GitHub Pages on every run, and a sticky comment on the PR summarizes pass/fail counts
 and any accessibility violations found, with a link to the full report (section 7).
 
+**What actually changed porting this from the legacy Vite SPA's `frontend/tests/` to this app's `frontend/tests/` (formerly `web/tests/`, before the later `web/` → `frontend/` rename):** the tests
+themselves (`visual.spec.ts`, `a11y.spec.ts`, `utils/theme.ts`, the summary reporter) are
+byte-for-byte the same logic — same matrix, same theme-seeding trick, same blocking-impact set.
+What had to change is *where the page list comes from*: `frontend/`'s pages were a static in-repo
+import (`@/data/work`, `@/data/journal`); `frontend/`'s pages live in Postgres, fetched through
+`@portfolio/backend`. That's a fundamentally different (async) data-access shape, and it's the
+reason this port needed a new file (`generate-pages-manifest.ts`) that didn't exist before — see
+section 4 for the full story, including the Playwright limitation that forced this design.
+
+**Corrected after the first version shipped — see section 12's 2026-07-27 "correction" entry
+before assuming this suite talks to a live database.** The very first working version of this
+port queried the real dev database directly. That was wrong, not just a later style preference:
+dev content changes constantly as the actual site evolves (new work items, new posts), which
+makes a "regression" suite's results depend on whatever happened to exist at the moment someone
+ran it — exactly the kind of instability a test suite exists to eliminate, not introduce. Caught
+by the user, who asked to be consulted on the data-strategy decision *before* it was implemented,
+not after. Four real 2026-era approaches to this problem were discussed (seeded test database,
+fake in-memory backend swapped in at build time, MSW + Next's `testProxy`, Storybook-level
+component isolation) — this suite ended up on the first one; the other three are recorded as
+deliberate backlog, not rejected outright, in section 12.
+
 **Why this document exists:** it's the single place documenting every decision made while
-building this — including two color-token fixes that were tried and rejected before landing on
-the final approach (section 11) — so that six months from now, "why is this token named like
-this" and "why does this CI step exist" both have answers here instead of having to be
-reverse-engineered from git history.
+building and then porting this — including two color-token fixes that were tried and rejected
+before landing on the final approach, and a real Playwright limitation hit while porting the page
+manifest to a database-backed source (both in section 11) — so that six months from now, "why is
+this token named like this" and "why does this file exist" both have answers here instead of
+having to be reverse-engineered from git history.
 
 ## 2. Environment & initial setup
 
 ### Requirements
 
-- Node.js 20+ (the CI workflow pins **Node 20** to match the existing `deploy_release.yaml`
-  workflow; locally this was developed against Node 22.22.0, which also works fine — the app has
-  no Node-version-specific code).
-- npm (comes with Node). This repo uses `npm ci`/`package-lock.json`, not yarn/pnpm.
+- Node.js 20+ (`backend-web-checks.yml`, the CI workflow covering `frontend/`, pins **Node 22** because
+  `@stryker-mutator/vitest-runner` needs it — this suite doesn't have its own separate Node
+  requirement, it just rides along with whatever `frontend/`'s other CI already uses). Locally this was
+  developed against Node 22.22.0/24.x, which also works fine — the app has no Node-version-specific
+  code.
+- npm (comes with Node). This repo uses `npm ci`/`package-lock.json` at the workspace root, not
+  yarn/pnpm.
+- A running Postgres, with `backend/.env.test`'s `portfolio_test` database migrated (`cd backend
+  && npm run test:migrate`) — see section 3. Unlike `frontend/`'s version of this suite, which
+  needed zero external services, this one's page list is generated FROM the database (section 4).
+  **Deliberately NOT the dev database** (`backend/.env`'s `portfolio`) — see this document's
+  intro and section 12's 2026-07-27 entry for why an earlier version of this port got that wrong.
 
 ### First-time setup
 
 ```bash
-cd frontend
-npm ci                                # install all dependencies, incl. @playwright/test, @axe-core/playwright
+# from the repo root — frontend/ and backend/ are npm workspace members, installed together
+npm install
+cd web
 npx playwright install chromium       # downloads the Chromium browser binary Playwright drives
+
+# One-time (or after schema changes): make sure the TEST database (not dev) has the current schema
+cd ../backend
+npm run test:migrate
 ```
 
 `npx playwright install` downloads browser binaries into a local cache
@@ -99,22 +138,32 @@ rendering) genuinely differs between Windows and Linux, even with an identical b
 identical CSS. This means: **a screenshot baseline generated on your Windows machine will very
 likely NOT match pixel-for-pixel with the same page rendered on the Ubuntu GitHub Actions runner**,
 even when nothing about the page actually changed. This is the single biggest practical gotcha of
-this whole setup.
+this whole setup — unchanged from the `frontend/tests/` original.
 
 The resolution: **baselines are always generated by CI (Ubuntu/Linux), never by a manual local
 run on Windows.** See [section 6](#6-updating-baseline-screenshots-locally) for how to reproduce
 the CI environment locally via Docker if you need to debug a diff without pushing.
 
+**Rendered markup/CSS differs enough from the old Vite app that pixel baselines had to be
+regenerated fresh, not copied over from `frontend/tests/visual-snapshots/`** — Next.js's SSR HTML
+and the exact same Tailwind build don't byte-match the old Vite output closely enough for a
+pixel-diff tool to treat them as "the same page." No baselines are committed as part of this port;
+the first real CI run against a seeded database produces them, same mechanism as section 6/12.
+
 ## 3. Environment variables
 
-**Nothing is required.** Normal local runs and normal CI runs need zero environment variables —
-`playwright.config.ts` builds the app and starts `vite preview` on `http://localhost:4173`
-automatically, and CI's PR-comment/GitHub Pages steps use the `GITHUB_TOKEN` Actions injects by
-default (see sections 7/9).
+**Nothing new is required beyond what `backend/`'s own test suite already needs.**
+`playwright.config.ts` loads `backend/.env.test` itself (note: **`.env.test`, not `.env`** — see
+this document's intro) so `DATABASE_URL` (pointing at `portfolio_test`) is available to
+`generate-pages-manifest.ts` and to the `webServer`-started Next.js app without any
+suite-specific setup beyond what `backend/README.md` already documents for `npm test`. Normal
+local runs need `backend/.env.test` to exist (copy from `.env.test.example`) and `portfolio_test`
+to be migrated — `frontend/`'s version of this suite never had this requirement at all, since its
+page list came from a static import with zero database dependency.
 
 One optional variable, for a specific edge case: `PLAYWRIGHT_BASE_URL`. Set it only if you want to
 point the suite at an already-deployed URL (e.g. a staging deployment) instead of building and
-previewing locally:
+starting the Next.js app locally:
 
 ```bash
 # frontend/.env.test (copy from .env.test.example — gitignored, never commit your own)
@@ -123,11 +172,9 @@ PLAYWRIGHT_BASE_URL=https://staging.example.com
 
 When set, `playwright.config.ts` uses it as `baseURL` directly and skips starting the local
 `webServer` entirely (no point building the app locally if you're testing a deployed instance).
-Unset (the default) it falls back to `http://localhost:4173`.
+Unset (the default) it falls back to `http://localhost:3100`.
 
-No other `.env` files exist or are needed anywhere else in this repo for this feature — the only
-other secrets in the repository are the VPS SSH deploy credentials used by the pre-existing
-`deploy_release.yaml` workflow, which are completely unrelated to this testing setup.
+No other `.env` files exist or are needed anywhere else in this repo for this feature.
 
 ## 4. Test structure & how to add pages
 
@@ -136,8 +183,12 @@ frontend/
   playwright.config.ts
   tests/
     README.md                       # this file
+    tsconfig.json                   # own small TS project — see its own comment for why
+    .generated/                     # gitignored — generate-pages-manifest.ts's JSON output
+      pages-manifest.json
     e2e/
-      pages.manifest.ts             # dynamic — ALL real pages, used by a11y.spec.ts only
+      generate-pages-manifest.ts    # THE ONLY file here that talks to the database (portfolio_test, never dev)
+      pages.manifest.ts             # sync reader of .generated/pages-manifest.json, used by a11y.spec.ts
       visual-fixtures.manifest.ts   # static — curated subset, used by visual.spec.ts only
       utils/theme.ts                # seedTheme(page, "light" | "dark")
       visual.spec.ts
@@ -164,13 +215,66 @@ treats array elements as nested path segments, so combined with `snapshotPathTem
 `playwright.config.ts` (`{snapshotDir}/{arg}-{projectName}{ext}`), the viewport (`{projectName}`)
 still ends up in the filename while the page name becomes the folder.
 
-**Two separate manifests, on purpose:** `pages.manifest.ts` is *dynamic* — it imports
-`@/data/work` and `@/data/journal` directly and derives one entry per page that actually renders
-(every `work` item with a `caseStudy`, every `journal` post with a `body`), plus 3 hardcoded
-static routes (`/`, `/work`, `/journal`). `visual-fixtures.manifest.ts` is *static* — a
-hand-picked list of a few of those same paths, chosen to represent distinct template variants,
-and it validates every path it lists still exists in `pages.manifest.ts` (throws a clear error at
-import time if not — e.g. if a case study's slug changes).
+### Why a `generate-pages-manifest.ts` script exists at all (the actual porting problem)
+
+`frontend/tests/e2e/pages.manifest.ts` could build the page list with a plain, synchronous
+`export const pagesManifest = [...]`, because its data source (`@/data/work`, `@/data/journal`)
+was a static in-repo import — no I/O, so no `async` needed anywhere.
+
+`frontend/`'s content lives in Postgres. Building the equivalent list means calling `getAllWork()` /
+`getJournalEntries()` (from `@portfolio/backend`, the same package the app itself uses) — which are
+inherently `async`. The first draft of this port tried to just make `pages.manifest.ts` itself
+`async` and `await` it from the top of `visual.spec.ts`/`a11y.spec.ts`. **This does not work**:
+Playwright discovers tests by requiring every spec file **twice** — once synchronously, purely to
+enumerate `test()` calls, and again for the actual run. A top-level `await` in a spec file only
+resolves during the second pass; during the fast discovery pass, any `test()` calls gated behind
+it simply never register, and Playwright reports "No tests found." This isn't a guess — it's
+confirmed against real reports from other projects hitting the exact same wall (see section 11 for
+the citations), and it's also *why* Playwright's own docs recommend generating dynamic test data
+in a separate step and reading it back synchronously, rather than trying to `await` it inline.
+
+The fix that's actually in place: `generate-pages-manifest.ts` is a plain Node script (not a
+Playwright file at all — run via `tsx`, before Playwright ever starts) that does the real
+`getAllWork()`/`getJournalEntries()` calls and writes a plain JSON file
+(`tests/.generated/pages-manifest.json`, gitignored). `pages.manifest.ts` goes back to being
+exactly what it was in `frontend/tests/` — a synchronous module, just reading that JSON with
+`fs.readFileSync` instead of importing static data. Every `npm run test:e2e`/`test:visual`/
+`test:a11y`/`test:e2e:update` script in `package.json` runs `test:e2e:prepare` first
+(`test:e2e:prepare && playwright test ...`, itself `test:e2e:seed-fixtures &&
+test:e2e:generate-manifest` — see below) — running `npx playwright test` directly, bypassing npm
+scripts, skips this and fails with a clear, actionable error from `pages.manifest.ts` telling you
+to run the prepare step first.
+
+### Where the data itself comes from — a seeded test database, NOT the dev database
+
+`generate-pages-manifest.ts` and the `webServer`-started Next.js app both read from
+`backend/.env.test`'s `portfolio_test` database — **never** `backend/.env`'s real dev database.
+This wasn't the original design (see this document's intro and section 12's 2026-07-27 entry) —
+the first working version of this port queried the dev database directly, which is exactly the
+"constantly changing data" problem a regression suite exists to eliminate, not depend on: a new
+work item or post added through the admin panel would silently change what pages exist and what
+they render, making yesterday's passing run and today's a comparison between two different sites,
+not evidence of a real regression either way.
+
+The fix: `test:e2e:seed-fixtures` (`npm --prefix ../backend run seed-e2e-fixtures`, which runs
+`backend/scripts/seed-e2e-fixtures.ts` against `.env.test`) hard-resets `portfolio_test` and
+inserts a small, fixed, deliberately-curated set of content — 3 work items (2 with a case study,
+1 without) and 3 posts (2 with a body, 1 "upcoming" stub without) — via the SAME `createWork`/
+`createPost` functions the admin panel's own API routes call, not raw `prisma.*.create()` calls
+(so `Document`/`Block` creation for case studies/bodies is never duplicated logic). Every
+`test:e2e*`/`test:visual`/`test:a11y` npm script runs this before `generate-pages-manifest.ts`, so
+the manifest and the actual server under test always agree on exactly the same 7 real pages —
+listed and reasoned about in `backend/scripts/seed-e2e-fixtures.ts`'s own doc comment, not
+duplicated here. See `backend/scripts/README.md` for the seed script's own dated entry.
+
+**Two separate manifests, on purpose, same reasoning as `frontend/tests/`:** `pages.manifest.ts`
+is the *dynamic, full* list — one entry per page that actually renders (every work item with
+`hasCaseStudy: true`, every journal post with a real body document), plus 3 hardcoded static
+routes (`/`, `/work`, `/journal`). `visual-fixtures.manifest.ts` is *static* — the same
+hand-picked 5-route list `frontend/tests/` used (routes are identical between the two apps), and
+it validates every path it lists still exists in `pages.manifest.ts` at import time, throwing a
+clear error otherwise (e.g. if a case study's slug changes, or the database the manifest was
+generated against doesn't have that content seeded yet).
 
 **Why the split:** accessibility scans are cheap (no images stored, just DOM assertions) so
 `pages.manifest.ts` can safely scale to hundreds of future articles/projects with zero added
@@ -179,40 +283,46 @@ forever, in git history) — testing every single future article visually would 
 extra signal (it's the same shared page template being re-tested) while bloating the repo. So
 visual regression stays pinned to a small, deliberately curated set. See section 11 for why
 *masking* the dynamic content areas of `home`/`work-list`/`journal-list` was considered as an
-alternative and dropped in favor of the `/update-snapshots` mechanism (section 8).
+alternative in the original `frontend/tests/` implementation and dropped in favor of the
+`/update-snapshots` mechanism (section 8) — that decision carries over unchanged.
 
-Neither manifest adds anything to the domain types — `WorkItem`/`JournalPost` in `src/data/*.ts`
-have zero knowledge that tests exist. That separation of concerns is intentional and should stay
-that way; if you need a different subset of pages for some future test type, create another
-manifest file, don't add a flag to the domain model.
+Neither manifest adds anything to `@portfolio/backend`'s domain types (`WorkSummary`/
+`PostSummary`) — they have zero knowledge that tests exist, same separation of concerns the
+original `frontend/tests/` established with `WorkItem`/`JournalPost`. If you need a different
+subset of pages for some future test type, create another manifest file, don't add a flag to the
+domain model.
 
 ### How to add pages
 
-- **New journal post or work case study with the existing template shape:** add it to
-  `journal.ts` / `work.ts` as normal (give it a `body`/`caseStudy`). `pages.manifest.ts` picks it
-  up automatically — it will get accessibility coverage on the next run, with zero test-code
-  changes. It will NOT automatically get visual-regression coverage (see above) — that's
-  deliberate. If the visual check on `home`/`work-list`/`journal-list` fails just because your
-  new content changed what they render, that's expected — see section 8 to accept it.
+- **New fixture journal post or work item, for template-variant coverage:** add it to
+  `backend/scripts/seed-e2e-fixtures.ts`'s `FIXTURES` object (via `createWork`/`createPost`, same
+  as the existing entries) — NOT through the admin panel, and NOT against `backend/.env`'s dev
+  database (see the section above for why). The next `npm run test:e2e`/`test:a11y`/etc. reseeds
+  `portfolio_test` and regenerates the manifest, picking the new fixture up automatically —
+  accessibility coverage with zero test-code changes beyond the fixture itself. It will NOT
+  automatically get visual-regression coverage (see above) — that's deliberate. If the visual
+  check on `home`/`work-list`/`journal-list` fails just because your new content changed what they
+  render, that's expected — see section 8 to accept it.
 - **You want this specific new page visually regression-tested too** (e.g. it uses a new content
   block type, or a layout variant nothing else has): add its path to the `FIXTURE_PATHS` array at
   the top of `tests/e2e/visual-fixtures.manifest.ts`.
 - **A brand-new top-level route** (e.g. a future `/about`): add one line to the `staticPages`
-  array in `tests/e2e/pages.manifest.ts`. If you also want it visually tested, add it to
+  array in `tests/e2e/generate-pages-manifest.ts` (NOT `pages.manifest.ts` — that file just reads
+  the JSON the generator writes). If you also want it visually tested, add it to
   `visual-fixtures.manifest.ts` too.
 - **A fixture's underlying content gets renamed/removed:** `visual-fixtures.manifest.ts` throws a
-  descriptive error at test-collection time (`npx playwright test --list` will fail loudly) rather
-  than silently dropping that page from coverage — update `FIXTURE_PATHS` to point at something
-  that still exists.
+  descriptive error at test-collection time (`npx playwright test --list` will fail loudly, after
+  you've run the generator at least once) rather than silently dropping that page from coverage —
+  update `FIXTURE_PATHS` to point at something that still exists.
 
 ## 5. Running tests locally
 
 ```bash
-cd frontend
+cd web
 
-npm run test:e2e              # everything (visual + a11y, all projects)
-npm run test:visual           # only tests/e2e/visual.spec.ts
-npm run test:a11y             # only tests/e2e/a11y.spec.ts
+npm run test:e2e              # seeds fixtures + generates the manifest, then runs everything (visual + a11y, all projects)
+npm run test:visual           # seeds fixtures + generates the manifest, then runs only tests/e2e/visual.spec.ts
+npm run test:a11y             # seeds fixtures + generates the manifest, then runs only tests/e2e/a11y.spec.ts
 
 npx playwright test --project=Desktop         # only the Desktop viewport project
 npx playwright test -g "home @ light"         # only tests whose title matches this string
@@ -224,16 +334,21 @@ npx playwright test --ui                      # interactive UI mode (recommended
 npm run test:e2e:report       # opens the last HTML report (or: npx playwright show-report)
 ```
 
+Running `npx playwright test ...` directly (any of the three commands above) skips both the
+fixture-seeding and manifest-generation steps — only safe if you already ran `npm run
+test:e2e:prepare` (or one of the `npm run test:*` scripts) at least once. Otherwise
+`pages.manifest.ts` throws a clear error telling you to run it.
+
 `--list` (e.g. `npx playwright test --list`) is useful to sanity-check the manifest/fixture logic
 without launching a single browser — it prints every resolved test title, and importantly, it's
 also what will surface a `visual-fixtures.manifest.ts` "stale fixture" error immediately, since
-that check runs at module-import time.
+that check runs at module-import time (after the JSON manifest has already been generated once).
 
 ## 6. Updating baseline screenshots locally
 
 ```bash
 npm run test:e2e:update
-# equivalent to: npx playwright test tests/e2e/visual.spec.ts --update-snapshots
+# equivalent to: npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts --update-snapshots
 ```
 
 **Don't commit baselines generated this way on Windows.** As covered in section 2, Windows and
@@ -245,17 +360,20 @@ false diff the moment CI (Ubuntu) runs against it. Three options, in order of pr
    either — the PR job's HTML report shows you exactly what changed, actual/expected/diff, side
    by side).
 3. **Reproduce the CI environment locally via Docker**, if you specifically want to iterate on a
-   diff without pushing anything yet:
+   diff without pushing anything yet. This needs a reachable Postgres from inside the container
+   too (`--network host` on Linux, or point `DATABASE_URL` at a host that's reachable from
+   Docker's network on Windows/macOS) — and, same as any local run, `backend/.env.test`'s
+   `portfolio_test` database, migrated, never the dev one:
 
    ```bash
-   docker run --rm -v "${PWD}:/work" -w /work/frontend \
+   docker run --rm -v "${PWD}:/work" -w /work/web \
      mcr.microsoft.com/playwright:v1.61.1-noble \
-     npx playwright test tests/e2e/visual.spec.ts --update-snapshots
+     bash -c "npm run test:e2e:prepare && npx playwright test tests/e2e/visual.spec.ts --update-snapshots"
    ```
 
-   (Match the image tag's Playwright version to `frontend/package.json`'s `@playwright/test`
-   version whenever you bump it — see section 10.) This runs the exact same Ubuntu/Chromium
-   combination the GitHub Actions runner uses, so the resulting PNGs are safe to commit directly.
+   (Match the image tag's Playwright version to `frontend/package.json`'s `@playwright/test` version
+   whenever you bump it — see section 10.) This runs the exact same Ubuntu/Chromium combination
+   the GitHub Actions runner uses, so the resulting PNGs are safe to commit directly.
 
 ## 7. How this works in CI
 
@@ -273,6 +391,17 @@ section 8):
   needed), this run is a confirmation, not a place that fixes anything — `master` has a
   repository ruleset blocking direct pushes anyway, so this job never tries to commit here (see
   section 8 for why that matters).
+
+Unlike `frontend/tests/`'s version of this workflow, the job now also runs an ephemeral
+`postgres:16-alpine` service container (same image/settings as `backend-web-checks.yml`'s own job,
+kept in sync deliberately), with `DATABASE_URL`/`JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` set as
+real job-level env vars — not a `backend/.env.test` file, which doesn't exist in CI. A dedicated
+"Apply migrations to the CI database" step runs `npx prisma migrate deploy` in `backend/` before
+Playwright starts, then the "Run tests" step's `npm run test:e2e` reseeds `portfolio_test` and
+regenerates the manifest against that same database (section 4) before running the suite. Also
+unlike the legacy Vite SPA's `frontend/tests/`, dependencies are installed once at the **repo root** (`npm ci`, no
+`working-directory`), since `frontend`/`backend` are npm workspace members sharing one root
+`package-lock.json` — the legacy Vite SPA had its own standalone lockfile and could install in place.
 
 Regardless of outcome, the job always (`if: always()`) goes on to: publish the HTML report to
 GitHub Pages (section 9), and — on PRs — post/update a sticky summary comment built by
@@ -294,13 +423,14 @@ Where to look:
 Workflow file:
 [`.github/workflows/accept-visual-baselines.yml`](../../.github/workflows/accept-visual-baselines.yml).
 
-**Why this exists instead of a master auto-commit:** the original design regenerated baselines on
-`master` after merge and committed them directly. That doesn't work here — `master` has a
-repository ruleset (PR required, status checks required, CodeQL required) that blocks direct
-pushes, including from a bot with `contents: write`. The fix isn't to bypass that (e.g. via a PAT
-in the ruleset's allow-list — see the [RESOLVED] note in section 11 for the workaround that was
-tried first and abandoned) — it's to never need to push to `master` at all: baselines get
-accepted **before** merging, from the PR's own branch, which has no such restriction.
+**Why this exists instead of a master auto-commit:** the original `frontend/tests/` design
+regenerated baselines on `master` after merge and committed them directly. That doesn't work here
+— `master` has a repository ruleset (PR required, status checks required, CodeQL required) that
+blocks direct pushes, including from a bot with `contents: write`. The fix isn't to bypass that
+(e.g. via a PAT in the ruleset's allow-list — see the `[RESOLVED]` note in section 11 for the
+workaround that was tried first and abandoned) — it's to never need to push to `master` at all:
+baselines get accepted **before** merging, from the PR's own branch, which has no such
+restriction.
 
 **How to use it:** when a visual check fails and the report shows the diff is just your own
 content change (not a real bug), comment exactly:
@@ -312,8 +442,10 @@ content change (not a real bug), comment exactly:
 on the PR. The bot reacts with 👍, then:
 
 1. Checks out the **PR's own branch** (via `gh pr checkout`, not `master`).
-2. Regenerates `tests/visual-snapshots/` (`npx playwright test tests/e2e/visual.spec.ts --update-snapshots`)
-   in the same Ubuntu/Chromium environment CI uses — no local Docker step needed.
+2. Regenerates `tests/visual-snapshots/` (`npm run test:e2e:prepare && npx playwright
+   test tests/e2e/visual.spec.ts --update-snapshots`) in the same Ubuntu/Chromium environment CI
+   uses — no local Docker step needed. Needs the CI Postgres service container reachable, same as
+   the main check (section 7).
 3. Commits and pushes straight to that branch if anything actually changed.
 4. Posts a follow-up comment: ✅ if it pushed an update, ℹ️ if there was nothing to update, ❌ with
    a link to the run if something went wrong.
@@ -335,7 +467,9 @@ explicit **"Verify the PR branch is not from a fork"** step, *before* any checko
 it fetches the PR via the API and compares `head.repo.full_name` to this repository; if they
 don't match, the job fails closed (`core.setFailed`) before fetching or running a single line of
 the PR's code, and the final comment reports "ignored — this PR is from a fork" instead of a
-generic failure. See the `[RESOLVED]` entry in section 11 for how this was found.
+generic failure. See the `[RESOLVED]` entry in section 11 for how this was found. (This is all
+`frontend/tests/`-era history, carried over here unchanged — the fork guard doesn't need any
+`frontend/`-specific change once the workflow itself is retargeted.)
 
 **Known limitation:** only works for PRs whose branch lives in this repository (not a fork) —
 `gh pr checkout` plus a push needs write access to the branch, which a fork's branch doesn't grant
@@ -349,15 +483,12 @@ Reports are published via
 [`peaceiris/actions-gh-pages`](https://github.com/peaceiris/actions-gh-pages), which pushes the
 built Playwright HTML report to a `gh-pages` branch, into a subfolder per run
 (`reports/pr-<number>/` or `reports/master/`), with `keep_files: true` so older reports from other
-PRs aren't wiped out by a newer run.
+PRs aren't wiped out by a newer run. Unchanged from `frontend/tests/` — this mechanism has nothing
+Vite/Next-specific about it.
 
-**One-time manual setup required** (cannot be done via a commit — this is a repository setting):
-
-1. Go to the repo on GitHub → **Settings → Pages**.
-2. Under "Build and deployment" → **Source**, choose **Deploy from a branch**.
-3. Branch: **`gh-pages`**, folder: **`/ (root)`**. Save.
-4. The `gh-pages` branch itself doesn't need to exist beforehand — `peaceiris/actions-gh-pages`
-   creates it automatically on the first workflow run if it's missing.
+**One-time manual setup** (already done, carried over unchanged from the `frontend/tests/`
+implementation — nothing to redo here): repo **Settings → Pages**, source **Deploy from a branch**,
+branch **`gh-pages`**, folder **`/ (root)`**.
 
 After that one-time step, every workflow run publishes to
 `https://<owner>.github.io/<repo>/reports/<pr-N|master>/` automatically — no further manual steps.
@@ -376,16 +507,19 @@ knowing if that ever changes.
 
 ## 10. Updating dependencies
 
-### Versions installed initially
+### Versions installed initially (matching `frontend/tests/`'s versions at time of port)
 
 - `@playwright/test`: `1.61.1`
 - `@axe-core/playwright`: `4.12.1`
+- `tsx`: `4.23.1` (new — needed to run `generate-pages-manifest.ts` as a standalone Node script;
+  see section 4. Same version already used by `backend/` for its own scripts, kept in sync
+  deliberately rather than picking a different one for no reason.)
 
 Installed with:
 
 ```bash
-cd frontend
-npm install --save-dev @playwright/test@1.61.1 @axe-core/playwright@4.12.1
+cd web
+npm install --save-dev @playwright/test@1.61.1 @axe-core/playwright@4.12.1 tsx@4.23.1
 ```
 
 ### How to bump these later
@@ -394,10 +528,11 @@ npm install --save-dev @playwright/test@1.61.1 @axe-core/playwright@4.12.1
    `npm view @axe-core/playwright version`.
 2. Read the Playwright release notes for the versions between what you have and the target,
    specifically for: changes to `toHaveScreenshot` defaults, changes to built-in `devices[]`
-   presets (device names/viewports occasionally get added or renamed — this bit us once, see
-   [section 11](#11-known-issues--notes)), and changes to the HTML/GitHub reporters.
+   presets (device names/viewports occasionally get added or renamed — this bit the original
+   `frontend/tests/` implementation once, see [section 11](#11-known-issues--notes)), and changes
+   to the HTML/GitHub reporters.
 3. Bump in `frontend/package.json`, then run `npm install` (or `npm update @playwright/test
-   @axe-core/playwright`) to refresh `package-lock.json`.
+   @axe-core/playwright`) to refresh the root `package-lock.json`.
 4. **Re-run `npx playwright install chromium`** after bumping `@playwright/test` — the npm
    package version and the downloaded browser binary version are coupled; an out-of-sync browser
    binary is the most common source of "works locally, fails in CI" (or vice versa) after a
@@ -407,17 +542,84 @@ npm install --save-dev @playwright/test@1.61.1 @axe-core/playwright@4.12.1
    accepted via a PR (per [section 8](#8-accepting-new-baselines-from-a-pr-update-snapshots))
    right after a Playwright upgrade, and treat that particular baseline diff as "expected churn
    from the upgrade", not a real regression.
-6. Also bump the Node version in `.github/workflows/visual-tests.yml` (`node-version: 20`) if you
-   want to track a newer Node LTS — keep it in sync with `deploy_release.yaml` unless you have a
-   specific reason to diverge.
+6. Also bump the Node version in `.github/workflows/visual-tests.yml` if you want to track a newer
+   Node LTS — keep it in sync with `backend-web-checks.yml`'s Node version unless you have a
+   specific reason to diverge (currently 20 here vs. 22 there; see that workflow's own comment for
+   why it needs the newer one and why this suite doesn't).
 
 ## 11. Known issues & notes
 
 _(Living section — append a new entry every time a real problem is hit during setup or later
 maintenance. Do not delete old entries even if they're later fixed elsewhere — mark them
-resolved instead, so the history of "what bit us" is preserved.)_
+resolved instead, so the history of "what bit us" is preserved. Entries below inherited from
+`frontend/tests/README.md` are kept verbatim, since they document real problems hit in code that
+this suite still shares logic with — see section 1's "what actually changed" note.)_
 
-### [RESOLVED] `toHaveScreenshot(name)` requires the `.png` extension in the name
+### [RESOLVED, from this port] The suite originally queried the live DEV database, not a seeded test one
+
+Shipped once, working end-to-end (verified live), but wrong: see section 12's 2026-07-27
+"Correction" entry for the full writeup, including the four data-strategy approaches considered
+and why the other three were filed as backlog instead of chosen. Short version: a regression
+suite comparing against a database that changes every time someone adds real content through the
+admin panel isn't testing for regressions, it's testing "did the content change" — which it
+always will, eventually, for reasons that have nothing to do with a real bug. Fixed by
+`backend/scripts/seed-e2e-fixtures.ts` (a hard reset-then-seed of `backend/.env.test`'s
+`portfolio_test`, never the dev database) plus repointing `generate-pages-manifest.ts`/
+`playwright.config.ts` at `.env.test`.
+
+### [NEW, from this port] Playwright can't await a database query at module-import time — this forced a new script
+
+First draft of this port tried the obvious thing: make `pages.manifest.ts` an `async function`
+and call `await getPagesManifest()` at the top of `visual.spec.ts`/`a11y.spec.ts`, mirroring how
+`app/(site)/*/page.tsx` already calls these same backend functions. Running `npx playwright test`
+reported **zero tests found** — no error, just an empty run.
+
+Root cause, confirmed by deliberately adding a `console.log` at the top of the spec file: it gets
+required **twice** by Playwright — a fast, synchronous "discovery" pass that only counts/collects
+`test()` calls (no test actually runs yet), then a second pass that executes them. Top-level
+`await` only actually resolves during the second pass; during discovery, execution just... stops
+at the `await`, so none of the `test()` calls after it (all of them, in this suite's design) ever
+register. This matches reports from other real projects hitting the identical wall — see
+https://github.com/microsoft/playwright/issues/12857 and
+https://stackoverflow.com/questions/78158808 — both independently arrive at the same fix: **run
+the async data-gathering as its own step before Playwright starts, write it to a file, read that
+file synchronously inside the spec.**
+
+Fix: extracted `generate-pages-manifest.ts`, a plain Node script (not a Playwright test file at
+all, run via `tsx`) that does the actual `getAllWork()`/`getJournalEntries()`/`getPostBySlug()`
+calls and writes `tests/.generated/pages-manifest.json`. `pages.manifest.ts` went back to being a
+synchronous module — same shape as the original `frontend/tests/` version, just reading
+pre-computed JSON instead of a static import. Every `test:e2e*`/`test:visual`/`test:a11y` npm
+script now chains the generator in front of `playwright test`. See section 4 for the full design
+writeup.
+
+**Takeaway:** don't reach for top-level `await` in a Playwright spec file to solve "I need async
+data before generating tests," even though it looks like it should work and the file will
+happily type-check. Playwright's two-pass discovery model makes it silently produce zero tests
+instead of an error, which is a worse failure mode than a thrown exception would have been.
+
+### [NEW, from this port] `@portfolio/backend`'s PrismaClient needs `DATABASE_URL` loaded before the FIRST import, not just before it's *used*
+
+Early draft of `generate-pages-manifest.ts` called `loadEnv({ path: ... })` and then had a normal
+static `import { getAllWork, getJournalEntries } from "@portfolio/backend";` right below it in the
+same file. This reliably failed with a Prisma connection error even though `loadEnv()` textually
+ran first.
+
+Root cause: ES module semantics fully evaluate a module's static imports (walking the whole
+dependency graph, `@portfolio/backend` → `backend/src/db/client.ts`, which constructs the
+`PrismaClient` at module scope) **before** the importing module's own top-level statements run —
+regardless of where the `import` line sits in the file relative to other code. `db/client.ts`'s
+`new PrismaPg({ connectionString: process.env.DATABASE_URL })` was therefore always evaluated
+before `loadEnv()`'s side effect, no matter how the two lines were ordered textually.
+
+Fixed by using a **dynamic** `await import("@portfolio/backend")` instead, inside an `async
+main()`, called strictly after `loadEnv()`. Dynamic imports aren't part of the static module
+graph — they evaluate imperatively, at the point they're actually awaited, so this genuinely runs
+`loadEnv()` first. `next.config.ts` never hit this because it doesn't import `@portfolio/backend`
+directly itself; it just sets `process.env` for Next.js's own later, separate module loads of the
+route/page files (which happen long after `next.config.ts` finished running).
+
+### [RESOLVED, from frontend/tests/] `toHaveScreenshot(name)` requires the `.png` extension in the name
 
 First draft called `expect(page).toHaveScreenshot(\`${entry.name}-${theme}\`, ...)` (no
 extension). Playwright throws `Screenshot name "..." must have '.png' extension` — the string
@@ -425,7 +627,7 @@ overload of `toHaveScreenshot` expects the extension as part of the name; it's n
 automatically even though `snapshotPathTemplate` also has an `{ext}` placeholder. Fixed by
 appending `.png` explicitly in `visual.spec.ts`.
 
-### [RESOLVED] Apple device presets (`devices["iPad (gen 7)"]`, `devices["iPhone 13"]`) default to WebKit, not Chromium
+### [RESOLVED, from frontend/tests/] Apple device presets (`devices["iPad (gen 7)"]`, `devices["iPhone 13"]`) default to WebKit, not Chromium
 
 First draft of `playwright.config.ts` used these presets directly for the Tablet/Mobile
 projects. Every test under those projects failed with:
@@ -442,442 +644,383 @@ installed by `npx playwright install chromium` — so WebKit was simply never do
 
 Fix: don't spread a full Apple device preset. Instead spread `devices["Desktop Chrome"]` (which
 pins the Chromium engine) and override just the `viewport`/`isMobile`/`hasTouch` fields to get
-tablet/mobile-shaped viewports while staying on Chromium:
-
-```ts
-use: { ...
-    devices["Desktop Chrome"], viewport
-:
-    {
-        width: 390, height
-    :
-        844
-    }
-,
-    isMobile: true, hasTouch
-:
-    true
-}
-,
-```
+tablet/mobile-shaped viewports while staying on Chromium.
 
 **Takeaway for later:** if multi-browser (WebKit/Firefox) support is ever added, remember to run
 `npx playwright install` for those engines too, and re-evaluate whether the Apple presets should
 be used as-is at that point (they'd then make sense, since a real WebKit binary would exist).
 
-### Real, pre-existing accessibility violations found by `a11y.spec.ts`
+### [RESOLVED, from frontend/tests/] Real, pre-existing accessibility violations found by `a11y.spec.ts`
 
 The first real run against the actual site (before any test-code bugs were fixed) surfaced
 genuine, site-wide `color-contrast` (WCAG "serious") violations — not test bugs. Confirmed
-visually: the footer copyright line and various "faint"/muted labels are legitimately hard to
+visually: the footer copyright line and various "faint"/muted labels were legitimately hard to
 read against the near-black background in the exported screenshots.
 
 - Rule: `color-contrast` (WCAG 2 AA, `wcag143`), impact `serious`.
 - Affected token/classes seen across pages: `.text-text-faint` (footer copyright, ledger year
   columns, date labels), status badges (`.text-status-warning`/`.text-status-success` on their
   tint backgrounds), `.text-accent-solid`.
-- Where: on **every** page tested, in **both** light and dark theme — this is a design-token
-  issue (`neutral.dim` in `src/shared/ui/theme/tokens.ts`, wired to `--color-text-faint`), not a
-  page-specific bug.
+- Where: on **every** page tested, in **both** light and dark theme — this was a design-token
+  issue, not a page-specific bug.
 - Also found once: `scrollable-region-focusable` (serious) — a horizontally-scrollable region
   (likely a `CodeBlock`) that isn't reachable/operable via keyboard.
 
-This is a real finding the new tooling is supposed to surface (accessibility was requirement #3
-of the original ask) — it is being tracked and handled explicitly, see the decision recorded in
-the implementation log below rather than silently patched or hidden.
+Fixed at the token level (see the "accent/status color fix" entry below) — this fix lives in the
+design tokens/components themselves (ported to `frontend/src/shared/ui/theme/`), not in this test
+suite, so it applies to both apps' history.
 
-### The accent/status color fix — full story (three attempts, two rejected)
+### [RESOLVED, from frontend/tests/] The accent/status color fix — full story (three attempts, two rejected)
 
-This is the single biggest detour of the whole implementation, worth recording in detail because
-the *reasoning* about why two fixes were rejected matters more than the final diff.
+This was the single biggest detour of the original `frontend/tests/` implementation, worth
+keeping in full because the *reasoning* about why two fixes were rejected matters more than the
+final diff.
 
 **Attempt 1 — rejected: darken `palette.accent`/`statusGreen`/`statusAmber` globally.**
 Scaled every channel of the vibrant orange/green/amber down uniformly (in linear sRGB) until the
-worst-case contrast ratio cleared 4.5:1. Numerically correct (see the ratios above), but visually
-wrong: darkening a saturated orange this much makes it look muddy/brown, not "a deeper orange" —
-warm hues lose their vibrancy fast as lightness drops, and the result read as "someone spilled
-coffee on the buttons" (direct quote from the review). Reverted immediately, before it was ever
-looked at from a testing/CI angle — the lesson here is **generate a real visual preview (a
-screenshot or an isolated swatch page) before applying any color-token change, never just trust
-the contrast-ratio math.**
+worst-case contrast ratio cleared 4.5:1. Numerically correct, but visually wrong: darkening a
+saturated orange this much makes it look muddy/brown, not "a deeper orange" — warm hues lose their
+vibrancy fast as lightness drops. Reverted immediately — the lesson: **generate a real visual
+preview before applying any color-token change, never just trust the contrast-ratio math.**
 
 **Attempt 2 — accepted, partial: `accent.onSolid` / `status.onSolid` (dark ink on solid fill).**
 The actual root cause was that a single token (`accent.solid` / `status.success` / `status.warning`)
-was being reused for two incompatible roles:
-
-- as a **background fill** (buttons, `StatusBadge` pills, dots, `ProgressBar`) — must stay vibrant,
-- as the **foreground text color** drawn on a pale ~12%-opacity tint of the same color (the old
-  `StatusBadge` style) — this is what actually failed contrast (ratio 1.5-2.6 against light-theme
-  tints).
-
-Fix: keep the vibrant fill untouched everywhere, and redesign `StatusBadge` from "pale tint +
-colored text" to "solid fill + dark ink text", reusing the site's own dark-theme near-black
-(`darkPalette.bg`, `#0b0b0d`) as the ink color — added as `accent.onSolid` / `status.onSolid`
-(→ CSS vars `--color-accent-on-solid` / `--color-status-on-solid` → Tailwind `text-accent-on-solid`
-/ `text-status-on-solid`). Dark ink clears **7.5:1** on the orange, **10.4:1** on amber, **11.3:1**
-on green — huge margins, and it's the *same* ink color in both site themes since the fill itself
-is theme-invariant. Applied to:
-
-- `Button.tsx` primary variant (`text-text-inverse` → `text-accent-on-solid`) — fixes the
-  `.h-14` CTA-button violation.
-- `StatusBadge.tsx` — all three colored tones (`success`/`warning`/`accent`) switched from
-  `bg-*-tint-bg` + colored text to `bg-*` (solid) + `text-*-on-solid`; `dotClasses` updated the
-  same way so the small pulsing dot (nav "AVAILABLE FOR PROJECTS" badge) stays visible against the
-  now-solid pill instead of blending into it.
-- This was previewed as an isolated HTML swatch *and* as real screenshots of the actual site
-  before being accepted — see the note above about not trusting the math alone.
+was being reused for two incompatible roles: a **background fill** (must stay vibrant) and the
+**foreground text color** drawn on a pale tint of the same color (fails contrast). Fix: keep the
+vibrant fill untouched everywhere, redesign the affected badge/button components from "pale tint +
+colored text" to "solid fill + dark ink text," reusing the site's own dark-theme near-black as the
+ink color. Dark ink clears 7.5-11.3:1 depending on the fill.
 
 **Attempt 3 — accepted: `accent.text` (a third, theme-aware role for plain inline text).**
-Even after attempt 2, 6 violations remained, all on **plain accent-colored text with no fill
-behind it at all**: the global `a { color: var(--color-accent-solid) }` link rule, `Eyebrow`
-(`tone="accent"`), `Text` (`tone="aurora"`), `IconBadge` (`accent` tone), and the case-study
-"approach" step titles on `WorkDetailPage`. There is no background here to put dark ink on — the
-`onSolid` trick from attempt 2 fundamentally does not apply. For this role the color itself has to
-change on the light theme (there is no way around it — this was verified numerically with an
-OKLCH-based search across dozens of candidate lightness/chroma values: every value that clears
-4.5:1 against a near-white background inevitably reads as "burnt orange/rust", not "orange" —
-that's a hard perceptual limit of the hue, not a fixable calculation). Added `accent.text`
-(dark theme: identical to `accent.solid`, unchanged; light theme: `#be3500`, chosen as the
-*minimal* darkening that still clears every real background it appears on — ratio ~4.66-5.7 vs.
-the page background, white cards, and the accent tint) and repointed every one of those five call
-sites at `text-accent-text` instead of `text-accent-solid`. This was previewed in-context (actual
-site screenshots of the hero "SYSTEMS ENGINEER" label, the "Case study →" link, and the
-"CASE STUDY" eyebrow) before being accepted, and reads as a subtle, still-clearly-orange shift at
-the small text sizes it's used at.
+Even after attempt 2, violations remained on **plain accent-colored text with no fill behind it**
+(link color, eyebrow labels, etc.) — there's no background to put dark ink on, so the color itself
+had to change on the light theme. Verified numerically (OKLCH-based search) that every value
+clearing 4.5:1 against a near-white background reads as "burnt orange/rust" — a hard perceptual
+limit of the hue, not a fixable calculation. Added `accent.text` (dark theme: identical to
+`accent.solid`; light theme: a minimal darkening that still clears every real background it
+appears on) and repointed the relevant call sites at it.
 
 **Net result:** three distinct semantic roles now exist where there used to be one ambiguous
 token — `*.solid` (fill), `*.onSolid` (text/dot on a solid fill of the same color), `accent.text`
-(plain inline text with no fill). `WorkItem`/`JournalPost` were never touched by any of this — it
-lives entirely in `src/shared/ui/theme/tokens.ts` and the handful of components that consume it.
+(plain inline text with no fill). `WorkSummary`/`PostSummary` were never touched by any of this.
 
-### `toHaveScreenshot`/test timeouts under Docker resource constraints
+### [RESOLVED, from frontend/tests/] `toHaveScreenshot`/test timeouts under Docker resource constraints
 
-While generating the initial baselines inside the official `mcr.microsoft.com/playwright` Docker
-image (see section 12), 5 of 30 tests failed with `Timeout 5000ms exceeded` on the screenshot
-stability check, and later 2 more failed with `Test timeout of 30000ms exceeded` on the heavier
-`home` page (hero gradient/glow background). Root cause: Playwright retries capturing a
-screenshot until two consecutive captures are pixel-identical (to avoid catching mid-animation
-frames), and a CPU-throttled container running 8 parallel workers just needed more wall-clock time
-for that to settle — not a real bug in the app or the tests. Fixed by raising both timeouts in
+While generating the initial `frontend/tests/` baselines inside the official
+`mcr.microsoft.com/playwright` Docker image, several tests failed with `Timeout 5000ms exceeded` on
+the screenshot stability check, and others with `Test timeout of 30000ms exceeded` on the heavier
+`home` page (hero gradient/glow background). Root cause: Playwright retries capturing a screenshot
+until two consecutive captures are pixel-identical (to avoid catching mid-animation frames), and a
+CPU-throttled container running several parallel workers just needed more wall-clock time for that
+to settle — not a real bug in the app or the tests. Fixed by raising both timeouts in
 `playwright.config.ts`: `expect.toHaveScreenshot.timeout` from the 5s default to `15_000`, and the
-top-level test `timeout` from the 30s default to `60_000`. Since GitHub Actions runners are
-similarly modest (2 vCPU), these higher timeouts are kept for real CI too, not just local Docker
-runs.
+top-level test `timeout` from the 30s default to `60_000`. Kept as-is in this port — GitHub Actions
+runners are similarly modest (2 vCPU) regardless of which app is under test.
 
-### `heading-order` (moderate) on the landing page — tracked, not blocking
+### [RESOLVED, from frontend/tests/] `heading-order` (moderate) on the landing page — tracked, not blocking
 
-The very first full CI-equivalent run found one non-blocking (`moderate` impact, below this
-suite's `critical`/`serious` failure threshold — see `BLOCKING_IMPACTS` in `a11y.spec.ts`) finding:
-`heading-order` — "Heading levels should only increase by one" — on the home page, in both
-themes. This is exactly what the moderate/minor-violations-are-reported-not-blocking design is
-for (see the "Report contents" discussion in the original plan): it shows up in
-`test-results/summary.json`'s `a11yViolationCount` and would show up in the PR comment, but
-doesn't fail the build. Not fixed as part of this task (out of scope — it's a genuine, pre-existing
-heading-hierarchy issue on the landing page worth a small follow-up, but not a testing-infra
-concern); left here so it isn't forgotten.
+The very first full CI-equivalent run of `frontend/tests/` found one non-blocking (`moderate`
+impact, below this suite's `critical`/`serious` failure threshold — see `BLOCKING_IMPACTS` in
+`a11y.spec.ts`) finding: `heading-order` — "Heading levels should only increase by one" — on the
+home page, in both themes. Not fixed as part of the original task (out of scope); worth
+re-checking once this port's first real `test:a11y` run against `frontend/`'s landing page completes,
+since the heading structure may or may not have carried over identically during the Next.js port.
 
-### `opacity-45` on the "upcoming" journal entry (also fixed)
+### [RESOLVED, from frontend/tests/] `opacity-45` on the "upcoming" journal entry (also fixed)
 
-Separately, the unpublished "Notes from the Camera Pipeline — draft" entry wrapped its *entire*
-block (already-AA-compliant text) in `opacity-45`, which re-introduces exactly the contrast
-problem the token fixes above just solved — `opacity` blends every pixel toward the page
-background, and a numeric search showed the opacity would need to go from `0.45` to **~0.84-0.94**
-to stay above 4.5:1, which is indistinguishable from full opacity and defeats the point of dimming
-it. Fixed by dropping the `opacity-45` wrapper entirely in `JournalListPage.tsx` and instead
-relying on the tone system that was already there: title uses `text-text-muted` (was already
-conditional on `!isPublished`), excerpt now uses `tone="faint"` instead of `tone="muted"` when
-unpublished. Both tones are already independently AA-compliant at full opacity, so this can't
-regress the same way again.
+The unpublished "upcoming" journal entry wrapped its *entire* block (already-AA-compliant text) in
+`opacity-45`, which re-introduces exactly the contrast problem the token fixes above just solved —
+`opacity` blends every pixel toward the page background. Fixed by dropping the `opacity-45`
+wrapper entirely and instead relying on the tone system that was already there. This fix lives in
+`JournalListPage.tsx` (ported to `frontend/src/views/journal-list/`), not in this test suite.
 
-### [RESOLVED] The "upcoming" entry title stopped visually de-emphasizing after the `opacity-45` fix
+### [RESOLVED, from frontend/tests/] The "upcoming" entry title stopped visually de-emphasizing after the `opacity-45` fix
 
 Caught by the user reviewing an actual screenshot, not by any test: after the `opacity-45` fix
-above, the unpublished entry's title ("Notes from the Camera Pipeline — draft") rendered at full
-brightness — visually indistinguishable from a real published post's title, defeating the entire
-point of "upcoming" looking de-emphasized (this was the original UX intent the `opacity-45` hack
-existed for in the first place).
+above, the unpublished entry's title rendered at full brightness — visually indistinguishable from
+a real published post's title. Root cause: the title used a manually-appended `className` override
+(`text-text-muted`) alongside the `Text` component's own default `tone="primary"` class — which one
+wins is generation-order-dependent, not something the className string itself controls. Fixed by
+using the `tone` prop the `Text` component already exposes instead of fighting its output.
+**Takeaway:** never override a design-system component's color via a raw same-specificity utility
+class in `className` when the component exposes a prop for that; it may work by accident today and
+silently flip later.
 
-Root cause, pre-existing (not introduced by the `opacity-45` removal, just exposed by it): the
-title was `<Text variant="h3" className={cn("...", !isPublished && "text-text-muted")}>` — no
-`tone` prop, so `Text` defaults to `tone="primary"`, which adds `text-text-primary` via its own
-internal `toneClasses` lookup. That class and the manually-appended `text-text-muted` both landed
-in the className string at the same specificity — **which one visually wins depends on the order
-Tailwind emits them in the generated stylesheet, not on their order in the className string.**
-This is a fragile pattern in general (any time you override a component's own tone/variant output
-by appending a same-specificity utility class rather than using the prop the component exposes for
-that exact purpose), and it silently flipped outcomes at some point after other, unrelated `@theme`
-color variables were added earlier in this same implementation.
+### [RESOLVED, from frontend/tests/] Master's baseline auto-commit silently failed — `master` has a protected-push ruleset
 
-Fix: use the `tone` prop the `Text` component already provides instead of fighting its output —
-`<Text variant="h3" tone={isPublished ? "primary" : "muted"} className="...">`. Only one tone class
-is ever emitted now, so there's no ordering ambiguity to regress on. **Takeaway:** never override a
-design-system component's color via a raw same-specificity utility class in `className` when the
-component exposes a prop for that; it may work by accident today and silently flip later.
+Discovered via the GitHub API (job step logs), not from an obviously-red check — the master run
+itself looked green-ish but the "Commit updated baselines" step had `conclusion: "failure"` buried
+in the job's step list. Root cause: `master`'s repository ruleset blocks direct pushes, including
+from `stefanzweifel/git-auto-commit-action` running with the default `GITHUB_TOKEN` and
+`contents: write` — branch-protection rulesets take precedence over what a workflow's own
+`permissions:` block grants.
 
-### [RESOLVED] Master's baseline auto-commit silently failed — `master` has a protected-push ruleset
+Replaced entirely with the architecture in section 8: baselines are accepted **before** merge,
+from the PR branch (via `/update-snapshots`), so `master` never needs to accept a direct push for
+this at all.
 
-Discovered via the GitHub API (job step logs), not from a failing check that was obviously red —
-the master run itself looked green-ish (report published, PR comment posted, etc.) but the
-"Commit updated baselines" step had `conclusion: "failure"` buried in the job's step list, and no
-`github-actions[bot]` commit ever actually appeared on `master`. Root cause: `master` has a
-repository ruleset (pull request required, status checks required, CodeQL required) that blocks
-direct pushes — including from `stefanzweifel/git-auto-commit-action` running with the default
-`GITHUB_TOKEN` and `contents: write`, since branch-protection rulesets take precedence over what
-a workflow's own `permissions:` block grants.
+### [RESOLVED, from frontend/tests/] Bare GitHub Pages root 404s — permanently, not a delay
 
-**First attempt (tried, then abandoned):** work around it with a bypass-listed PAT instead of
-`GITHUB_TOKEN`:
+The `gh-pages` branch only ever gets written to under `reports/<dest>/` — nothing publishes an
+`index.html` at the actual branch root. Fixed by adding a second, small
+`peaceiris/actions-gh-pages` step to the workflow that publishes a one-page static landing page
+straight to the branch root, with `keep_files: true` so it doesn't wipe the `reports/` folder.
 
-1. **Settings → Developer settings → Personal access tokens** — create a token (fine-grained,
-   scoped to just this repo, with **Contents: Read and write**).
-2. **Settings → Secrets and variables → Actions** — add it as a repository secret named
-   `BASELINE_COMMIT_PAT`.
-3. **Settings → Rules → Rulesets** — open the ruleset covering `master`, and in **Bypass list**
-   add **Repository admin**, set to **Always allow**.
-4. Use that secret as the `token:` input on the workflow's checkout step instead of
-   `GITHUB_TOKEN`, falling back to `GITHUB_TOKEN` when the secret isn't set.
+### [RESOLVED, from frontend/tests/] `/update-snapshots` had a "pwn request" vulnerability — trusted commenter, untrusted code
 
-This does work (the bypass-list entry is what actually lets the push through; the PAT is just how
-the workflow proves it's an account holding that role) — but it's the wrong fix. It keeps the
-fundamental design flaw (a bot trying to push straight to a protected branch) and just punches a
-hole in the protection for it, plus it needs an extra secret and a ruleset exception that has to
-be remembered/maintained. Replaced entirely with the architecture in section 8: baselines are
-accepted **before** merge, from the PR branch (via `/update-snapshots`, a new comment-triggered
-workflow), so `master` never needs to accept a direct push for this at all. `visual-tests.yml`'s
-`master` job now runs in plain compare-only mode, identical to the `pull_request` job — no more
-`--update-snapshots`, no more auto-commit step, no more PAT, no more bypass-list entry needed.
+Flagged by an automated code-review comment — `github.event.comment.author_association` (who
+posted the comment) says nothing about whose code is checked out and executed. A trusted
+maintainer commenting `/update-snapshots` on a malicious fork PR would unknowingly hand that
+fork's code push-capable credentials (the "pwn request" pattern). Fixed with a
+`head.repo.full_name` check against the PR via the API, run *before* any checkout of PR content —
+see the updated section 8 for the exact mechanics.
 
-### [RESOLVED] Bare GitHub Pages root (`.../Portfolio-Website/`) 404s — permanently, not a delay
+### [RESOLVED, from frontend/tests/] First real `/update-snapshots` run failed — mangled `Checkout` step + a template-literal bug
 
-Different from the transient "brand-new PR report path" propagation delay noted elsewhere in
-this section: the `gh-pages` branch only ever gets written to under `reports/<dest>/`
-(`destination_dir` in the workflow) — nothing publishes an `index.html` at the actual branch
-root, confirmed with `git ls-tree origin/gh-pages` (only `.nojekyll` and `reports/` at the top
-level). Visiting the bare Pages URL therefore 404s **forever**, not just for a minute after a
-fresh deploy — there's simply nothing there to serve, ever, until something publishes to that
-path.
-
-Fixed by adding a second, small `peaceiris/actions-gh-pages` step to the workflow that publishes
-a one-page static landing page (generated by `.github/scripts/generate-pages-index.mjs`, linking
-to `reports/master/` and explaining where PR reports live) straight to the branch root (no
-`destination_dir`), with `keep_files: true` so it doesn't wipe the `reports/` folder written by
-the other publish step in the same job.
-
-### [RESOLVED] `/update-snapshots` had a "pwn request" vulnerability — trusted commenter, untrusted code
-
-Flagged by an automated code-review comment on the PR (not caught during initial implementation
-or manual testing) — a genuinely serious finding, not a nitpick. The workflow's only guard was
-`github.event.comment.author_association` (who posted the comment), which says nothing about
-whose code is checked out and executed. Concretely: `gh pr checkout` fetches the PR's own branch,
-then `npm ci` and `npx playwright test --update-snapshots` execute that branch's own
-`postinstall` scripts / `playwright.config.ts` / test files — all while the job still holds a
-`contents: write` token (needed for the later `git push`). A trusted maintainer commenting
-`/update-snapshots` on what looks like an innocent content-only PR from a malicious fork would
-unknowingly hand that fork's code push-capable credentials. This is a well-documented class of
-GitHub Actions vulnerability (often called a "pwn request"), not something specific to this repo
-— but it was a real, exploitable gap here given the repo is public, not just a theoretical one.
-
-Fixed with a `head.repo.full_name` check against the PR via the API, run *before* any checkout of
-PR content, that fails the job closed if the PR's branch isn't in this repository (i.e. is a
-fork) — see the updated section 8 above for the exact mechanics. Deliberately did **not** go with
-the reviewer's other suggested option (run the untrusted code in a separate job stripped of
-write-scoped credentials, then use a second, privileged job only to commit the already-produced
-output) — that's a more elaborate defense-in-depth pattern worth reconsidering if this repo ever
-accepts external contributions, but the fork guard alone fully closes the specific attack
-described here, and is far simpler to reason about for a personal, single-maintainer repo.
-
-### [RESOLVED] First real `/update-snapshots` run failed — mangled `Checkout` step + a template-literal bug
-
-Two separate, unrelated bugs, both found from a single real run (triggered from an actual PR
-comment) rather than caught during review:
-
-1. **The `Checkout` step got mangled during a merge.** After the fork-guard security fix landed
-   on its own branch and was later merged together with an unrelated large PR (the Next.js
-   migration) that had *also* touched this same file, the merged result on `master` had a
-   `Checkout` step whose `uses:` pointed at `actions/setup-node@v4` (with Node version/cache
-   inputs) instead of `actions/checkout@v4` — and the separate `Checkout PR branch` (`gh pr
-   checkout ...`) and `Setup Node` steps had vanished entirely, apparently swallowed by the same
-   bad merge-conflict resolution. Confirmed by diffing
-   `git show origin/master:.github/workflows/accept-visual-baselines.yml`
-   against what this file should contain — the job never actually checked out the repository
-   before trying to `npm ci` inside `frontend/`, which doesn't exist without a checkout. Fixed by
-   restoring the three steps as distinct entries: `Checkout` (`actions/checkout@v4`, no inputs),
-   `Checkout PR branch` (`gh pr checkout`), `Setup Node` (`actions/setup-node@v4`).
-2. **The failure-comment URL was a JS template-literal bug, not a GitHub issue.** The failure
-   branch built the workflow-run link with `"${context.serverUrl}/${context.repo.owner}/..."` —
-   **double-quoted**, not backtick-delimited. `${...}` interpolation only happens inside
-   backtick template literals in JavaScript; inside a regular string it's inserted completely
-   literally. The posted PR comment therefore linked to the literal text
-   `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-   which GitHub tried to parse as a repo-relative path and rendered as a nonsensical branch-compare
-   page ("There isn't anything to compare"). Fixed by switching that branch to an actual template
-   literal (`` `${context.serverUrl}/...` ``) and building the URL as its own variable first.
-
-**Takeaway:** embedded `script: |` blocks in a workflow YAML are opaque strings to the YAML
-parser — `js-yaml`/YAML validation (used throughout this implementation to sanity-check syntax)
-catches YAML structure problems, but says nothing about the JavaScript *inside* those blocks.
-Neither bug here was a YAML problem; both were JS logic bugs that only surfaced by actually
-triggering the workflow for real.
+Two separate, unrelated bugs from a single real run: (1) the `Checkout` step got mangled during a
+merge (a bad conflict resolution swapped it for `actions/setup-node@v4`, dropping the real
+checkout/setup steps entirely) — fixed by restoring the three distinct steps; (2) the
+failure-comment's workflow-run link used double-quoted string concatenation instead of a template
+literal, so `${...}` never interpolated and the literal placeholder text got posted as a broken
+link — fixed by switching to an actual backtick template literal. **Takeaway:** embedded
+`script: |` blocks in workflow YAML are opaque strings to a YAML parser — YAML validation catches
+YAML structure problems, but says nothing about the JavaScript logic inside those blocks.
 
 ### Design change: content-driven visual diffs are accepted via PR comment, not avoided
 
-Initially considered (and asked about explicitly): masking the "living" content areas of
-`home`/`work-list`/`journal-list` (the featured-work grid, the journal preview, the full
-ledgers) with Playwright's `mask` option, so adding a new work item or journal post would never
-trigger an "expected" visual diff on those pages in the first place. Superseded by the
-`/update-snapshots` mechanism in section 8 before being implemented (a brief, incomplete
-`data-visual-mask` attribute landed in `WorkListPage.tsx` mid-exploration and was reverted): that
-mechanism solves the actual underlying friction (visual checks failing on legitimate content
-changes, with no easy way to move past it) more generally — it also covers genuine template/design
-changes on those same pages, which masking never would have. Revisit masking later only if
-`/update-snapshots` itself turns out to be too much friction for routine content updates in
-practice.
+Initially considered (in the original `frontend/tests/` implementation): masking the "living"
+content areas of `home`/`work-list`/`journal-list` with Playwright's `mask` option, so adding a
+new work item or journal post would never trigger an "expected" visual diff there in the first
+place. Superseded by the `/update-snapshots` mechanism (section 8) before being implemented: that
+mechanism solves the actual underlying friction more generally — it also covers genuine
+template/design changes on those same pages, which masking never would have. Carried over
+unchanged into this port; revisit only if `/update-snapshots` itself turns out to be too much
+friction for routine content updates in practice.
 
 ## 12. Implementation log
 
 _(Living, append-only. One entry per small implementation step: date, what was done, which files
-changed, what didn't work and how it was fixed.)_
+changed, what didn't work and how it was fixed. Entries before the "port to frontend/tests/" heading
+below are inherited verbatim from `frontend/tests/README.md`, since they document the history of
+code this suite still shares logic with.)_
 
-### 2026-07-17 — Guide skeleton created
+### 2026-07-17 — Guide skeleton created (frontend/tests/)
 
-Created this file with all 12 sections as placeholders. No code changes yet. Next step: add
-`@playwright/test` and `@axe-core/playwright` as dev dependencies.
+Created `frontend/tests/README.md` with all 12 sections as placeholders. No code changes yet.
 
-### 2026-07-17 — Dependencies, Playwright config, manifests, specs
+### 2026-07-17 — Dependencies, Playwright config, manifests, specs (frontend/tests/)
 
-- Installed `@playwright/test@1.61.1` and `@axe-core/playwright@4.12.1` as dev dependencies;
-  installed the Chromium browser binary only (`npx playwright install chromium`).
-- Added npm scripts: `test:e2e`, `test:visual`, `test:a11y`, `test:e2e:update`, `test:e2e:report`.
-- Created `playwright.config.ts`: 3 projects (Desktop/Tablet/Mobile, all Chromium-based —
-  see the known-issue below about why Apple device presets were avoided), `snapshotDir`/
-  `snapshotPathTemplate` pointing at `tests/visual-snapshots/`, `webServer` that builds+previews
-  the app unless `PLAYWRIGHT_BASE_URL` is set.
-- Created `tests/e2e/pages.manifest.ts` (dynamic, derives every real page from `@/data/work` /
-  `@/data/journal`) and `tests/e2e/visual-fixtures.manifest.ts` (static, hand-picked subset,
-  validated against the dynamic manifest at import time).
-- Created `tests/e2e/utils/theme.ts` (`seedTheme`) and the two spec files
-  (`visual.spec.ts`, `a11y.spec.ts`).
-- Created `tests/e2e/reporters/summary-reporter.ts`.
-- Fixed two real implementation bugs found while running the suite for the first time (see
-  section 11): the `.png` extension on `toHaveScreenshot()` names, and the WebKit-vs-Chromium
-  device preset issue.
-- Ran the suite against the real site for the first time and found genuine, pre-existing
-  accessibility issues (not test bugs) — see the "accent/status color fix" story in section 11
-  for the full investigation and the three attempts (one rejected, two accepted) it took to
-  resolve them properly, plus the separate `opacity-45` fix on the journal list page.
-- End state: all 10 `a11y.spec.ts` tests pass (5 pages × light/dark); all 30 `visual.spec.ts`
-  tests run cleanly end-to-end (no baselines committed yet on purpose — see section 6/12 below,
-  those get generated from Linux, not from this Windows dev machine).
+Installed `@playwright/test@1.61.1` and `@axe-core/playwright@4.12.1`, added npm scripts, created
+`playwright.config.ts` (3 Chromium-based projects), the dynamic/static manifest pair, `utils/
+theme.ts`, both specs, and the summary reporter. Fixed the `.png`-extension and WebKit-preset bugs
+(section 11). First full run: 40/40 passed (30 visual + 10 a11y), one non-blocking `moderate`
+finding.
 
-### 2026-07-17 — CI workflow, GitHub Pages publishing, initial baselines
+### 2026-07-17 — CI workflow, GitHub Pages publishing, initial baselines (frontend/tests/)
 
-- Created `.github/workflows/visual-tests.yml` (single `test` job, branches on
-  `pull_request`/`push` event type — see section 7) and `.github/scripts/format-summary.mjs`
-  (turns `test-results/summary.json` into the PR comment body).
-- Chose `peaceiris/actions-gh-pages` (branch-based deploy, supports incremental per-run
-  subfolders via `destination_dir`/`keep_files`) over the newer Pages-via-Actions-artifact
-  mechanism, specifically because the latter replaces the whole site on every deploy and can't
-  easily keep multiple PRs' reports side by side — see section 9 for the one-time repo Settings
-  step this requires.
-- Updated `frontend/.gitignore` (`/test-results/`, `/playwright-report/`, `/blob-report/`,
-  `/playwright/.cache/`, `.env.test` — explicitly NOT `tests/visual-snapshots/`) and added
-  `frontend/.env.test.example`.
-- Generated the actual initial baselines using the official `mcr.microsoft.com/playwright:v1.61.1-noble`
-  Docker image (matching the exact `@playwright/test` version installed), with `-e CI=true` so the
-  run also matched CI's worker count/retry policy exactly, not just its OS/Chromium build. Command
-  used (see section 6 for the general form):
+Created `visual-tests.yml` and `format-summary.mjs`. Generated the actual initial 30 baseline PNGs
+using the official `mcr.microsoft.com/playwright` Docker image, matching CI's exact
+OS/Chromium/worker-count combination. Hit and fixed two timeout issues (section 11).
 
-  ```bash
-  docker run --rm -e CI=true \
-    -v "E:\Projects\Portfolio-Website:/work" -v /work/frontend/node_modules \
-    -w /work/frontend mcr.microsoft.com/playwright:v1.61.1-noble \
-    bash -c "npm ci && npx playwright test tests/e2e/visual.spec.ts --update-snapshots"
-  ```
+### 2026-07-17 — Baselines reorganized into one folder per page (frontend/tests/)
 
-  (The second `-v /work/frontend/node_modules`, with no host path, mounts an anonymous
-  container-local volume over that path — necessary because `node_modules` built on Windows
-  contains Windows-native binaries (`esbuild`, `rollup`) that silently fail inside a Linux
-  container if reused directly from a bind-mount; `npm ci` re-populates it with Linux binaries
-  instead, without touching the real Windows `node_modules` on the host.)
-- Hit two timeout issues during this run (both fixed in `playwright.config.ts`, see section 11)
-  and confirmed the fix with a second Docker run.
-- Ran the **full** suite (`npx playwright test`, no `--update-snapshots`) one more time in the
-  same container against the freshly-committed baselines as a final sanity check: **40/40 passed**
-  (30 visual + 10 a11y), with one non-blocking `moderate` finding recorded (see section 11).
-- All 30 PNGs under `frontend/tests/visual-snapshots/` are now the real, committed baseline —
-  generated from Linux, safe to compare against in CI.
+Switched from a flat screenshot name to an array name, turning 30 flat files into 5 folders of 6
+files each — verified with one test first before regenerating all 30.
 
-### 2026-07-17 — Baselines reorganized into one folder per page
+### 2026-07-17 — Real UX bug caught from a screenshot (frontend/tests/)
 
-Switched `visual.spec.ts` from a flat screenshot name (`${entry.name}-${theme}.png`, producing 30
-files in a single folder) to an array name (`[entry.name, \`${theme}.png\`]`), which Playwright
-turns into nested folders — verified with one test first (`tests/visual-snapshots/home/light-Desktop.png`)
-before wiping and regenerating all 30 baselines via the same Docker command as before. Final
-layout: 5 folders (one per page), 6 files each (2 themes × 3 viewports) — see section 4. Re-ran
-the full suite in the same container afterward: 40/40 passed again, no regressions from the
-restructure.
+User spotted the unpublished journal entry's title rendering at full brightness from an actual
+screenshot — see the `[RESOLVED]` entry in section 11.
 
-### 2026-07-17 — Real UX bug caught from a screenshot: "upcoming" entry not visually de-emphasized
+### 2026-07-18 — First real PR/master run surfaced two more bugs, plus a bigger architecture change (frontend/tests/)
 
-User spotted this from an actual rendered screenshot (not from a failing test — this doesn't
-violate any WCAG rule, it's a design intent regression): the unpublished journal entry's title
-should look clearly grayed-out/de-emphasized so it doesn't blend in with real posts, and after the
-`opacity-45` removal (previous log entry) it no longer did. Root cause and fix: see the
-`[RESOLVED]` entry in section 11 — a `Text` component tone/className specificity conflict that
-had likely been silently broken (or silently working "by luck" of generation order) for a while.
-Fixed `JournalListPage.tsx` to pass `tone={isPublished ? "primary" : "muted"}` instead of a
-manual `className` override. Regenerated the `journal-list/` baselines (only) via Docker,
-confirmed visually against the same screenshot the user flagged, then re-ran the full suite:
-40/40 passed.
+Found the master baseline auto-commit was silently failing (repository ruleset blocking direct
+pushes) and a transient Pages-report 404. Redesigned around `/update-snapshots` (section 8) instead
+of patching the master auto-commit. Also fixed the permanent bare-Pages-root 404. This document
+moved from `VISUAL_TESTING_GUIDE.md` at the repo root to `frontend/tests/README.md`.
 
-### 2026-07-18 — First real PR/master run surfaced two more bugs, plus a bigger architecture change
+### 2026-07-18 — Security review caught a real "pwn request" gap; first live run then caught two more bugs (frontend/tests/)
 
-- **Report 404 (transient, not a bug):** a PR's first-ever report at `reports/pr-<N>/` briefly
-  404'd right after the check finished — confirmed via a live re-fetch minutes later that it was
-  just GitHub Pages' normal build/propagation lag for a brand-new path, not a broken publish.
-- **Master's baseline auto-commit was actually failing** (see the `[RESOLVED]` entry in section
-    11) — found via the GitHub API (`.../actions/runs/<id>/jobs`), which showed the "Commit updated
-        baselines" step with `conclusion: "failure"` even though the overall run "looked" mostly fine.
-        Root cause: a repository ruleset on `master` (PR required, status checks required, CodeQL
-        required) blocks direct pushes from anything, including a bot with `contents: write`.
-- Discussed the actual workflow the user wants: open a PR, see a visual check fail because page
-  content changed (not a bug), explicitly accept that, and have it land without a second
-  master-side build. Redesigned around that instead of patching the master auto-commit:
-    - Simplified `visual-tests.yml`: removed `--update-snapshots`/the auto-commit step entirely;
-      `master` now runs the exact same compare-only check as `pull_request`.
-    - Added `.github/workflows/accept-visual-baselines.yml`, a new `issue_comment`-triggered
-      workflow: `/update-snapshots` on a PR checks out that PR's branch (`gh pr checkout`),
-      regenerates baselines, and pushes straight to it — never touching `master` — restricted to
-      `OWNER`/`MEMBER`/`COLLABORATOR` commenters only.
-    - Considered masking the dynamic content areas of `home`/`work-list`/`journal-list` first (a
-      stray, incomplete `data-visual-mask` attribute briefly landed in `WorkListPage.tsx` from this
-      exploration) — dropped in favor of `/update-snapshots`, which solves the same friction more
-      generally; reverted that attribute.
-- Also fixed the permanent (non-transient) bare-Pages-root 404 — see the `[RESOLVED]` entry in
-  section 11 — by publishing a small landing page via `.github/scripts/generate-pages-index.mjs`.
-- **File relocated:** this document moved from `VISUAL_TESTING_GUIDE.md` at the repo root to
-  `frontend/tests/README.md` (user's call — keeps it next to the tests it documents rather than
-  competing with the repo's own top-level README). Updated every cross-reference in
-  `.github/workflows/*.yml` and `.github/scripts/*.mjs` to the new path/relative depth.
+Added the fork-guard step to `accept-visual-baselines.yml`. First real `/update-snapshots` trigger
+failed from a mangled `Checkout` step (lost in an unrelated merge) and a template-literal bug in
+the failure-comment link — both fixed, see section 11.
 
-### 2026-07-18 — Security review caught a real "pwn request" gap; first live run then caught two more bugs
+### 2026-07-27 — Port to `web/tests/` (this port; `web/` was later renamed `frontend/`)
 
-- An automated code-review comment on the CI-fix PR correctly flagged that the workflow's
-  `author_association` check only vets the *commenter*, not the *code about to run* — see the
-  `[RESOLVED]` entry in section 11 for the full explanation. Added a "Verify the PR branch is not
-  from a fork" step (`actions/github-script`, checks `head.repo.full_name` via the API) that runs
-  *before* any PR content is checked out, failing the job closed for fork PRs.
-- First real trigger of `/update-snapshots` on an actual PR comment failed. Root-caused via
-  `git show origin/master:.github/workflows/accept-visual-baselines.yml` (comparing what's
-  actually deployed against what the file should contain) rather than guessing: (1) the
-  `Checkout` step had been mangled into `actions/setup-node@v4` during a merge with an unrelated
-  PR that touched the same file, losing the real `Checkout`/`Checkout PR branch`/`Setup Node`
-  steps entirely — restored them as three distinct steps; (2) the failure-comment's workflow-run
-  link used double-quoted string concatenation instead of a template literal, so `${...}` never
-  interpolated and the literal placeholder text got posted as a broken link — fixed by using an
-  actual backtick template literal. Neither bug was catchable by YAML validation (`js-yaml`),
-  since embedded `script: |` blocks are opaque strings to a YAML parser — both only surfaced by
-  triggering the workflow for real. See section 11 for the full writeup of both.
-- Did not commit or push any of this — all fixes in this entry were applied as local file edits
-  only, at the user's explicit request after an earlier boundary-crossing (branches/commits were
-  pushed without asking first, which should not have happened).
+- Ported `visual.spec.ts`, `a11y.spec.ts`, `utils/theme.ts`, `reporters/summary-reporter.ts`
+  byte-for-byte (logic unchanged — same matrix, same theme-seeding, same blocking-impact set).
+  Confirmed this app's theme storage key (`portfolio.theme-preference`,
+  `frontend/src/shared/theme/theme.context.tsx`) matches the legacy Vite SPA's exactly, so `utils/theme.ts`
+  needed zero changes.
+- Hit the top-level-`await`-in-a-spec-file wall while trying to make `pages.manifest.ts` async
+  directly (see section 11's new entry) — extracted `generate-pages-manifest.ts` as a separate
+  pre-step instead, writing `tests/.generated/pages-manifest.json`; `pages.manifest.ts` went back
+  to a plain synchronous `fs.readFileSync`, and `visual-fixtures.manifest.ts` needed no changes at
+  all beyond its doc comment, since it only ever consumed `pages.manifest.ts`'s exported array,
+  not the async source directly.
+- Hit a second, more subtle ordering bug inside `generate-pages-manifest.ts` itself — a static
+  `import` of `@portfolio/backend` evaluated before the file's own `loadEnv()` call, regardless of
+  line order, because ES modules always finish evaluating static dependencies first (see section
+  11's second new entry). Fixed with a dynamic `await import(...)` instead.
+- `WorkSummary.hasCaseStudy` (already a cheap boolean on the type — see
+  `backend/src/content/work.ts`) let the work-detail-page filter avoid any extra per-item query,
+  an improvement over the frontend/tests/ original's static-array `.filter()`. `PostSummary` has
+  no equivalent flag, so the journal-detail-page filter calls `getPostBySlug()` per entry — the
+  same existence check `app/(site)/journal/[slug]/page.tsx` itself makes before rendering, just
+  run once up front instead of per-request.
+- Added `frontend/tests/tsconfig.json` as its own small TS project, and excluded `tests/` from
+  `frontend/tsconfig.json`'s `include` set — confirmed (via Next.js's own docs, not assumed) that `next
+  build`'s type-check step runs across the *entire* project selected by `tsconfig.json`, only
+  auto-skipping files matched by `*.test.*`/`*.spec.*` by name. Without this exclusion,
+  `generate-pages-manifest.ts`/`pages.manifest.ts`/etc. (none of which match that naming pattern)
+  would have broken `next build` — and by extension, `backend-web-checks.yml`'s existing `npm run
+  build` step in `frontend/` — for reasons having nothing to do with the app itself.
+- Swapped the `webServer` command from Vite's `build && preview -- --port 4173` to Next's `build
+  && start -- -p 3100` (a different fixed port, chosen only to avoid colliding with an already-
+  running `next dev` on its own default 3000).
+- Did not copy `frontend/tests/visual-snapshots/*.png` — Next's SSR markup doesn't pixel-match the
+  old Vite output closely enough for a diff tool to treat them as the same baseline; fresh
+  baselines are generated the same way the original ones were (CI/Docker on Linux, never Windows),
+  once a database with real seeded content is available to generate the page manifest against.
+- Left CI retargeting (`.github/workflows/visual-tests.yml`,
+  `.github/workflows/accept-visual-baselines.yml`) untouched — that's a separate, later step in the
+  `frontend/` retirement plan, not part of this port. Sections 7/8 above call this out explicitly
+  rather than describing CI as already wired to `frontend/tests/`, which it isn't yet.
+
+### 2026-07-27 — Correction: this suite shipped querying the live dev database, and that was wrong
+
+**What happened.** The version of this port described in the entry above worked end-to-end
+(verified live: `generate-pages-manifest.ts` ran against a real Postgres, `next build` typechecked,
+30/30 `test:a11y` passed against a real built/started server) — but it pointed
+`generate-pages-manifest.ts` and the `webServer`-started app at `backend/.env`'s real DEV
+database, the same one a developer edits by hand through the admin panel day to day. This shipped
+without asking first, which is exactly the mistake: a data-source strategy for a test suite is a
+real architectural decision with several legitimate answers, not a detail to silently pick and
+move on from.
+
+**Why it was actually wrong, not just a style disagreement.** A regression suite exists to answer
+"did something ACTUALLY break," which requires comparing against a KNOWN, FIXED baseline. Querying
+the dev database means the set of pages under test — and everything they render — silently
+changes every time someone adds a work item or journal post through the admin panel. Two
+consequences, both real: (1) `visual.spec.ts`'s curated fixture pages would drift out of sync with
+what the dynamic manifest considers valid (`visual-fixtures.manifest.ts`'s own "stale fixture"
+guard exists for exactly this), and (2) a passing run today and a passing run next week aren't
+comparable evidence of "nothing regressed" — they might just both happen to reflect whatever
+content existed at each moment, which is not what "visual regression testing" is supposed to mean.
+
+**Four real, current (2026) approaches were discussed before choosing a fix** — recorded here
+because the trade-offs matter more than the final pick, and the three not chosen are backlog, not
+rejected ideas:
+
+1. **Seeded, isolated test database with deterministic fixtures** (chosen). Real Postgres, real
+   Prisma queries, real `notFound()`/routing behavior — the actual integration is genuinely
+   exercised, just against fixed, known content instead of whatever the dev DB happens to contain
+   right now.
+2. **Fake in-memory backend, swapped in for `@portfolio/backend` at build time** (via a bundler
+   `resolveAlias`, env-gated). Zero database dependency at all, maximally deterministic — but the
+   real Prisma/schema integration this suite is also supposed to exercise (a11y/visual checks
+   catching e.g. a broken query, not just a broken template) wouldn't be covered by this suite at
+   all anymore. Filed as a legitimate future option, not implemented.
+3. **MSW + Next.js's experimental `testProxy`**, intercepting `fetch()` during SSR. Confirmed (by
+   reading the actual code, not assumed) that this **cannot work for the pages this suite targets
+   as currently architected**: `frontend/`'s public Server Components call `@portfolio/backend`
+   directly, in-process — a plain function call to a Prisma-backed function, never a `fetch()` —
+   and MSW only ever intercepts the network/fetch layer. It has nothing to intercept here. It
+   would apply naturally to the admin panel's CLIENT components, which do call `fetch()` against
+   `/api/admin/*` — filed as a real, correctly-scoped idea for a FUTURE admin-flow test suite, not
+   this one.
+4. **Storybook-level component isolation** (`frontend/src/views/storybook/` already exists as a
+   dev-only playground). Screenshot individual templates with fixed props, no database or routing
+   involved at all — fast and maximally deterministic, but a different, complementary layer
+   (proves "does the template render correctly in isolation," not "does the real integrated page
+   work") rather than a replacement for what `visual.spec.ts`/`a11y.spec.ts` already do. Filed as a
+   future addition.
+
+**The actual fix.** `backend/scripts/seed-e2e-fixtures.ts` (new — see its own doc comment and
+`backend/scripts/README.md`'s dated entry) hard-resets `backend/.env.test`'s `portfolio_test`
+database and inserts 3 work items (2 with a case study, 1 without) and 3 posts (2 with a body, 1
+"upcoming" stub without), reusing `createWork`/`createPost` — the same functions the admin panel's
+own API routes call — rather than duplicating `Document`/`Block` creation logic. Both
+`generate-pages-manifest.ts` and `playwright.config.ts` were repointed from `backend/.env` to
+`backend/.env.test`. A new npm script chain, `test:e2e:seed-fixtures` → `test:e2e:generate-manifest`
+(together, `test:e2e:prepare`), runs before every `playwright test` invocation via
+`test:e2e`/`test:visual`/`test:a11y`/`test:e2e:update`.
+
+**Verified live, again, after the fix** — not assumed to "still work" just because it worked
+before the change: reseeded `portfolio_test` twice in a row (confirms the reset-then-seed is
+idempotent, no leftover-row unique-constraint errors), regenerated the manifest (now a fixed 7
+pages: 3 static + `work-navigation-engine` + `work-onboarding-flow` + `journal-flowbus` +
+`journal-testing-culture` — `internal-tooling` and `upcoming-draft` correctly excluded, proving
+both filter branches in `generate-pages-manifest.ts` are now actually exercised, not just
+theoretically reachable), and re-ran the full `test:a11y` suite against a real built/started
+server pointed at the seeded test DB: **14/14 passed**. Also queried the DEV database directly
+afterward to confirm the seed script never touched it (`portfolio.work` row count unchanged from
+before this fix).
+
+**Takeaway.** "It works end-to-end" and "it's the right design" are different claims — this
+suite passed its own live verification the first time and was still fundamentally wrong about
+where its data should come from. The fix for that kind of gap is asking a real question up front,
+not more testing after the fact.
+
+### 2026-07-27 — CI retargeted from the legacy `frontend/tests/` to `web/tests/` (later renamed `frontend/tests/`)
+
+**What needed doing.** `.github/workflows/visual-tests.yml` and
+`.github/workflows/accept-visual-baselines.yml` still pointed entirely at `frontend/tests/` (the
+legacy Vite SPA), even though the suite itself had already been ported to `web/tests/` (later renamed
+`frontend/tests/` — the entry above). Sections 7/8 of this document explicitly called out this gap as a caveat rather than
+pretending CI already worked — this entry closes it.
+
+**What was actually done, not just a path find/replace.** This wasn't a pure mechanical rename:
+This app's test suite's data source is a real Postgres database (unlike the legacy `frontend/tests/`'s static
+in-repo import), so both workflows needed real additions, not just `frontend` → `web` path swaps:
+
+- Added an ephemeral `postgres:16-alpine` service container to both jobs — same
+  image/user/password/database settings as `backend-web-checks.yml`'s own job, kept in sync
+  deliberately rather than inventing a second convention for the same thing.
+- Added `DATABASE_URL`/`JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` as real job-level env vars (not a
+  `backend/.env.test` file, which is gitignored and doesn't exist in CI) — `generate-pages-
+  manifest.ts` and `next.config.ts` already anticipated this in their own doc comments (their
+  `loadEnv()` calls are no-ops when the variable is already set), it just hadn't been wired up yet.
+- Added an explicit "Apply migrations to the CI database" step (`npx prisma migrate deploy` in
+  `backend/`) before Playwright starts — `frontend/tests/`'s version never needed this at all.
+- Changed dependency install from `working-directory: frontend` (the legacy Vite SPA) + its own `package-lock.json` to a
+  **root-level** `npm ci` with `cache-dependency-path: package-lock.json` — `web`/`backend` (`web` later
+  renamed `frontend`) are npm workspace members sharing one root lockfile; the legacy Vite SPA was a standalone app with its own.
+  **This deviates from the retirement plan's literal text** (which said `cache path →
+  frontend/package-lock.json`), because no such file exists or should exist once `frontend/` is a workspace
+  member — installing with `working-directory: web` would fail outright (no lockfile there to
+  resolve against). Verified live: `npm ci` at the root correctly hoists and symlinks
+  `@portfolio/backend` the same way local `npm install` already does for every other workflow in
+  this repo.
+- Replaced the separate "Run tests" (`npx playwright test`) step's implicit assumption that no
+  prepare step is needed with `npm run test:e2e` (visual-tests.yml) / `npm run test:e2e:update`
+  (accept-visual-baselines.yml) — both already chain `test:e2e:seed-fixtures` →
+  `test:e2e:generate-manifest` in front of the actual Playwright invocation (see section 4), so a
+  bare `npx playwright test` in CI would have failed immediately with `pages.manifest.ts`'s own
+  "run the prepare step first" error.
+- `.github/scripts/format-summary.mjs` hardcoded its OUTPUT path as `frontend/pr-comment.md` in
+  two places (not just the `summaryPath` it receives as an argument) — missed on a first read of
+  the plan's diff list, which only mentioned workflow YAML files. Caught by actually reading the
+  script's full source before assuming the retarget was complete; fixed both hardcoded paths to
+  `frontend/pr-comment.md` to match the workflow's own `Comment on PR` step.
+
+**Understandability.** Both workflow files now carry a top-of-file comment explaining why the
+Postgres service/env/migration step exist (pointing at `generate-pages-manifest.ts`'s own comment
+for the deeper reason), so a future reader doesn't have to reverse-engineer "why does a visual
+test workflow need a database" from the diff alone.
+
+**Migration/fault-tolerance impact.** None beyond what `backend-web-checks.yml` already
+established — same ephemeral-container pattern, same failure mode (a flaky/slow Postgres container
+fails the health check and the job fails loudly, not silently).
+
+**SOLID angle.** Not applicable in the class-design sense — this is CI configuration, not
+application code. The relevant discipline here was reuse (Don't Repeat Yourself at the
+infrastructure level): the Postgres service block, env var names, and migration step are copied
+verbatim from `backend-web-checks.yml` rather than inventing a slightly different second version of
+the same setup.
+
+**Not yet done.** Since no baselines exist yet in `frontend/tests/visual-snapshots/` (the port's own
+entry above notes fresh baselines still need generating), the very first real run of
+`visual-tests.yml` against this retarget will fail on every visual assertion until that initial
+generation happens — expected, not a bug in this retarget, and tracked as the next step in the
+`frontend/` retirement plan, not this one.

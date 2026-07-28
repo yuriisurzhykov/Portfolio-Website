@@ -1,2 +1,2 @@
-export type { CodeLanguage } from "./codeHighlighter.ts";
-export { highlightCode } from "./codeHighlighter.ts";
+export type { CodeLanguage } from "./codeHighlighter";
+export { highlightCode } from "./codeHighlighter";

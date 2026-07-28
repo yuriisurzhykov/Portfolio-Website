@@ -1,130 +1,253 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkLoginRateLimit, recordFailedLogin, resetLoginRateLimit } from "./rate-limit";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+    checkLoginRateLimit,
+    checkRateLimit,
+    InMemoryRateLimiter,
+    resetLoginRateLimit,
+    setRateLimiterForTesting,
+    UpstashRateLimiter,
+    type RedisCommands,
+} from "./rate-limit";
 
-const WINDOW_MS = 15 * 60 * 1000;
-
-afterEach(() => {
-    vi.useRealTimers();
-});
-
-/**
- * The limiter's buckets live in a module-level Map with no exported way to
- * reset it, so each test uses its own unique key (crypto-random suffix) —
- * that's simpler and safer than trying to reset shared module state
- * between tests, and just as valid: the limiter is keyed by client IP in
- * production, so per-test isolation via a unique key mirrors that exactly.
- */
 function uniqueKey(): string {
     return `test-${ Math.random().toString(36).slice(2) }`;
 }
 
-describe("rate-limit", () => {
-    it("allows a key that has never been seen before", () => {
-        expect(checkLoginRateLimit(uniqueKey()).allowed).toBe(true);
+describe("InMemoryRateLimiter", () => {
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
-    it("still allows requests below the failure threshold", () => {
+    it("allows a key that has never been seen before", async () => {
+        const limiter = new InMemoryRateLimiter();
+        expect((await limiter.checkAndRecord(uniqueKey(), 10, 900)).allowed).toBe(true);
+    });
+
+    it("still allows requests up to and including the limit", async () => {
+        const limiter = new InMemoryRateLimiter();
         const key = uniqueKey();
-        for (let i = 0; i < 9; i++) recordFailedLogin(key);
-        expect(checkLoginRateLimit(key).allowed).toBe(true);
+        let last;
+        for (let i = 0; i < 10; i++) last = await limiter.checkAndRecord(key, 10, 900);
+        expect(last!.allowed).toBe(true);
     });
 
-    it("blocks once the failure threshold is reached", () => {
+    it("blocks once the count exceeds the limit", async () => {
+        const limiter = new InMemoryRateLimiter();
         const key = uniqueKey();
-        for (let i = 0; i < 10; i++) recordFailedLogin(key);
-        const result = checkLoginRateLimit(key);
-        expect(result.allowed).toBe(false);
-        expect(result.retryAfterSeconds).toBeGreaterThan(0);
+        let last;
+        for (let i = 0; i < 11; i++) last = await limiter.checkAndRecord(key, 10, 900);
+        expect(last!.allowed).toBe(false);
+        expect(last!.retryAfterSeconds).toBeGreaterThan(0);
     });
 
-    it("resetLoginRateLimit clears the block for that key", () => {
+    it("reset clears the block for that key", async () => {
+        const limiter = new InMemoryRateLimiter();
         const key = uniqueKey();
-        for (let i = 0; i < 10; i++) recordFailedLogin(key);
-        expect(checkLoginRateLimit(key).allowed).toBe(false);
+        for (let i = 0; i < 11; i++) await limiter.checkAndRecord(key, 10, 900);
+        expect((await limiter.checkAndRecord(key, 10, 900)).allowed).toBe(false);
 
-        resetLoginRateLimit(key);
-        expect(checkLoginRateLimit(key).allowed).toBe(true);
+        await limiter.reset(key);
+        expect((await limiter.checkAndRecord(key, 10, 900)).allowed).toBe(true);
     });
 
-    it("tracks different keys independently", () => {
+    it("tracks different keys independently", async () => {
+        const limiter = new InMemoryRateLimiter();
         const keyA = uniqueKey();
         const keyB = uniqueKey();
-        for (let i = 0; i < 10; i++) recordFailedLogin(keyA);
+        for (let i = 0; i < 11; i++) await limiter.checkAndRecord(keyA, 10, 900);
 
-        expect(checkLoginRateLimit(keyA).allowed).toBe(false);
-        expect(checkLoginRateLimit(keyB).allowed).toBe(true);
+        expect((await limiter.checkAndRecord(keyA, 10, 900)).allowed).toBe(false);
+        expect((await limiter.checkAndRecord(keyB, 10, 900)).allowed).toBe(true);
     });
 
-    /**
-     * Found by mutation testing: "blocks once the threshold is reached"
-     * only asserted `retryAfterSeconds > 0`, which can't distinguish the
-     * real 15-minute window from a wrong arithmetic mistake (e.g. adding
-     * instead of subtracting, or multiplying instead of dividing by 1000).
-     * `now` is deliberately NOT left at 0: `resetAt - now` and
-     * `resetAt + now` happen to produce the same result when `now` is 0,
-     * which would make the test pass against the wrong formula too.
-     */
-    it("computes retryAfterSeconds precisely from the real 15-minute window, not just as some positive number", () => {
+    it("computes retryAfterSeconds precisely from the real window, not just as some positive number", async () => {
         vi.useFakeTimers();
         vi.setSystemTime(0);
+        const limiter = new InMemoryRateLimiter();
         const key = uniqueKey();
-        for (let i = 0; i < 10; i++) recordFailedLogin(key); // resetAt = WINDOW_MS
+        for (let i = 0; i < 10; i++) await limiter.checkAndRecord(key, 10, 900); // resetAt = 900_000
 
         vi.setSystemTime(1000); // 1 real second later
-        expect(checkLoginRateLimit(key).retryAfterSeconds).toBe(15 * 60 - 1);
+        const result = await limiter.checkAndRecord(key, 10, 900);
+        expect(result.allowed).toBe(false);
+        expect(result.retryAfterSeconds).toBe(900 - 1);
     });
 
     /**
-     * Found by mutation testing: nothing tested the exact expiry boundary,
-     * so a mutant changing `resetAt < now` to `resetAt <= now` survived —
-     * both versions agree everywhere except the single instant they're
-     * equal. Below only pins the reader-side check (`checkLoginRateLimit`);
-     * the writer-side check has its own boundary test below.
+     * Found by mutation testing on the version this replaces: pins the
+     * exact boundary (`resetAt < now`, not `<=`) — at the instant `now`
+     * equals `resetAt` the window has NOT expired yet (still blocked),
+     * only strictly after it has.
      */
-    it("checkLoginRateLimit still reports blocked at the exact expiry instant, only allowing strictly after", () => {
+    it("still reports blocked at the exact expiry instant, only allowing strictly after", async () => {
         vi.useFakeTimers();
         vi.setSystemTime(0);
+        const limiter = new InMemoryRateLimiter();
         const key = uniqueKey();
-        for (let i = 0; i < 10; i++) recordFailedLogin(key); // resetAt = WINDOW_MS
+        for (let i = 0; i < 11; i++) await limiter.checkAndRecord(key, 10, 900); // resetAt = 900_000, blocked
 
-        vi.setSystemTime(WINDOW_MS); // exactly at the boundary — not yet expired
-        expect(checkLoginRateLimit(key).allowed).toBe(false);
+        vi.setSystemTime(900_000); // exactly at the boundary — not yet expired
+        expect((await limiter.checkAndRecord(key, 10, 900)).allowed).toBe(false);
 
-        vi.setSystemTime(WINDOW_MS + 1); // strictly past it
-        expect(checkLoginRateLimit(key).allowed).toBe(true);
+        vi.setSystemTime(900_001); // strictly past it
+        expect((await limiter.checkAndRecord(key, 10, 900)).allowed).toBe(true);
     });
 
-    it("recordFailedLogin only resets the counter strictly after the window passes, not exactly at the boundary", () => {
+    it("starts a genuinely fresh window after real expiry — a full new run of hits blocks again", async () => {
         vi.useFakeTimers();
         vi.setSystemTime(0);
+        const limiter = new InMemoryRateLimiter();
         const key = uniqueKey();
-        for (let i = 0; i < 10; i++) recordFailedLogin(key); // resetAt = WINDOW_MS
+        for (let i = 0; i < 11; i++) await limiter.checkAndRecord(key, 10, 900); // blocked
+        expect((await limiter.checkAndRecord(key, 10, 900)).allowed).toBe(false);
 
-        vi.setSystemTime(WINDOW_MS); // exactly at the boundary — not yet expired
-        recordFailedLogin(key); // must increment the existing bucket (11), not start a fresh one
-        expect(checkLoginRateLimit(key).allowed).toBe(false);
+        vi.setSystemTime(900_001); // the window has now passed
+        let last;
+        for (let i = 0; i < 11; i++) last = await limiter.checkAndRecord(key, 10, 900); // a fresh run of 11 hits
+        expect(last!.allowed).toBe(false); // must block again, not be stuck "expired" forever
+    });
+});
+
+describe("UpstashRateLimiter", () => {
+    /**
+     * Mimics the real INCR-and-EXPIRE Lua script's atomic semantics in
+     * plain JS: expiry is only ever "set" (tracked here via `expiryCalls`,
+     * since there's no real TTL clock in this mock) on the exact call where
+     * the counter goes from absent to 1, folded into the same `eval` call —
+     * never as a separate step a caller could observe or skip.
+     */
+    function createMockRedis(): RedisCommands & { store: Map<string, number>; expiryCalls: number } {
+        const store = new Map<string, number>();
+        const mock = {
+            store,
+            expiryCalls: 0,
+            async eval<TData>(_script: string, keys: string[], args: unknown[]): Promise<TData> {
+                const [key] = keys;
+                const next = (store.get(key) ?? 0) + 1;
+                store.set(key, next);
+                if (next === 1) {
+                    mock.expiryCalls += 1;
+                }
+                return next as TData;
+            },
+            async ttl() {
+                return 42;
+            },
+            async del(key: string) {
+                const existed = store.has(key);
+                store.delete(key);
+                return existed ? 1 : 0;
+            },
+        };
+        return mock;
+    }
+
+    it("allows requests up to the limit and blocks past it", async () => {
+        const redis = createMockRedis();
+        const limiter = new UpstashRateLimiter(redis);
+        const key = uniqueKey();
+
+        for (let i = 0; i < 5; i++) {
+            expect((await limiter.checkAndRecord(key, 5, 60)).allowed).toBe(true);
+        }
+        const blocked = await limiter.checkAndRecord(key, 5, 60);
+        expect(blocked.allowed).toBe(false);
+        expect(blocked.retryAfterSeconds).toBe(42);
+    });
+
+    it("sets expiry only on the first increment, not every call", async () => {
+        const redis = createMockRedis();
+        const limiter = new UpstashRateLimiter(redis);
+        const key = uniqueKey();
+
+        await limiter.checkAndRecord(key, 5, 60);
+        await limiter.checkAndRecord(key, 5, 60);
+        await limiter.checkAndRecord(key, 5, 60);
+
+        expect(redis.expiryCalls).toBe(1);
     });
 
     /**
-     * Found by mutation testing: the previous boundary test alone doesn't
-     * prove `recordFailedLogin` actually WRITES a fresh, future `resetAt` —
-     * `checkLoginRateLimit` has its own independent expiry check, which
-     * would keep reporting "allowed" for a stale, never-updated `resetAt`
-     * regardless of what `recordFailedLogin` did internally, masking a
-     * mutant that made `recordFailedLogin` stop resetting altogether. The
-     * real, only-observable-this-way symptom of that bug: once expired
-     * once, the key could NEVER be blocked again, no matter how many more
-     * failures come in — a full fresh run of failures must still block.
+     * Pins the actual security-relevant behavior a PR review flagged: the
+     * increment and its expiry must be ONE atomic Redis round trip (a Lua
+     * `eval`), not two separate `incr` + `expire` calls — the two-call
+     * version leaves a real window where a crash/network failure between
+     * them permanently blocks a key with no TTL to ever reset it. Asserts
+     * the actual mechanism (single `eval` call, correct key/window
+     * arguments), not just the externally-observable count/expiry outcome
+     * already covered above — a call-count assertion is what would catch a
+     * regression back to two separate calls, since the outcome-only tests
+     * above would still pass even if `incr`+`expire` were reintroduced.
      */
-    it("starts a genuinely fresh window after expiry — a full new run of failures blocks again", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(0);
+    it("increments and sets expiry via a single atomic eval call, not separate commands", async () => {
+        const redis = createMockRedis();
+        const evalSpy = vi.spyOn(redis, "eval");
+        const limiter = new UpstashRateLimiter(redis);
         const key = uniqueKey();
-        for (let i = 0; i < 10; i++) recordFailedLogin(key); // resetAt = WINDOW_MS
-        expect(checkLoginRateLimit(key).allowed).toBe(false);
 
-        vi.setSystemTime(WINDOW_MS + 1); // the window has now passed
-        for (let i = 0; i < 10; i++) recordFailedLogin(key); // a fresh run of 10 failures
-        expect(checkLoginRateLimit(key).allowed).toBe(false); // must block again, not be stuck "expired" forever
+        await limiter.checkAndRecord(key, 5, 60);
+
+        expect(evalSpy).toHaveBeenCalledTimes(1);
+        expect(evalSpy).toHaveBeenCalledWith(expect.any(String), [key], [60]);
+    });
+
+    it("reset deletes the counter", async () => {
+        const redis = createMockRedis();
+        const limiter = new UpstashRateLimiter(redis);
+        const key = uniqueKey();
+
+        await limiter.checkAndRecord(key, 1, 60);
+        await limiter.reset(key);
+        expect(redis.store.has(key)).toBe(false);
+        // A fresh window after reset — must be allowed again, not still counted.
+        expect((await limiter.checkAndRecord(key, 1, 60)).allowed).toBe(true);
+    });
+});
+
+describe("checkLoginRateLimit / resetLoginRateLimit (default limiter selection)", () => {
+    beforeEach(() => {
+        setRateLimiterForTesting(new InMemoryRateLimiter());
+    });
+
+    it("allows a key that has never been seen before", async () => {
+        expect((await checkLoginRateLimit(uniqueKey())).allowed).toBe(true);
+    });
+
+    it("blocks after 5 attempts within the window", async () => {
+        const key = uniqueKey();
+        let last;
+        for (let i = 0; i < 6; i++) last = await checkLoginRateLimit(key);
+        expect(last!.allowed).toBe(false);
+    });
+
+    it("resetLoginRateLimit clears the block for that key", async () => {
+        const key = uniqueKey();
+        for (let i = 0; i < 6; i++) await checkLoginRateLimit(key);
+        expect((await checkLoginRateLimit(key)).allowed).toBe(false);
+
+        await resetLoginRateLimit(key);
+        expect((await checkLoginRateLimit(key)).allowed).toBe(true);
+    });
+
+    it("tracks IP and account keys independently even for the same login attempt", async () => {
+        const ip = `ip:${ uniqueKey() }`;
+        const account = `account:${ uniqueKey() }`;
+        for (let i = 0; i < 6; i++) await checkLoginRateLimit(ip);
+
+        expect((await checkLoginRateLimit(ip)).allowed).toBe(false);
+        expect((await checkLoginRateLimit(account)).allowed).toBe(true);
+    });
+});
+
+describe("checkRateLimit (general-purpose entry point)", () => {
+    beforeEach(() => {
+        setRateLimiterForTesting(new InMemoryRateLimiter());
+    });
+
+    it("delegates straight to the configured limiter with the given limit/window", async () => {
+        const key = uniqueKey();
+        let last;
+        for (let i = 0; i < 4; i++) last = await checkRateLimit(key, 3, 60);
+        expect(last!.allowed).toBe(false);
     });
 });

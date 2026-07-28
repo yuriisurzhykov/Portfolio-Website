@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { ArrowRight, Code2, Database, Palette } from "lucide-react";
 

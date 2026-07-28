@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { CodeBlockSurface } from "./CodeBlockSurface";
@@ -106,32 +108,32 @@ export const CodeBlock = forwardRef<HTMLPreElement, CodeBlockProps>(
         const canCopy = Boolean(textToCopy);
 
         return (
-            <CodeBlockSurface className={ className }>
+            <CodeBlockSurface className={className}>
                 <CodeBlockToolbar
-                    title={ title }
-                    copyable={ copyable }
-                    canCopy={ canCopy }
-                    copied={ copied }
-                    labels={ labels }
-                    onCopy={ handleCopy }
+                    title={title}
+                    copyable={copyable}
+                    canCopy={canCopy}
+                    copied={copied}
+                    labels={labels}
+                    onCopy={handleCopy}
                 />
 
                 <CodeBlockContent
-                    variant={ variant }
-                    language={ language }
-                    highlightEnabled={ highlightEnabled }
-                    showLineNumbers={ showLineNumbers }
-                    startLine={ startLine }
-                    rawCode={ rawCode }
-                    innerRef={ innerRef }
-                    { ...rest }
+                    variant={variant}
+                    language={language}
+                    highlightEnabled={highlightEnabled}
+                    showLineNumbers={showLineNumbers}
+                    startLine={startLine}
+                    rawCode={rawCode}
+                    innerRef={innerRef}
+                    {...rest}
                 >
-                    { children }
+                    {children}
                 </CodeBlockContent>
 
-                {/* Live region для screen readers */ }
+                {/* Live region для screen readers */}
                 <span aria-live="polite" className="sr-only">
-                    { copied ? labels.liveRegionCopied : undefined }
+                    {copied ? labels.liveRegionCopied : undefined}
                 </span>
             </CodeBlockSurface>
         );

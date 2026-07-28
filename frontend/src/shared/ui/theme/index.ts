@@ -1,7 +1,7 @@
-export type { IconName } from "./icons.ts";
+export type { IconName } from "./icons";
 
-export { typography } from "./typography.ts";
-export type { TextVariant } from "./typography.ts";
-export type { DesignTokens } from "./tokens.ts";
+export { typography } from "./typography";
+export type { TextVariant } from "./typography";
+export type { DesignTokens } from "./tokens";
 
-export { themeVars } from "./theme.css.ts";
+export { themeVars } from "./theme.css";

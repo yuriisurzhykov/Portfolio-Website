@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import * as React from "react";
-import type { ThemeSwitcherOptionModel } from "../model/theme-toggle.model.ts";
-import { getThemeSwitcherStyles } from "./themeToggle.styles.ts";
+import type { ThemeSwitcherOptionModel } from "../model/theme-toggle.model";
+import { getThemeSwitcherStyles } from "./themeToggle.styles";
 import { ln } from "@/shared/i18n/engine";
 
 const styles = getThemeSwitcherStyles();

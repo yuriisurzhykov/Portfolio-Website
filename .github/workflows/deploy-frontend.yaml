@@ -1,0 +1,252 @@
+name: Deploy frontend/ (Next.js)
+
+# push to master  -> deploy to dev.yuriisoft.me  (yuriisoft-frontend-dev.service, :3001)
+# push tag v*     -> deploy to yuriisoft.me      (yuriisoft-frontend.service, :3000)
+#
+# Mirrors deploy_release.yaml's tag-triggered production model (same VPS
+# secrets, same appleboy actions) but adds a continuous dev deploy on every
+# master push, and adds the extra steps deploy.sh never needed for a
+# static site: wiring backend/.env into the release and running
+# `prisma migrate deploy` before restarting the app (see deploy-frontend.sh).
+#
+# Renamed from deploy-web.yaml when web/ was renamed to frontend/ (the
+# legacy Vite frontend/ this app replaced was retired first — see
+# .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md). The VPS
+# targets below (yuriisoft-frontend[-dev], /srv/apps/yuriisoft-frontend[-dev])
+# name the NEW infrastructure this workflow deploys to once provisioned —
+# CI is retargeted first, then the actual systemd services/directories are
+# provisioned under the new names before this workflow is exercised for
+# real again.
+#
+# Supersedes build-web-artifact.yml (a manual, deploy-less diagnostic
+# workflow used to get the very first artifact onto the VPS during initial
+# Phase 6 bring-up) — that file is removed in the same commit as this one.
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # See build-web-artifact.yml's original comment: `prisma generate`
+    # (backend's postinstall script) needs DATABASE_URL to be *set*, even
+    # though it never connects — these are build-time placeholders only.
+    env:
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      JWT_ACCESS_SECRET: build-time-placeholder-not-for-real-use
+      JWT_REFRESH_SECRET: build-time-placeholder-not-for-real-use
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies (frontend/ + backend/)
+        run: npm ci
+
+      - name: Build frontend (Next.js)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Package artifact
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='frontend/.next/cache' \
+            -czf release.tar.gz \
+            package.json package-lock.json node_modules backend frontend
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-release
+          path: release.tar.gz
+          retention-days: 7
+
+  deploy-dev:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      # deploy-frontend.sh comes from the repo itself, not the build
+      # artifact — download-artifact alone doesn't check out the repo, so
+      # without this step .scripts/deploy-frontend.sh simply doesn't exist
+      # in this job's workspace and scp-action silently has nothing to send.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-release
+
+      - name: Copy files to Server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "release.tar.gz, .scripts/deploy-frontend.sh"
+          target: "/tmp/"
+
+      - name: Deploy on Server (dev)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /tmp/.scripts/deploy-frontend.sh
+            /tmp/.scripts/deploy-frontend.sh "${{ github.sha }}" /tmp/release.tar.gz /srv/apps/yuriisoft-frontend-dev yuriisoft-frontend-dev.service
+            DEPLOY_EXIT_CODE=$?
+            rm -f /tmp/release.tar.gz
+            rm -rf /tmp/.scripts
+            if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+              echo "❌ Deployment FAILED with exit code $DEPLOY_EXIT_CODE"
+              exit $DEPLOY_EXIT_CODE
+            fi
+
+      # Additive-only sync of NEW OPTIONAL env vars (currently: Upstash
+      # Redis, for backend/src/auth/rate-limit.ts) into shared/.env,
+      # driven by GitHub Actions secrets rather than a human SSHing in —
+      # see .scripts/set-app-env-finish.sh and provision/12-set-app-env-
+      # helper.sh for the narrow, root-owned mechanism this calls into.
+      # DATABASE_URL/JWT_* are deliberately NOT here and never will be —
+      # those stay one-time/manual (provision/06-app-env.sh), never
+      # touched by CI, since resetting either one live invalidates every
+      # session or breaks the DB connection outright, which must always be
+      # a deliberate human act, not a side effect of an ordinary deploy.
+      # `continue-on-error`: a hiccup here (or the secrets simply not
+      # being configured yet) must never fail an otherwise-good deploy —
+      # this step only ever ADDS/UPDATES named keys, never deletes, so
+      # skipping it changes nothing about what's already live.
+      - name: Sync optional env vars (dev)
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            UPSTASH_URL="${{ secrets.UPSTASH_REDIS_REST_URL_DEV }}"
+            UPSTASH_TOKEN="${{ secrets.UPSTASH_REDIS_REST_TOKEN_DEV }}"
+            ARGS=()
+            [ -n "$UPSTASH_URL" ] && ARGS+=("UPSTASH_REDIS_REST_URL=$UPSTASH_URL")
+            [ -n "$UPSTASH_TOKEN" ] && ARGS+=("UPSTASH_REDIS_REST_TOKEN=$UPSTASH_TOKEN")
+            if [ ${#ARGS[@]} -eq 0 ]; then
+              echo "No optional env secrets configured yet — skipping."
+              exit 0
+            fi
+            sudo /usr/local/bin/set-app-env-finish.sh /srv/apps/yuriisoft-frontend-dev "${ARGS[@]}"
+
+  # Publishes a GitHub Release for the pushed tag with auto-generated
+  # notes (from merged PRs/commits since the last tag) and the exact
+  # built artifact attached — a permanent, browsable record of "what was
+  # v1.2.3, and can I get that exact build back later" independent of the
+  # VPS deploy (this job doesn't depend on deploy-prod, and deploy-prod
+  # doesn't depend on this — a slow/failed release publish should never
+  # block the actual deploy, and vice versa).
+  github-release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-release
+
+      - name: Rename artifact for clarity
+        run: mv release.tar.gz "frontend-${{ github.ref_name }}.tar.gz"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: "frontend-${{ github.ref_name }}.tar.gz"
+
+  deploy-prod:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from tag
+        id: ver
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-release
+
+      - name: Copy files to Server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "release.tar.gz, .scripts/deploy-frontend.sh"
+          target: "/tmp/"
+
+      - name: Deploy on Server (prod)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /tmp/.scripts/deploy-frontend.sh
+            /tmp/.scripts/deploy-frontend.sh "${{ steps.ver.outputs.VERSION }}" /tmp/release.tar.gz /srv/apps/yuriisoft-frontend yuriisoft-frontend.service
+            DEPLOY_EXIT_CODE=$?
+            rm -f /tmp/release.tar.gz
+            rm -rf /tmp/.scripts
+            if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+              echo "❌ Deployment FAILED with exit code $DEPLOY_EXIT_CODE"
+              exit $DEPLOY_EXIT_CODE
+            fi
+
+      # See deploy-dev's identical step for the full rationale (additive-
+      # only, DATABASE_URL/JWT_* deliberately excluded, continue-on-error
+      # so a missing/misconfigured optional secret never fails a real
+      # deploy) — same mechanism, prod's own secret values and BASE_DIR.
+      - name: Sync optional env vars (prod)
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            UPSTASH_URL="${{ secrets.UPSTASH_REDIS_REST_URL_PROD }}"
+            UPSTASH_TOKEN="${{ secrets.UPSTASH_REDIS_REST_TOKEN_PROD }}"
+            ARGS=()
+            [ -n "$UPSTASH_URL" ] && ARGS+=("UPSTASH_REDIS_REST_URL=$UPSTASH_URL")
+            [ -n "$UPSTASH_TOKEN" ] && ARGS+=("UPSTASH_REDIS_REST_TOKEN=$UPSTASH_TOKEN")
+            if [ ${#ARGS[@]} -eq 0 ]; then
+              echo "No optional env secrets configured yet — skipping."
+              exit 0
+            fi
+            sudo /usr/local/bin/set-app-env-finish.sh /srv/apps/yuriisoft-frontend "${ARGS[@]}"

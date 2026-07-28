@@ -17,8 +17,11 @@ const THEME_STORAGE_KEY = "portfolio.theme-preference";
  * reachable through the dev-only Storybook toggle on the public site — no UI interaction needed.
  *
  * Must be called BEFORE `page.goto(...)`: `addInitScript` runs before any of the page's own
- * scripts, which is what lets it beat ThemeProvider's `useState(() => getInitialPreference())`
- * initializer.
+ * scripts, which is what lets it beat ThemeProvider's client-only "correct to stored preference"
+ * effect (see theme.context.tsx's own comment on why the FIRST render is always deterministic
+ * "dark" now — this seeded value is picked up one effect-tick later, same as a real returning
+ * visitor, which is early enough for `waitForLoadState("networkidle")` in the specs below to
+ * settle on the seeded theme before a screenshot/axe scan runs).
  */
 export async function seedTheme(page: Page, theme: ThemePreference): Promise<void> {
     await page.addInitScript(

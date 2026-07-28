@@ -10,19 +10,16 @@ import { type PageManifestEntry, pagesManifest } from "./pages.manifest";
  * one of them didn't already tell you.
  *
  * So this list is deliberately curated by hand to cover distinct TEMPLATE variants, not content
- * volume:
+ * volume — same 5 routes as the `frontend/tests/` original, since the two apps render identical
+ * routes for identical content:
  *  - static list pages ("/", "/work", "/journal") — always included, they have no variants.
- *  - "/work/navigation-engine" — a case study WITH a `heroImage` reference and an `approach`
- *    steps grid (see WorkCaseStudy in src/data/work.ts).
- *  - "/journal/flowbus" — a journal post whose body includes a `code` block (see
- *    ContentBlock in src/data/journal.ts) alongside plain paragraphs/headings.
+ *  - "/work/navigation-engine" — a case study WITH a hero image and an "approach" steps grid.
+ *  - "/journal/flowbus" — a journal post whose body includes a code block alongside plain
+ *    paragraphs/headings.
  *
- * When the template gains a new visual variant worth guarding (e.g. a case study with no
- * `heroImage`, or a post with an image gallery block), add its path below — do NOT add a flag to
- * `WorkItem`/`JournalPost` for this; those types stay unaware of testing on principle (see
- * frontend/tests/README.md, section 4).
+ * When the template gains a new visual variant worth guarding (e.g. a case study with no hero
+ * image, or a post with an image gallery block), add its path below.
  */
-
 const FIXTURE_PATHS: string[] = ["/", "/work", "/work/navigation-engine", "/journal", "/journal/flowbus"];
 
 const pagesByPath = new Map(pagesManifest.map((entry) => [entry.path, entry]));
@@ -32,9 +29,10 @@ export const visualFixturesManifest: PageManifestEntry[] = FIXTURE_PATHS.map((pa
     if (!entry) {
         throw new Error(
             `visual-fixtures.manifest.ts references "${ path }", but it no longer exists in ` +
-            `pages.manifest.ts. The content behind this fixture was probably renamed, removed, ` +
-            `or no longer qualifies (missing caseStudy/body) — update FIXTURE_PATHS above to point ` +
-            `at a page that still exists.`,
+            `pages.manifest.ts. The content behind this fixture was probably renamed, removed, no ` +
+            `longer has a real case study/body, or the DB the manifest was generated against ` +
+            `("npm run test:e2e:generate-manifest") doesn't have it seeded yet — update ` +
+            `FIXTURE_PATHS above to point at a page that still exists.`,
         );
     }
     return entry;

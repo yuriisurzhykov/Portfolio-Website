@@ -1,2 +1,2 @@
-export { Text } from "./Text.tsx";
-export type { TextProperties } from "./Text.tsx";
+export { Text } from "./Text";
+export type { TextProperties } from "./Text";

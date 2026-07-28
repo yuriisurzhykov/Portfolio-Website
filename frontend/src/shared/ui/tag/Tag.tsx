@@ -1,7 +1,7 @@
 import type { ForwardedRef } from "react";
 import * as React from "react";
 import { cn } from "@/shared/lib/utils";
-import type { TagProps, TagSize, TagVariant } from "@/shared/ui/tag/Tag.types.ts";
+import type { TagProps, TagSize, TagVariant } from "@/shared/ui/tag/Tag.types";
 
 /**
  * tag

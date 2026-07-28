@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { ThemeContext } from "./theme.context";
 import type { ThemeContextValue } from "./theme.types";

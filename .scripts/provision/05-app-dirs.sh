@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Creates the directory layout for a Next.js app deployment target,
-# parallel to the existing /srv/apps/yuriisoft (frontend/ static site) —
-# that directory is untouched, the site keeps serving from there until the
-# Phase 6 cutover step.
+# parallel to /srv/apps/yuriisoft (the old frontend/ static site's release
+# directory) — cutover at nginx already happened, so that directory is no
+# longer serving traffic and is just pending manual removal on the VPS;
+# this script doesn't touch it either way.
 #
 # Parameterized via APP_BASE_DIR so the same script provisions both the
 # eventual production target (/srv/apps/yuriisoft-web, the default) and a

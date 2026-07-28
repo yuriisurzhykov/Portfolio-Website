@@ -4,6 +4,12 @@
 // marocchino/sticky-pull-request-comment via its `path` input (avoids GITHUB_OUTPUT multiline
 // escaping entirely).
 //
+// This script's own OUTPUT path was hardcoded and had to be moved twice to track
+// visual-tests.yml's own retargeting: frontend/pr-comment.md (legacy Vite app) -> web/pr-comment.md
+// (Next.js, mid-migration) -> frontend/pr-comment.md again (once web/ was renamed to frontend/ —
+// see .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md). Must keep matching the
+// workflow's `Comment on PR` step, which reads this exact path.
+//
 // Usage: node format-summary.mjs <summaryJsonPath> <reportDestDir> <owner/repo>
 
 import fs from "node:fs";

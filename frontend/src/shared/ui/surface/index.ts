@@ -1,2 +1,2 @@
-export { Surface } from "./Surface.tsx";
-export type { SurfaceProperties } from "./Surface.tsx";
+export { Surface } from "./Surface";
+export type { SurfaceProperties } from "./Surface";

@@ -8,6 +8,13 @@ name: Visual & Accessibility Tests
 # `/update-snapshots` comment command handled by accept-visual-baselines.yml. By the time a PR
 # is merged its baselines are already correct, so this job's run on master is just a
 # confirmation, not a place that ever needs to write back to the repo.
+#
+# Retargeted from the legacy Vite frontend/ to web/ (Next.js + Postgres) once its tests/ were
+# ported over, then renamed again alongside web/ -> frontend/ once the legacy app was retired —
+# see .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md. The suite needs a real
+# database (its page list is generated FROM Postgres, not a static in-repo import), so this job
+# has a Postgres service container + DATABASE_URL/JWT_* env + a migration step, mirroring the
+# exact pattern already established in backend-web-checks.yml for the same reason.
 
 on:
   pull_request:
@@ -28,6 +35,35 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      # frontend/tests/e2e/generate-pages-manifest.ts and the webServer-started Next.js app both
+      # need a real Postgres to read the seeded fixture content from — same ephemeral-per-run
+      # container backend-web-checks.yml already uses, for the same reason (never point CI at
+      # anything that persists between runs or a real dev database).
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: portfolio
+          POSTGRES_PASSWORD: portfolio_ci
+          POSTGRES_DB: portfolio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Real env vars, not a dotenv-loaded backend/.env.test (that file is gitignored and doesn't
+      # exist here) — frontend/tests/e2e/generate-pages-manifest.ts's and frontend/next.config.ts's
+      # own dotenv calls are no-ops in CI for exactly this reason (dotenv's config() never
+      # overwrites an already-set value). See generate-pages-manifest.ts's own comment.
+      DATABASE_URL: postgresql://portfolio:portfolio_ci@localhost:5432/portfolio_test
+      JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,11 +73,17 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          # frontend/ and backend/ are npm workspace members (single package-lock.json at the
+          # repo root) — unlike the legacy Vite frontend/ this app replaced, which had its own
+          # standalone lockfile.
+          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        working-directory: frontend
+      - name: Install workspace dependencies (frontend/ + backend/)
         run: npm ci
+
+      - name: Apply migrations to the CI database
+        working-directory: backend
+        run: npx prisma migrate deploy
 
       - name: Install Playwright browsers
         working-directory: frontend
@@ -49,7 +91,10 @@ jobs:
 
       - name: Run tests
         working-directory: frontend
-        run: npx playwright test
+        # Seeds portfolio_test with fixed fixtures + generates the page manifest before running
+        # Playwright — see frontend/tests/README.md section 4 for why this can't happen inside a
+        # spec file itself (Playwright's two-pass discovery model can't await it there).
+        run: npm run test:e2e
 
       - name: Determine report destination path
         id: report-dest

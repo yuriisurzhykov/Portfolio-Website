@@ -1,16 +1,42 @@
 {
-  "files": [],
-  "references": [
-    {
-      "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.node.json"
-    }
-  ],
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
     "incremental": true,
-    "composite": true
-  }
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  // "tests" (Playwright suite, see tests/README.md): Next.js's build-time type check runs `tsc`
+  // against this ENTIRE tsconfig's include set, not just files actually reachable from the app
+  // (confirmed against Next's own docs — the CLI type checker "checks the complete project
+  // selected by your tsconfig file"). It only auto-skips files matching `*.test.*`/`*.spec.*` by
+  // name, which covers the two spec files here but not pages.manifest.ts,
+  // generate-pages-manifest.ts, etc. — those would otherwise fail `next build` for reasons
+  // having nothing to do with the app itself. Excluded wholesale instead; tests/tsconfig.json is
+  // its own small, separate project for editor/IntelliSense purposes.
+  "exclude": ["node_modules", "tests"]
 }

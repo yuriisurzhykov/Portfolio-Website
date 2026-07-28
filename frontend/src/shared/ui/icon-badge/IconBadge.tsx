@@ -1,7 +1,7 @@
 import type { ForwardedRef } from "react";
 import * as React from "react";
 import { cn } from "@/shared/lib/utils";
-import type { IconBadgeProps, IconBadgeSize, IconBadgeTone } from "@/shared/ui/icon-badge/IconBadge.types.ts";
+import type { IconBadgeProps, IconBadgeSize, IconBadgeTone } from "@/shared/ui/icon-badge/IconBadge.types";
 
 /**
  * IconBadge

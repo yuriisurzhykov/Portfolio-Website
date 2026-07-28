@@ -1,2 +1,2 @@
-export { Section } from "./Section.tsx";
-export type { SectionProps } from "./Section.tsx";
+export { Section } from "./Section";
+export type { SectionProps } from "./Section";
