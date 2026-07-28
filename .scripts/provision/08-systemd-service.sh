@@ -5,8 +5,8 @@
 # service would be a bad surprise).
 #
 # Parameterized (SERVICE_NAME, APP_BASE_DIR, PORT) so the same script
-# produces both yuriisoft-web-dev.service (port 3001, verified live first)
-# and the eventual yuriisoft-web.service (port 3000) — see
+# produces both yuriisoft-frontend-dev.service (port 3001, verified live
+# first) and the eventual yuriisoft-frontend.service (port 3000) — see
 # .scripts/provision/README.md.
 #
 # ExecStart runs `npm run start` (not the `next` binary directly) — kept
@@ -28,8 +28,8 @@
 # never restarts a currently running service itself.
 set -euo pipefail
 
-: "${SERVICE_NAME:?Set SERVICE_NAME, e.g. yuriisoft-web-dev}"
-: "${APP_BASE_DIR:?Set APP_BASE_DIR, e.g. /srv/apps/yuriisoft-web-dev}"
+: "${SERVICE_NAME:?Set SERVICE_NAME, e.g. yuriisoft-frontend-dev}"
+: "${APP_BASE_DIR:?Set APP_BASE_DIR, e.g. /srv/apps/yuriisoft-frontend-dev}"
 : "${PORT:?Set PORT, e.g. 3001}"
 DESCRIPTION="${DESCRIPTION:-Portfolio Next.js app (${SERVICE_NAME})}"
 APP_USER="nextapp"
@@ -43,7 +43,7 @@ After=network.target postgresql.service
 Type=simple
 User=${APP_USER}
 Group=${APP_USER}
-WorkingDirectory=${APP_BASE_DIR}/current/web
+WorkingDirectory=${APP_BASE_DIR}/current/frontend
 Environment=NODE_ENV=production
 Environment=PORT=${PORT}
 Environment=NEXT_TELEMETRY_DISABLED=1

@@ -1,9 +1,9 @@
 {
   "name": "portfolio-website",
   "private": true,
-  "description": "Repo-level workspace root. Only wires up the Next.js app (web/) and its backend package (backend/) as an npm workspace — frontend/ (the legacy Vite SPA) has already been cut over from in production and is kept only pending its removal, so it's deliberately NOT a workspace member and keeps its own independent install/build lifecycle untouched until it's deleted.",
+  "description": "Repo-level workspace root. Wires up the Next.js app (frontend/) and its backend package (backend/) as an npm workspace — the legacy Vite SPA that used to live at frontend/ has been fully retired; this is the renamed Next.js app that replaced it.",
   "workspaces": [
-    "web",
+    "frontend",
     "backend"
   ],
   "overrides": {

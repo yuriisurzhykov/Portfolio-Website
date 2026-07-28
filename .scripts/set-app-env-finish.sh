@@ -7,9 +7,9 @@
 # account (yuriisoft) a narrow sudoers NOPASSWD rule for exactly this path
 # - see that script's header for why this exists as a separate installed
 # binary instead of the deploy account getting general sudo over cp/cat/
-# chown/systemctl directly (same reasoning as deploy-web-finish.sh: one
-# fixed, auditable script is a much smaller attack surface than a wildcard
-# sudoers rule over general-purpose tools).
+# chown/systemctl directly (same reasoning as deploy-frontend-finish.sh:
+# one fixed, auditable script is a much smaller attack surface than a
+# wildcard sudoers rule over general-purpose tools).
 #
 # shared/.env is mode 600 owned by nextapp - the deploy account (yuriisoft)
 # has NO access to it at all, not even to list the directory (see
@@ -23,7 +23,7 @@ BASE_DIR="$1"
 shift
 
 case "$BASE_DIR" in
-    /srv/apps/yuriisoft-web | /srv/apps/yuriisoft-web-dev) ;;
+    /srv/apps/yuriisoft-frontend | /srv/apps/yuriisoft-frontend-dev) ;;
     *)
         echo "Refusing: unrecognized BASE_DIR '${BASE_DIR}'" >&2
         exit 1
@@ -79,8 +79,8 @@ echo "OK: ${ENV_FILE} updated."
 
 CURRENT_RELEASE="${BASE_DIR}/current"
 if [ -L "$CURRENT_RELEASE" ]; then
-    SERVICE_NAME="yuriisoft-web.service"
-    [ "$BASE_DIR" = "/srv/apps/yuriisoft-web-dev" ] && SERVICE_NAME="yuriisoft-web-dev.service"
+    SERVICE_NAME="yuriisoft-frontend.service"
+    [ "$BASE_DIR" = "/srv/apps/yuriisoft-frontend-dev" ] && SERVICE_NAME="yuriisoft-frontend-dev.service"
 
     echo "Wiring into the current release and restarting ${SERVICE_NAME}..."
     cp "$ENV_FILE" "${CURRENT_RELEASE}/backend/.env"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MANUAL FALLBACK — the primary path for adding/updating an optional env
 # var (e.g. UPSTASH_REDIS_REST_URL/_TOKEN) is now .github/workflows/
-# deploy-web.yaml's "Sync optional env vars" steps, driven by GitHub
+# deploy-frontend.yaml's "Sync optional env vars" steps, driven by GitHub
 # Actions secrets on every deploy — not a human running this by hand. Use
 # THIS script only for a one-off value not yet wired into that workflow,
 # or for debugging on a box the CI hasn't reached yet.
@@ -38,11 +38,11 @@ SSH_USER="${SSH_USER:-yuriisoft}"
 case "$TARGET" in
     prod)
         SSH_HOST="${SSH_HOST:-yuriisoft.me}"
-        BASE_DIR="/srv/apps/yuriisoft-web"
+        BASE_DIR="/srv/apps/yuriisoft-frontend"
         ;;
     dev)
         SSH_HOST="${SSH_HOST:-dev.yuriisoft.me}"
-        BASE_DIR="/srv/apps/yuriisoft-web-dev"
+        BASE_DIR="/srv/apps/yuriisoft-frontend-dev"
         ;;
     *)
         echo "Usage: $0 <dev|prod> KEY=VALUE [KEY2=VALUE2 ...]" >&2
