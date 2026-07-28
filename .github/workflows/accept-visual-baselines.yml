@@ -109,8 +109,8 @@ jobs:
     if: needs.guard.outputs.is_fork != 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      issues: write
+      contents: read
+      issues: read
 
     services:
       # Same reasoning as visual-tests.yml: frontend/tests/e2e/generate-pages-manifest.ts needs a
@@ -175,6 +175,8 @@ jobs:
 
       - name: Commit and push to the PR branch
         id: commit
+        permissions:
+          contents: write
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -188,6 +190,8 @@ jobs:
           fi
 
       - name: Comment with the result
+        permissions:
+          issues: write
         if: always()
         uses: actions/github-script@v7
         with:
