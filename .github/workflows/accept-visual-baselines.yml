@@ -108,9 +108,17 @@ jobs:
     needs: guard
     if: needs.guard.outputs.is_fork != 'true'
     runs-on: ubuntu-latest
+    # contents: write is needed by "Commit and push to the PR branch" below,
+    # issues: write by "Comment with the result" — GitHub Actions only
+    # supports `permissions:` at the job (or workflow) level, never on an
+    # individual step, so both live here rather than split per-step (a
+    # CodeQL Autofix suggestion tried exactly that split and was reverted —
+    # the step-level `permissions:` keys were silently ignored, leaving
+    # both steps running with whatever narrower scope this job block
+    # granted, which would have broken the push and the comment).
     permissions:
-      contents: read
-      issues: read
+      contents: write
+      issues: write
 
     services:
       # Same reasoning as visual-tests.yml: frontend/tests/e2e/generate-pages-manifest.ts needs a
@@ -175,8 +183,6 @@ jobs:
 
       - name: Commit and push to the PR branch
         id: commit
-        permissions:
-          contents: write
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -190,8 +196,6 @@ jobs:
           fi
 
       - name: Comment with the result
-        permissions:
-          issues: write
         if: always()
         uses: actions/github-script@v7
         with:
