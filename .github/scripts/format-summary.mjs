@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 // Turns the custom Playwright reporter's test-results/summary.json into a Markdown comment body,
-// written to frontend/pr-comment.md so the workflow can hand it to
+// written to web/pr-comment.md so the workflow can hand it to
 // marocchino/sticky-pull-request-comment via its `path` input (avoids GITHUB_OUTPUT multiline
 // escaping entirely).
+//
+// Retargeted from frontend/pr-comment.md to web/pr-comment.md alongside visual-tests.yml's own
+// retarget (the summary.json path passed in as an argument moved the same way, but this script's
+// own OUTPUT path was hardcoded and needed the same change to keep matching the workflow's
+// `Comment on PR` step, which reads `web/pr-comment.md`).
 //
 // Usage: node format-summary.mjs <summaryJsonPath> <reportDestDir> <owner/repo>
 
@@ -17,7 +22,7 @@ if (!summaryPath || !reportDir || !repo) {
 
 if (!fs.existsSync(summaryPath)) {
     fs.writeFileSync(
-        "frontend/pr-comment.md",
+        "web/pr-comment.md",
         "### ⚠️ Visual & accessibility tests\n\nNo summary was produced — check the workflow run logs.",
     );
     process.exit(0);
@@ -53,4 +58,4 @@ if (violationLines.length > 0) {
     lines.push("", "<details><summary>Accessibility violations</summary>", "", ...violationLines, "", "</details>");
 }
 
-fs.writeFileSync("frontend/pr-comment.md", lines.join("\n") + "\n");
+fs.writeFileSync("web/pr-comment.md", lines.join("\n") + "\n");

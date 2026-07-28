@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the safe, secret-free template (mirrors backend/.env.test.example, which is tracked
+# for the same reason) — see tests/README.md section 3 for what it's for.
+!.env.test.example
 
 # vercel
 .vercel
@@ -43,3 +46,11 @@ next-env.d.ts
 # mutation testing (StrykerJS)
 .stryker-tmp
 /reports
+
+# Playwright — generated on every run, never commit. tests/visual-snapshots/ is NOT listed here
+# on purpose: those PNGs are the committed baseline "references" (see tests/README.md).
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/tests/.generated/

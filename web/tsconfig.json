@@ -30,5 +30,13 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // "tests" (Playwright suite, see tests/README.md): Next.js's build-time type check runs `tsc`
+  // against this ENTIRE tsconfig's include set, not just files actually reachable from the app
+  // (confirmed against Next's own docs — the CLI type checker "checks the complete project
+  // selected by your tsconfig file"). It only auto-skips files matching `*.test.*`/`*.spec.*` by
+  // name, which covers the two spec files here but not pages.manifest.ts,
+  // generate-pages-manifest.ts, etc. — those would otherwise fail `next build` for reasons
+  // having nothing to do with the app itself. Excluded wholesale instead; tests/tsconfig.json is
+  // its own small, separate project for editor/IntelliSense purposes.
+  "exclude": ["node_modules", "tests"]
 }
