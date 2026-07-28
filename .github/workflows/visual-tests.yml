@@ -1,6 +1,6 @@
 name: Visual & Accessibility Tests
 
-# Runs the Playwright visual-regression + accessibility suite (see web/tests/README.md) on
+# Runs the Playwright visual-regression + accessibility suite (see frontend/tests/README.md) on
 # every pull request and on every push to master. Both events run in the exact same
 # compare-only mode (never --update-snapshots here) — master has a repository ruleset that
 # blocks direct pushes even from Actions, so this workflow never tries to commit updated
@@ -9,11 +9,12 @@ name: Visual & Accessibility Tests
 # is merged its baselines are already correct, so this job's run on master is just a
 # confirmation, not a place that ever needs to write back to the repo.
 #
-# Retargeted from frontend/ (the legacy Vite SPA) to web/ (Next.js + Postgres) once web/tests/
-# was ported over — see web/tests/README.md section 7/12 for the port itself. The suite now needs
-# a real database (its page list is generated FROM Postgres, not a static in-repo import), so this
-# job gained a Postgres service container + DATABASE_URL/JWT_* env + a migration step, mirroring
-# the exact pattern already established in backend-web-checks.yml for the same reason.
+# Retargeted from the legacy Vite frontend/ to web/ (Next.js + Postgres) once its tests/ were
+# ported over, then renamed again alongside web/ -> frontend/ once the legacy app was retired —
+# see .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md. The suite needs a real
+# database (its page list is generated FROM Postgres, not a static in-repo import), so this job
+# has a Postgres service container + DATABASE_URL/JWT_* env + a migration step, mirroring the
+# exact pattern already established in backend-web-checks.yml for the same reason.
 
 on:
   pull_request:
@@ -36,10 +37,10 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      # web/tests/e2e/generate-pages-manifest.ts and the webServer-started Next.js app both need a
-      # real Postgres to read the seeded fixture content from — same ephemeral-per-run container
-      # backend-web-checks.yml already uses, for the same reason (never point CI at anything that
-      # persists between runs or a real dev database).
+      # frontend/tests/e2e/generate-pages-manifest.ts and the webServer-started Next.js app both
+      # need a real Postgres to read the seeded fixture content from — same ephemeral-per-run
+      # container backend-web-checks.yml already uses, for the same reason (never point CI at
+      # anything that persists between runs or a real dev database).
       postgres:
         image: postgres:16-alpine
         env:
@@ -56,9 +57,9 @@ jobs:
 
     env:
       # Real env vars, not a dotenv-loaded backend/.env.test (that file is gitignored and doesn't
-      # exist here) — web/tests/e2e/generate-pages-manifest.ts's and web/next.config.ts's own
-      # dotenv calls are no-ops in CI for exactly this reason (dotenv's config() never overwrites
-      # an already-set value). See generate-pages-manifest.ts's own comment.
+      # exist here) — frontend/tests/e2e/generate-pages-manifest.ts's and frontend/next.config.ts's
+      # own dotenv calls are no-ops in CI for exactly this reason (dotenv's config() never
+      # overwrites an already-set value). See generate-pages-manifest.ts's own comment.
       DATABASE_URL: postgresql://portfolio:portfolio_ci@localhost:5432/portfolio_test
       JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
       JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
@@ -72,11 +73,12 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
-          # web/ and backend/ are npm workspace members (single package-lock.json at the repo
-          # root) — unlike the legacy frontend/, which had its own standalone lockfile.
+          # frontend/ and backend/ are npm workspace members (single package-lock.json at the
+          # repo root) — unlike the legacy Vite frontend/ this app replaced, which had its own
+          # standalone lockfile.
           cache-dependency-path: package-lock.json
 
-      - name: Install workspace dependencies (web/ + backend/)
+      - name: Install workspace dependencies (frontend/ + backend/)
         run: npm ci
 
       - name: Apply migrations to the CI database
@@ -84,14 +86,14 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Install Playwright browsers
-        working-directory: web
+        working-directory: frontend
         run: npx playwright install --with-deps chromium
 
       - name: Run tests
-        working-directory: web
+        working-directory: frontend
         # Seeds portfolio_test with fixed fixtures + generates the page manifest before running
-        # Playwright — see web/tests/README.md section 4 for why this can't happen inside a spec
-        # file itself (Playwright's two-pass discovery model can't await it there).
+        # Playwright — see frontend/tests/README.md section 4 for why this can't happen inside a
+        # spec file itself (Playwright's two-pass discovery model can't await it there).
         run: npm run test:e2e
 
       - name: Determine report destination path
@@ -109,7 +111,7 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: web/playwright-report
+          publish_dir: frontend/playwright-report
           destination_dir: ${{ steps.report-dest.outputs.dir }}
           keep_files: true
 
@@ -130,10 +132,10 @@ jobs:
 
       - name: Build PR comment
         if: always() && github.event_name == 'pull_request'
-        run: node .github/scripts/format-summary.mjs web/test-results/summary.json "${{ steps.report-dest.outputs.dir }}" "${{ github.repository }}"
+        run: node .github/scripts/format-summary.mjs frontend/test-results/summary.json "${{ steps.report-dest.outputs.dir }}" "${{ github.repository }}"
 
       - name: Comment on PR
         if: always() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          path: web/pr-comment.md
+          path: frontend/pr-comment.md

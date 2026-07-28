@@ -5,32 +5,116 @@ name: Accept Visual Baselines
 # changed (a new work item, a new journal post, ...). This pushes the regenerated PNGs straight
 # to the PR's own branch (never to master, which has a ruleset blocking direct pushes anyway),
 # which then re-triggers the normal visual-tests.yml check via `synchronize` — no manual local
-# Docker run needed. See web/tests/README.md, section 8.
+# Docker run needed. See frontend/tests/README.md, section 8.
 #
-# Retargeted from frontend/ to web/ alongside visual-tests.yml — see that workflow's own comment
-# for why a Postgres service + DATABASE_URL/JWT_* env + a migration step were added here too:
-# web/tests/e2e/generate-pages-manifest.ts needs a real, seeded database to build the page list.
-
+# Retargeted from the legacy Vite frontend/ to web/ (Next.js + Postgres), then renamed again
+# alongside web/ -> frontend/ once the legacy app was retired — see
+# .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md. The Postgres service +
+# DATABASE_URL/JWT_* env + migration step exist because
+# frontend/tests/e2e/generate-pages-manifest.ts needs a real, seeded database to build the page
+# list.
+#
+# SECURITY (CWE-367, "Untrusted Checkout TOCTOU"): split into two jobs on purpose, not one.
+# `guard` makes the trust decision (comment author, same-repo-branch check) and captures an
+# IMMUTABLE commit SHA in the same API call that verifies the branch isn't a fork.
+# `update-snapshots` is gated on `needs.guard.outputs.is_fork != 'true'` at the JOB level and
+# only ever checks out that pinned SHA — never a mutable branch ref. Earlier this was one job
+# with an inline `core.setFailed()` guard step; that's functionally equivalent (a failed step
+# halts the job) but GitHub's own CodeQL scanner kept flagging it, because the ref it recognizes
+# as "provably immutable" is the literal `github.event.pull_request.head.sha` expression — a
+# value computed inside a github-script step's inline JS (as this workflow must do, since
+# `issue_comment` events carry no `pull_request.head` data at all, only a same-request API call
+# can get it) isn't something its dataflow analysis traces into. Splitting the trust check into
+# its own job with an explicit job-level `if:` gate mirrors the exact "environment approval" /
+# "label gate" shape CodeQL's query documentation shows as the recognized-safe pattern.
 on:
   issue_comment:
     types: [ created ]
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-
 jobs:
-  update-snapshots:
+  guard:
     if: >
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '/update-snapshots') &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    outputs:
+      is_fork: ${{ steps.guard.outputs.is_fork }}
+      head_sha: ${{ steps.guard.outputs.head_sha }}
+      head_ref: ${{ steps.guard.outputs.head_ref }}
+    steps:
+      - name: Acknowledge the command
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: "+1",
+            });
+
+      # author_association above only vets who posted the comment, not whose CODE is about to be
+      # checked out and executed. Without this guard, a trusted maintainer commenting
+      # /update-snapshots on a malicious fork PR would cause that fork's code (npm postinstall
+      # scripts, playwright.config.ts, test files, ...) to run with a contents: write token still
+      # live — a classic "pwn request". Fail closed, before any PR content is fetched, if the
+      # PR's branch isn't actually in this repository. head_sha/head_ref are captured in this same
+      # API call so the downstream job checks out exactly the commit that was just verified, not
+      # whatever the branch happens to point at when that later job actually starts.
+      #
+      # The rejection comment is posted HERE, inline, rather than in a separate downstream job —
+      # a job gated on `needs: guard` only runs by default when guard SUCCEEDS, so a job meant to
+      # react to guard's *failure* would need an `always()` override, which is more moving parts
+      # than just posting the comment before calling core.setFailed().
+      - name: Verify the PR branch is not from a fork
+        id: guard
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const expectedFullName = `${context.repo.owner}/${context.repo.repo}`;
+            const sameRepo = Boolean(pr.head.repo) && pr.head.repo.full_name === expectedFullName;
+            core.setOutput("is_fork", String(!sameRepo));
+            if (!sameRepo) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: "🚫 `/update-snapshots` was ignored — this PR's branch isn't in this " +
+                  "repository (looks like a fork). For security, this command only runs against " +
+                  "same-repo PR branches: running it here would mean checking out and executing " +
+                  "the fork's own code (install scripts, test config, ...) while a job still " +
+                  "holds write-scoped credentials.",
+              });
+              core.setFailed(
+                "Refusing to run: this PR's branch is not in this repository (looks like a fork). " +
+                "/update-snapshots only supports same-repo PR branches, specifically to avoid " +
+                "checking out and executing untrusted code while holding write-scoped credentials."
+              );
+              return;
+            }
+            core.setOutput("head_sha", pr.head.sha);
+            core.setOutput("head_ref", pr.head.ref);
+
+  update-snapshots:
+    needs: guard
+    if: needs.guard.outputs.is_fork != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
 
     services:
-      # Same reasoning as visual-tests.yml: web/tests/e2e/generate-pages-manifest.ts needs a real
-      # Postgres to read the seeded fixture content from before Playwright can regenerate any
+      # Same reasoning as visual-tests.yml: frontend/tests/e2e/generate-pages-manifest.ts needs a
+      # real Postgres to read the seeded fixture content from before Playwright can regenerate any
       # baseline screenshots.
       postgres:
         image: postgres:16-alpine
@@ -54,51 +138,11 @@ jobs:
       JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
 
     steps:
-      - name: Acknowledge the command
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: context.payload.comment.id,
-              content: "+1",
-            });
-
-      # SECURITY: author_association above only vets who posted the comment, not whose CODE is
-      # about to be checked out and executed. Without this guard, a trusted maintainer commenting
-      # /update-snapshots on a malicious fork PR would cause that fork's code (npm postinstall
-      # scripts, playwright.config.ts, test files, ...) to run with this job's contents: write
-      # token still live — a classic "pwn request". Fail closed, before any PR content is
-      # fetched, if the PR's branch isn't actually in this repository.
-      - name: Verify the PR branch is not from a fork
-        id: guard
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-            const expectedFullName = `${context.repo.owner}/${context.repo.repo}`;
-            const sameRepo = Boolean(pr.head.repo) && pr.head.repo.full_name === expectedFullName;
-            core.setOutput("is_fork", String(!sameRepo));
-            if (!sameRepo) {
-              core.setFailed(
-                "Refusing to run: this PR's branch is not in this repository (looks like a fork). " +
-                "/update-snapshots only supports same-repo PR branches, specifically to avoid " +
-                "checking out and executing untrusted code while holding write-scoped credentials."
-              );
-            }
-            core.setOutput("head_sha", pr.head.sha);
-            core.setOutput("head_ref", pr.head.ref);
-
       - name: Checkout PR head commit (immutable)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository }}
-          ref: ${{ steps.guard.outputs.head_sha }}
+          ref: ${{ needs.guard.outputs.head_sha }}
           fetch-depth: 0
 
       - name: Setup Node
@@ -106,11 +150,12 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
-          # web/ and backend/ are npm workspace members (single package-lock.json at the repo
-          # root) — unlike the legacy frontend/, which had its own standalone lockfile.
+          # frontend/ and backend/ are npm workspace members (single package-lock.json at the
+          # repo root) — unlike the legacy Vite frontend/ this app replaced, which had its own
+          # standalone lockfile.
           cache-dependency-path: package-lock.json
 
-      - name: Install workspace dependencies (web/ + backend/)
+      - name: Install workspace dependencies (frontend/ + backend/)
         run: npm ci
 
       - name: Apply migrations to the CI database
@@ -118,14 +163,14 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Install Playwright browsers
-        working-directory: web
+        working-directory: frontend
         run: npx playwright install --with-deps chromium
 
       - name: Regenerate baselines
-        working-directory: web
+        working-directory: frontend
         # Chains the same seed-fixtures + generate-manifest prepare steps visual-tests.yml's "Run
-        # tests" step does — see web/tests/README.md section 4 — before re-running visual.spec.ts
-        # with --update-snapshots.
+        # tests" step does — see frontend/tests/README.md section 4 — before re-running
+        # visual.spec.ts with --update-snapshots.
         run: npm run test:e2e:update
 
       - name: Commit and push to the PR branch
@@ -133,12 +178,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add web/tests/visual-snapshots
+          git add frontend/tests/visual-snapshots
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: accept visual regression baselines (via /update-snapshots)"
-            git push origin HEAD:${{ steps.guard.outputs.head_ref }}
+            git push origin HEAD:${{ needs.guard.outputs.head_ref }}
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -148,16 +193,9 @@ jobs:
         with:
           script: |
             const outcome = "${{ job.status }}";
-            const isFork = "${{ steps.guard.outputs.is_fork }}" === "true";
             const changed = "${{ steps.commit.outputs.changed }}";
             let body;
-            if (isFork) {
-              body = "🚫 `/update-snapshots` was ignored — this PR's branch isn't in this " +
-                "repository (looks like a fork). For security, this command only runs against " +
-                "same-repo PR branches: running it here would mean checking out and executing " +
-                "the fork's own code (install scripts, test config, ...) while this job still " +
-                "holds write-scoped credentials.";
-            } else if (outcome !== "success") {
+            if (outcome !== "success") {
               const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
               body = `❌ \`/update-snapshots\` failed — check the [workflow run](${runUrl}) for details.`;
             } else if (changed === "true") {
