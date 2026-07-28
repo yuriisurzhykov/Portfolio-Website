@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { logout } from "@portfolio/backend";
 import { REFRESH_TOKEN_COOKIE } from "@/shared/lib/auth-constants";
 import { clearAuthCookies } from "@/shared/lib/auth-cookies";
@@ -15,9 +15,7 @@ import { definePublicRoute } from "@/shared/lib/auth/guard";
  */
 export const POST = definePublicRoute(async (request: NextRequest) => {
     try {
-        const cookieToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
-
-        let refreshToken = cookieToken;
+        let refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
         if (!refreshToken) {
             try {
                 const body = (await request.json()) as { refreshToken?: unknown };
