@@ -823,6 +823,52 @@ the identical endpoint before concluding this wasn't an isolated fluke.
 the same resource). No code changes needed — `github.rest.issues.createComment`/
 `reactions.createForIssueComment` are still the right SDK calls; only the token scope was wrong.
 
+### [RESOLVED] The full suite (`test:e2e`) hung for 60s on `networkidle`, caused by rate limiting
+
+**Found live**, while investigating a separate report of "rate limiting breaks the tests": running
+`npm run test:e2e` (44 tests, `fullyParallel: true`) reliably passed in isolation (`test:a11y`
+alone, or a single `-g` filter) but hung with `Test timeout of 60000ms exceeded` /
+`page.waitForLoadState: Test timeout of 60000ms exceeded` on `waitForLoadState("networkidle")`,
+specifically on link-heavy pages (`work-list`) toward the END of a full run — never at the start.
+
+**Root cause.** `frontend/src/proxy.ts`'s per-IP rate limiter (`global`, 300 requests/5 minutes —
+see `backend/src/auth/README.md`) is keyed by IP, and every test in this suite shares ONE IP
+(localhost). 44 page visits, each triggering Next's own automatic background prefetching of every
+visible `<Link>` on that page, comfortably exceeds 300 requests well before the suite finishes.
+That alone isn't new — but combined with the 2026-07-28/29 status-page work
+(`frontend/src/shared/ui/status-page/README.md`), a blocked request now gets a REAL redirect
+response (to the "fun" `/error/429` page) instead of a harmless JSON body the router used to just
+fail to parse and silently drop. Once the shared budget was exhausted, EVERY subsequent prefetch
+on a link-heavy page got that redirect, and Playwright's `networkidle` wait — which requires a
+genuine quiet window with no in-flight requests — never got one.
+
+**Why this isn't (and shouldn't become) a rate-limiting test.** Rate limiting already has its own
+fast, deterministic unit suite (`frontend/src/proxy.test.ts`) that doesn't need a real browser or
+server at all. This suite's job is visual/accessibility regressions — it has no reason to also
+verify abuse protection, and doing so by accident (as a side effect of shared IP-based state) only
+adds flakiness with zero added signal.
+
+**Fix.** `frontend/src/proxy.ts`'s `enforceRateLimit` now short-circuits entirely when
+`process.env.DISABLE_RATE_LIMIT === "true"` — set in `backend/.env.test` (loaded by
+`playwright.config.ts` and inherited by the `webServer`-spawned `next build && next start`
+process) and as a job-level env var in both `visual-tests.yml` and `accept-visual-baselines.yml`
+(CI doesn't load a `.env.test` file at all — see those workflows' own `env:` block comments).
+Never set in dev or production. Also added to `backend/.env.test.example` so a fresh clone gets it
+automatically on first `cp .env.test.example .env.test`.
+
+**Verified live, twice.** First reproduced the hang on a clean run (killed all stray Node/port-3100
+processes first, to rule out leftover state from earlier manual testing as the cause). Then, after
+the fix: `npm run test:e2e` completed in 1.2 minutes (down from ~2 minutes) with zero timeouts — the
+30 visual failures that remain are the genuine, expected Windows-vs-Linux pixel-diff noise this
+document's section 2 already warns about (single-digit-percent pixel ratio differences, not the
+~97%-different images seen while the hang was also silently corrupting some pages' actual content).
+
+**Takeaway.** Shared, IP-keyed state (rate limiting, in this case) that's invisible to a test
+author is a real category of e2e flakiness — not just "the app is slow" or "the network is
+flaky." When a hang or failure looks unrelated to what a suite is actually testing, check for a
+cross-cutting concern (rate limits, caches, singletons) that only surfaces under the specific
+concurrency/volume that suite happens to generate.
+
 ### Design change: content-driven visual diffs are accepted via PR comment, not avoided
 
 Initially considered (in the original `frontend/tests/` implementation): masking the "living"
@@ -1061,3 +1107,15 @@ entry above notes fresh baselines still need generating), the very first real ru
 `visual-tests.yml` against this retarget will fail on every visual assertion until that initial
 generation happens — expected, not a bug in this retarget, and tracked as the next step in the
 `frontend/` retirement plan, not this one.
+
+### 2026-07-29 — `DISABLE_RATE_LIMIT` added to fix a real `npm run test:e2e` hang
+
+Full writeup in section 11's `[RESOLVED]` entry with the same date. Short version: the suite's own
+traffic (44 tests x automatic `<Link>` prefetching, one shared IP) exhausted `proxy.ts`'s rate
+limiter mid-run, and — after the same day's status-page work made a blocked request redirect for
+real instead of returning an ignorable JSON body — that turned into a genuine 60s
+`networkidle`-timeout hang rather than a quick, harmless failure. Fixed with an explicit
+`DISABLE_RATE_LIMIT="true"` env var, set in `backend/.env.test`/`.env.test.example` and as a
+job-level env var in both `visual-tests.yml` and `accept-visual-baselines.yml`. Verified live:
+reproduced the hang, then confirmed `npm run test:e2e` completes cleanly (1.2m, zero timeouts)
+after the fix.

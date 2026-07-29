@@ -74,6 +74,29 @@ export async function proxy(request: NextRequest) {
 }
 
 async function enforceRateLimit(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+    // Explicit opt-out for the Playwright visual/a11y suite ONLY — set via
+    // `backend/.env.test` (loaded by `playwright.config.ts` and inherited
+    // by the `next build && next start` process it spawns as `webServer`;
+    // never set in dev or prod). Found live: running the FULL suite
+    // (`npm run test:e2e`, 44 tests × Next's own automatic <Link>
+    // prefetching of every visible link) reliably exhausted the shared
+    // `global` budget partway through — and, since `isPrefetch` can't
+    // actually distinguish a prefetch from a real navigation here (see
+    // the comment on it below), EVERY subsequent prefetch on a
+    // link-heavy page (e.g. `/work`) then got a real redirect response
+    // instead of the harmless-to-ignore JSON 429 it used to get. Next's
+    // router kept retrying/following those, and `waitForLoadState
+    // ("networkidle")` in `visual.spec.ts` never saw a quiet window —
+    // observed as a flat 60s test timeout, not a screenshot mismatch.
+    // Rate limiting itself already has its own dedicated, fast unit
+    // suite (`proxy.test.ts`) that doesn't need a real server at all;
+    // exercising it AGAIN under a real browser here would only add
+    // flakiness to a suite whose actual job is visual/accessibility
+    // regressions, not abuse protection.
+    if (process.env.DISABLE_RATE_LIMIT === "true") {
+        return null;
+    }
+
     // The `/error/[code]` fun status pages (below) are themselves reached
     // via a redirect FROM this function when a real navigation gets
     // blocked — without this exemption, a visitor whose budget is already
@@ -99,6 +122,35 @@ async function enforceRateLimit(request: NextRequest, pathname: string): Promise
     // client sending fake prefetch headers on every request must still hit
     // SOME ceiling, just a more generous one sized for legitimate background
     // browsing rather than an unlimited bypass of `global`.
+    //
+    // IMPORTANT LIMITATION, found later while chasing the redirect bug
+    // below (verified with a live header dump from inside this exact
+    // function, in both `next dev` and a real `next build && next start`
+    // — not assumed): Next.js's Proxy/Middleware layer strips `rsc`,
+    // `next-router-state-tree`, AND `next-router-prefetch` from
+    // `request.headers` before this function ever sees them, even though
+    // the browser genuinely sent them (confirmed with a real Playwright
+    // network capture of the outgoing request) and even though Next's own
+    // internal router clearly still acts on them (an `rsc: 1` request
+    // gets back `Content-Type: text/x-component`). This is documented,
+    // deliberate Next.js behavior — see
+    // https://nextjs.org/docs/app/api-reference/file-conventions/proxy
+    // ("RSC requests and rewrites": "Next.js strips internal Flight
+    // headers from the request instance in Proxy... to prevent
+    // accidentally handling an RSC request differently than the HTML
+    // request"). The practical consequence: `isPrefetch` below is `false`
+    // for essentially every real request today, so prefetch traffic
+    // already shares `global`'s budget with real navigations regardless
+    // of this check — the separate `prefetch` tier is currently a no-op
+    // safety net, not a working split. Left in place (rather than
+    // deleted) because it's harmless, costs nothing, and would start
+    // working again for free if a future Next.js version, or a request
+    // arriving through a layer that forwards this header (e.g. some
+    // custom CDN/reverse-proxy configurations), ever makes it visible
+    // here. Actually fixing the split (e.g. raising `GLOBAL_LIMIT` to
+    // account for real prefetch volume, since header-based bucketing
+    // isn't achievable here) is tracked as a separate, deliberately
+    // out-of-scope follow-up — not fixed as a side effect of this file.
     const isPrefetch = request.headers.get("next-router-prefetch") !== null;
     const baseTier = isPrefetch
         ? checkRateLimit(`prefetch:${ ip }`, PREFETCH_LIMIT, PREFETCH_WINDOW_SECONDS)
@@ -127,13 +179,9 @@ async function enforceRateLimit(request: NextRequest, pathname: string): Promise
 
     const retryAfterSeconds = blocked.retryAfterSeconds ?? 60;
 
-    // A real browser navigation (not `/api/*`, not a background prefetch)
+    // A real browser navigation (not `/api/*`, not a declared prefetch)
     // gets bounced to the fun `/error/429` page instead of a bare JSON
-    // body — the JSON contract for everything else (API clients, the
-    // prefetch tier itself) is unchanged, which is also what keeps this
-    // from touching proxy.test.ts's existing assertions: `makeRequest()`
-    // there never sets an `Accept` header, so those requests stay on the
-    // JSON branch below exactly as before.
+    // body — the JSON contract for `/api/*` clients is unchanged.
     //
     // `NextResponse.rewrite()` can't reliably carry a custom status code
     // across Next.js versions (see vercel/next.js#37095 and #50155 — a
@@ -141,14 +189,42 @@ async function enforceRateLimit(request: NextRequest, pathname: string): Promise
     // of a `status` passed in `init`), so this uses a real redirect: the
     // redirect hop itself is the true 429, and the destination page
     // renders 200 — the same tradeoff most "fun" rate-limit pages make.
-    const wantsHtml = !isPrefetch
-        && !pathname.startsWith("/api")
-        && (request.headers.get("accept")?.includes("text/html") ?? false);
-    if (wantsHtml) {
+    //
+    // Deliberately NOT gated on `Accept: text/html` (an earlier version
+    // of this check was) — found live, via a real Playwright network
+    // capture of clicking an actual <Link>: a client-side App Router
+    // navigation fetches the RSC payload with `Accept: */*`, identical to
+    // a background prefetch or a plain `curl` hitting the same URL (see
+    // `isPrefetch`'s own comment above for why the header that would
+    // normally distinguish these, `rsc`, isn't visible here either). Since
+    // this app cannot reliably tell "a real click" apart from "a plain
+    // request to a page URL" at all, both get treated the same way here —
+    // which is also the more correct call on its own merits: `pathname`
+    // not starting with `/api` already means this URL's own real response
+    // would have been `text/html` anyway, so redirecting it to an HTML
+    // error page instead of a JSON one matches what it would have served.
+    // A real redirect response is exactly what the App Router's own
+    // `fetch()` for an RSC navigation already knows how to follow and
+    // re-render from, identically to how `redirect()` from a Server
+    // Action works.
+    const wantsRedirect = !isPrefetch && !pathname.startsWith("/api");
+    if (wantsRedirect) {
         const { isRu } = stripLocalePrefix(pathname);
+        // The blocked destination itself (e.g. `/journal?page=2`) travels
+        // along as `from`, so the standalone `/error/429` page's "Try
+        // again" can retry THAT page instead of just refreshing the
+        // (rate-limit-exempt) error page in place — found live: without
+        // this, "Try again" refreshed `/error/429` forever, even long
+        // after the rate-limit window actually expired, since refreshing
+        // an exempt route can never re-trip a check that would send the
+        // visitor onward. `StatusPage` re-validates this before ever
+        // navigating to it (see `isSafeRelativePath`) — it's about to be
+        // shared back to a browser via a URL, so it must be treated as
+        // untrusted from that point on, even though it originates here.
+        const originalDestination = `${ pathname }${ request.nextUrl.search }`;
         const url = request.nextUrl.clone();
         url.pathname = isRu ? `${ RU_PREFIX }/error/429` : "/error/429";
-        url.search = `?retryAfter=${ retryAfterSeconds }`;
+        url.search = `?${ new URLSearchParams({ retryAfter: String(retryAfterSeconds), from: originalDestination }) }`;
         return NextResponse.redirect(url, 307);
     }
 

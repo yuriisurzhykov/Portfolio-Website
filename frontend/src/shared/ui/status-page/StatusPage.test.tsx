@@ -13,9 +13,9 @@ afterEach(() => {
     vi.mocked(useRouter).mockReset();
 });
 
-function renderStatus(props: Parameters<typeof StatusPage>[0]) {
+function renderStatus(props: Parameters<typeof StatusPage>[0], language: "en" | "ru" = "en") {
     return render(
-        <I18nProvider>
+        <I18nProvider initialLanguage={language}>
             <StatusPage {...props} />
         </I18nProvider>,
     );
@@ -72,6 +72,32 @@ describe("StatusPage — primary action per code", () => {
         expect(homeLinks[0]).toHaveAttribute("href", "/");
     });
 
+    /**
+     * Regression test for a real bug (flagged by review): on a Russian
+     * missing-resource URL like `/ru/journal/unknown`, this page renders
+     * in Russian, but a hardcoded "/" home link drops the `/ru` prefix
+     * the moment it's followed — the visitor silently ends up back on
+     * the English site. The home target must derive from the active
+     * language, matching `LanguageSegmentedToggle`'s own `RU_PREFIX`
+     * handling, not a literal `"/"`.
+     */
+    it("home action targets /ru when the active language is Russian, not a bare /", () => {
+        renderStatus({ code: 400 }, "ru");
+        const homeLinks = screen.getAllByRole("link", { name: /на главную/i });
+        expect(homeLinks).toHaveLength(1);
+        expect(homeLinks[0]).toHaveAttribute("href", "/ru");
+    });
+
+    it("the secondary back-home link (shown for non-home actions) also targets /ru in Russian", () => {
+        renderStatus({ code: 429 }, "ru");
+        expect(screen.getByRole("link", { name: /на главную/i })).toHaveAttribute("href", "/ru");
+    });
+
+    it("home targets a bare / when the active language is English (default)", () => {
+        renderStatus({ code: 429 });
+        expect(screen.getByRole("link", { name: /back home/i })).toHaveAttribute("href", "/");
+    });
+
     it("401 (signIn action): links to /admin/login, appending ?from= when provided", () => {
         renderStatus({ code: 401, from: "/admin/journal/my-post/edit" });
         const signInLink = screen.getByRole("link", { name: "Sign in" });
@@ -105,7 +131,7 @@ describe("StatusPage — primary action per code", () => {
         expect(refresh).not.toHaveBeenCalled();
     });
 
-    it("clicking retry with no onRetry falls back to router.refresh", async () => {
+    it("clicking retry with no onRetry falls back to router.refresh when there's no known destination", async () => {
         const refresh = vi.fn();
         vi.mocked(useRouter).mockReturnValue({ refresh } as unknown as ReturnType<typeof useRouter>);
         const user = userEvent.setup();
@@ -114,6 +140,57 @@ describe("StatusPage — primary action per code", () => {
         await user.click(screen.getByRole("button", { name: "Try again" }));
 
         expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * Regression test for a real bug (flagged by review, reproduced by
+     * reasoning through the flow, not assumed): a standalone `/error/429`
+     * visit passes no `onRetry`, so "Try again" used to always call
+     * `router.refresh()` — but `/error/429` is itself exempt from rate
+     * limiting, so refreshing it can NEVER re-trip a check that would
+     * ever send the visitor onward. The visitor was stuck on the error
+     * page forever, even long after the real rate limit had expired.
+     * `from` (the original blocked destination, e.g. `/journal`, carried
+     * by `proxy.ts`'s redirect) fixes this: retrying should navigate
+     * THERE, not refresh the error page itself.
+     */
+    it("clicking retry with no onRetry but a known (safe) destination navigates there instead of refreshing", async () => {
+        const push = vi.fn();
+        const refresh = vi.fn();
+        vi.mocked(useRouter).mockReturnValue({ push, refresh } as unknown as ReturnType<typeof useRouter>);
+        const user = userEvent.setup();
+
+        renderStatus({ code: 429, from: "/journal?page=2" });
+        await user.click(screen.getByRole("button", { name: "Try again" }));
+
+        expect(push).toHaveBeenCalledWith("/journal?page=2");
+        expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it("ignores an unsafe from (e.g. a protocol-relative URL from a shared/crafted link) and falls back to refresh", async () => {
+        const push = vi.fn();
+        const refresh = vi.fn();
+        vi.mocked(useRouter).mockReturnValue({ push, refresh } as unknown as ReturnType<typeof useRouter>);
+        const user = userEvent.setup();
+
+        renderStatus({ code: 429, from: "//evil.example" });
+        await user.click(screen.getByRole("button", { name: "Try again" }));
+
+        expect(push).not.toHaveBeenCalled();
+        expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("still prefers an explicit onRetry over navigating to from, when both are present", async () => {
+        const push = vi.fn();
+        const onRetry = vi.fn();
+        vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<typeof useRouter>);
+        const user = userEvent.setup();
+
+        renderStatus({ code: 503, from: "/journal", onRetry });
+        await user.click(screen.getByRole("button", { name: "Try again" }));
+
+        expect(onRetry).toHaveBeenCalledTimes(1);
+        expect(push).not.toHaveBeenCalled();
     });
 
     it("a retry-action code (503) still shows a secondary back-home link alongside the retry button", () => {
