@@ -30,6 +30,8 @@
   "button.backHome": "на главную",
   "button.backToWork": "к работам",
   "button.backToJournal": "к журналу",
+  "button.signIn": "Войти",
+  "button.tryAgain": "Попробовать снова",
 
   "work.ledger.year": "ГОД",
   "work.ledger.system": "СИСТЕМА",
@@ -73,10 +75,37 @@
   "label.aria.mobileMenu.panel": "Навигационное меню",
   "label.aria.backToTop": "Наверх страницы",
 
-  "error.serviceUnavailable.title": "Временно недоступно",
-  "error.serviceUnavailable.description": "Эта часть сайта сейчас не смогла загрузить данные. Попробуйте ещё раз через момент.",
-  "error.serviceUnavailable.retry": "Попробовать снова",
-  "error.generic.title": "Что-то пошло не так",
-  "error.generic.description": "Произошла непредвиденная ошибка. Попробуйте ещё раз.",
-  "error.generic.retry": "Попробовать снова"
+  "error.status.400.caption": "Некорректный запрос",
+  "error.status.400.title": "Запрос немного не распарсился.",
+  "error.status.400.description": "Что-то в отправленных данных нам непонятно. Проверьте ссылку и попробуйте ещё раз.",
+
+  "error.status.401.caption": "Не авторизован",
+  "error.status.401.title": "Пропуск, пожалуйста.",
+  "error.status.401.description": "Чтобы попасть сюда, нужно сначала войти.",
+
+  "error.status.403.caption": "Доступ запрещён",
+  "error.status.403.title": "Хорошая попытка. Но нет.",
+  "error.status.403.description": "У вашего аккаунта нет доступа сюда, даже после входа.",
+
+  "error.status.404.caption": "Не найдено",
+  "error.status.404.title": "Вы сошли с проложенного маршрута.",
+  "error.status.404.description": "Здесь ничего нет — страница переехала, была переименована или никогда не существовала. Вернём вас на трассу.",
+
+  "error.status.429.caption": "Слишком много запросов",
+  "error.status.429.title": "Полегче, чемпион!",
+  "error.status.429.description": "Вы кликаете чуточку слишком быстро. Переведите дух и попробуйте ещё раз.",
+  "error.status.429.descriptionWithRetry": "Вы кликаете чуточку слишком быстро — попробуйте снова примерно через {seconds} с.",
+
+  "error.status.500.caption": "Внутренняя ошибка сервера",
+  "error.status.500.title": "У нас что-то замкнуло.",
+  "error.status.500.description": "Наш сервер споткнулся о собственный провод. Мы уже знаем — попробуйте ещё раз.",
+
+  "error.status.501.caption": "Не реализовано",
+  "error.status.501.title": "Это ещё готовится.",
+  "error.status.501.description": "Этой функции пока не существует — но вы нашли очень раннюю версию страницы «скоро будет».",
+
+  "error.status.503.caption": "Сервис недоступен",
+  "error.status.503.title": "Небольшой перерыв на подзарядку.",
+  "error.status.503.description": "Этой части сайта сейчас не удалось загрузить данные. Мы скоро вернёмся — попробуйте ещё раз.",
+  "error.status.503.descriptionWithRetry": "Эта часть сайта переводит дыхание — попробуйте снова примерно через {seconds} с."
 }

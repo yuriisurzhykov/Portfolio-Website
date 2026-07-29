@@ -16,6 +16,6 @@ export type { AccessTokenPayload } from "./auth/jwt";
 // `@upstash/redis` talks to Upstash over plain HTTPS (fetch), not a
 // persistent TCP connection — no Node-only APIs, verified safe for Edge
 // (see the Upstash SDK's own Cloudflare Workers/Vercel Edge support). Used
-// by `web/src/proxy.ts` for the general per-IP rate-limit tiers.
-export { checkRateLimit } from "./auth/rate-limit";
-export type { RateLimitCheck } from "./auth/rate-limit";
+// by `frontend/src/proxy.ts` for the general per-IP rate-limit tiers.
+export { checkRateLimit, InMemoryRateLimiter, setRateLimiterForTesting } from "./auth/rate-limit";
+export type { RateLimitCheck, RateLimiter } from "./auth/rate-limit";
