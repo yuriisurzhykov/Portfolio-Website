@@ -135,26 +135,13 @@ jobs:
           ref: ${{ needs.guard.outputs.head_sha }}
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Prepare workspace
+        uses: ./.github/actions/prepare-workspace
         with:
-          node-version: 20
-          cache: "npm"
-          # frontend/ and backend/ are npm workspace members (single package-lock.json at the
-          # repo root) — unlike the legacy Vite frontend/ this app replaced, which had its own
-          # standalone lockfile.
-          cache-dependency-path: package-lock.json
+          node-version: "20"
 
-      - name: Install workspace dependencies (frontend/ + backend/)
-        run: npm ci --ignore-scripts
-
-      - name: Apply migrations to the CI database
-        working-directory: backend
-        run: npx prisma migrate deploy
-
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
 
       - name: Regenerate baselines
         working-directory: frontend

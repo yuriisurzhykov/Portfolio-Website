@@ -1,0 +1,28 @@
+name: 'Prepare workspace'
+description: >
+  Node setup + npm ci + Prisma migrate — the install/prepare recipe every
+  CI workflow in this repo needs. Extracted after this exact recipe drifted
+  out of sync between 3 hand-copied workflows twice in one week (see this
+  action's own README.md).
+inputs:
+  node-version:
+    required: true
+    description: 'Node.js version (e.g. "20" or "22")'
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: package-lock.json
+
+    - name: Install workspace dependencies (frontend/ + backend/)
+      run: npm ci
+      shell: bash
+
+    - name: Apply migrations to the CI database
+      run: npx prisma migrate deploy
+      working-directory: backend
+      shell: bash

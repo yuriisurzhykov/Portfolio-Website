@@ -1,0 +1,9 @@
+name: 'Setup Playwright'
+description: 'Installs Playwright browsers for frontend/ — only the workflows that actually run Playwright need this.'
+runs:
+  using: composite
+  steps:
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      working-directory: frontend
+      shell: bash
