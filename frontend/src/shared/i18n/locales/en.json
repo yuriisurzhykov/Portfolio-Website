@@ -30,6 +30,8 @@
   "button.backHome": "back home",
   "button.backToWork": "back to work",
   "button.backToJournal": "back to journal",
+  "button.signIn": "Sign in",
+  "button.tryAgain": "Try again",
 
   "work.ledger.year": "YEAR",
   "work.ledger.system": "SYSTEM",
@@ -73,10 +75,37 @@
   "label.aria.mobileMenu.panel": "Navigation menu",
   "label.aria.backToTop": "Back to top",
 
-  "error.serviceUnavailable.title": "Temporarily unavailable",
-  "error.serviceUnavailable.description": "This part of the site couldn't load its data just now. Please try again in a moment.",
-  "error.serviceUnavailable.retry": "Try again",
-  "error.generic.title": "Something went wrong",
-  "error.generic.description": "An unexpected error occurred. Please try again.",
-  "error.generic.retry": "Try again"
+  "error.status.400.caption": "Bad Request",
+  "error.status.400.title": "That request didn't quite parse.",
+  "error.status.400.description": "Something about what was sent doesn't make sense to us. Double-check the link and try again.",
+
+  "error.status.401.caption": "Unauthorized",
+  "error.status.401.title": "Badge check, please.",
+  "error.status.401.description": "You'll need to sign in before this page will talk to you.",
+
+  "error.status.403.caption": "Forbidden",
+  "error.status.403.title": "Nice try. Still no.",
+  "error.status.403.description": "Your account doesn't have access to this one, even signed in.",
+
+  "error.status.404.caption": "Not Found",
+  "error.status.404.title": "You've wandered off the map.",
+  "error.status.404.description": "There's nothing here — the page moved, got renamed, or never existed. Let's get you back on track.",
+
+  "error.status.429.caption": "Too Many Requests",
+  "error.status.429.title": "Whoa there, speed racer!",
+  "error.status.429.description": "You've been clicking around a little too fast. Take a breather and try again shortly.",
+  "error.status.429.descriptionWithRetry": "You've been clicking around a little too fast — try again in about {seconds}s.",
+
+  "error.status.500.caption": "Internal Server Error",
+  "error.status.500.title": "Something short-circuited on our end.",
+  "error.status.500.description": "Our server tripped over its own cable. We've been notified — please try again.",
+
+  "error.status.501.caption": "Not Implemented",
+  "error.status.501.title": "This one's still in the oven.",
+  "error.status.501.description": "This feature doesn't exist yet — but you've found a very early preview of the \"coming soon\" page.",
+
+  "error.status.503.caption": "Service Unavailable",
+  "error.status.503.title": "Taking a quick nap.",
+  "error.status.503.description": "This part of the site couldn't load its data just now. We'll be back in a moment — try again shortly.",
+  "error.status.503.descriptionWithRetry": "This part of the site is catching its breath — try again in about {seconds}s."
 }

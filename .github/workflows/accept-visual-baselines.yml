@@ -126,6 +126,10 @@ jobs:
       DATABASE_URL: postgresql://portfolio:portfolio_ci@localhost:5432/portfolio_test
       JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
       JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
+      # See visual-tests.yml's own comment / frontend/src/proxy.ts's DISABLE_RATE_LIMIT comment —
+      # this run regenerates ALL 30 visual baselines in one go, at least as much traffic as the
+      # normal check, so it needs the same bypass.
+      DISABLE_RATE_LIMIT: "true"
 
     steps:
       - name: Checkout PR head commit (immutable)

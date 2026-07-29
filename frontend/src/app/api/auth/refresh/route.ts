@@ -3,6 +3,7 @@ import { refreshSession } from "@portfolio/backend";
 import { REFRESH_TOKEN_COOKIE } from "@/shared/lib/auth-constants";
 import { clearAuthCookies, setAuthCookies } from "@/shared/lib/auth-cookies";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
+import { getClientIp } from "@/shared/lib/client-ip";
 import { definePublicRoute } from "@/shared/lib/auth/guard";
 
 async function getRefreshToken(request: NextRequest): Promise<string | undefined> {
@@ -36,7 +37,7 @@ export const POST = definePublicRoute(async (request: NextRequest) => {
 
         const result = await refreshSession(refreshToken, {
             userAgent: request.headers.get("user-agent") ?? undefined,
-            ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+            ip: getClientIp(request),
         });
 
         if (!result) {

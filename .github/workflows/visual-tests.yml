@@ -60,6 +60,11 @@ jobs:
       DATABASE_URL: postgresql://portfolio:portfolio_ci@localhost:5432/portfolio_test
       JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
       JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
+      # See frontend/src/proxy.ts's own comment on DISABLE_RATE_LIMIT — this suite's own traffic
+      # (44 tests x Next's automatic <Link> prefetching, reliably reproduced as a 60s
+      # networkidle-timeout hang) trips rate limiting meant for real visitors; that logic has its
+      # own separate, fast unit suite (proxy.test.ts) and doesn't need re-exercising here.
+      DISABLE_RATE_LIMIT: "true"
 
     steps:
       - name: Checkout
