@@ -109,13 +109,7 @@ describe("InMemoryRateLimiter", () => {
 });
 
 describe("UpstashRateLimiter", () => {
-    /**
-     * Mimics the real INCR-and-EXPIRE Lua script's atomic semantics in
-     * plain JS: expiry is only ever "set" (tracked here via `expiryCalls`,
-     * since there's no real TTL clock in this mock) on the exact call where
-     * the counter goes from absent to 1, folded into the same `eval` call —
-     * never as a separate step a caller could observe or skip.
-     */
+    /** Mimics the real INCR-and-EXPIRE Lua script: `expiryCalls` only increments when the counter goes from absent to 1. */
     function createMockRedis(): RedisCommands & { store: Map<string, number>; expiryCalls: number } {
         const store = new Map<string, number>();
         const mock = {
@@ -167,18 +161,8 @@ describe("UpstashRateLimiter", () => {
         expect(redis.expiryCalls).toBe(1);
     });
 
-    /**
-     * Pins the actual security-relevant behavior a PR review flagged: the
-     * increment and its expiry must be ONE atomic Redis round trip (a Lua
-     * `eval`), not two separate `incr` + `expire` calls — the two-call
-     * version leaves a real window where a crash/network failure between
-     * them permanently blocks a key with no TTL to ever reset it. Asserts
-     * the actual mechanism (single `eval` call, correct key/window
-     * arguments), not just the externally-observable count/expiry outcome
-     * already covered above — a call-count assertion is what would catch a
-     * regression back to two separate calls, since the outcome-only tests
-     * above would still pass even if `incr`+`expire` were reintroduced.
-     */
+    /** Asserts the mechanism itself (one `eval` call), not just the outcome — a regression back to separate
+     * `incr`+`expire` calls would still pass the outcome-only tests above. */
     it("increments and sets expiry via a single atomic eval call, not separate commands", async () => {
         const redis = createMockRedis();
         const evalSpy = vi.spyOn(redis, "eval");

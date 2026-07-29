@@ -9,12 +9,9 @@ name: Visual & Accessibility Tests
 # is merged its baselines are already correct, so this job's run on master is just a
 # confirmation, not a place that ever needs to write back to the repo.
 #
-# Retargeted from the legacy Vite frontend/ to web/ (Next.js + Postgres) once its tests/ were
-# ported over, then renamed again alongside web/ -> frontend/ once the legacy app was retired —
-# see .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md. The suite needs a real
-# database (its page list is generated FROM Postgres, not a static in-repo import), so this job
-# has a Postgres service container + DATABASE_URL/JWT_* env + a migration step, mirroring the
-# exact pattern already established in backend-web-checks.yml for the same reason.
+# The suite needs a real database (its page list is generated FROM Postgres, not a static in-repo
+# import), so this job has a Postgres service container + DATABASE_URL/JWT_* env + a migration
+# step, mirroring backend-web-checks.yml's own pattern for the same reason.
 
 on:
   pull_request:
