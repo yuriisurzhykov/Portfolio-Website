@@ -1,15 +1,8 @@
 name: Backend & Web Checks
 
-# Runs on every pull request and every push to master: backend typecheck,
-# the Vitest suite in backend/ (unit + integration tests against a real,
-# ephemeral Postgres service container — mirrors the local dev setup in
-# docker-compose.yml, just ephemeral per run instead of persistent), and a
-# full `next build` of frontend/ to catch build-breaking changes early. This
-# is the equivalent of visual-tests.yml, but for the Next.js/Postgres/Prisma
-# side of the repo (frontend/ + backend/) rather than the legacy Vite
-# frontend/ SPA this app replaced (see
-# .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md for the
-# rename that gave both apps the same directory name at different times).
+# Runs on every pull request and every push to master: backend typecheck, the Vitest suite in
+# backend/ (against an ephemeral Postgres service container), and a full `next build` of
+# frontend/. Equivalent of visual-tests.yml for the Next.js/Postgres/Prisma side of the repo.
 
 on:
   pull_request:
@@ -59,27 +52,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Prepare workspace
+        uses: ./.github/actions/prepare-workspace
         with:
           # 22, not 20 like the other workflows in this repo: StrykerJS's
           # @stryker-mutator/vitest-runner (mutation testing, see
           # test:mutation below) requires Node >=22. Scoped to this workflow
           # only — it's the one that runs the suites Stryker reruns.
-          node-version: 22
-          cache: "npm"
-          cache-dependency-path: package-lock.json
-
-      - name: Install workspace dependencies (frontend/ + backend/)
-        run: npm ci
+          node-version: "22"
 
       - name: Typecheck backend
         working-directory: backend
         run: npm run typecheck
-
-      - name: Apply migrations to the CI database
-        working-directory: backend
-        run: npx prisma migrate deploy
 
       - name: Run backend test suite
         working-directory: backend

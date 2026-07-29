@@ -441,13 +441,17 @@ content change (not a real bug), comment exactly:
 
 on the PR. The bot reacts with 👍, then:
 
-1. Checks out the **PR's own branch** (via `gh pr checkout`, not `master`).
-2. Regenerates `tests/visual-snapshots/` (`npm run test:e2e:prepare && npx playwright
+1. A separate `guard` job verifies the comment author and that the PR's branch actually lives in
+   this repository (not a fork), capturing an immutable commit SHA in that same API call.
+2. A second `update-snapshots` job, gated on `guard`'s output, checks out **that exact SHA** (not a
+   mutable branch ref — see the workflow file's own top comment for why this is split into two
+   jobs instead of one).
+3. Regenerates `tests/visual-snapshots/` (`npm run test:e2e:prepare && npx playwright
    test tests/e2e/visual.spec.ts --update-snapshots`) in the same Ubuntu/Chromium environment CI
    uses — no local Docker step needed. Needs the CI Postgres service container reachable, same as
    the main check (section 7).
-3. Commits and pushes straight to that branch if anything actually changed.
-4. Posts a follow-up comment: ✅ if it pushed an update, ℹ️ if there was nothing to update, ❌ with
+4. Commits and pushes straight to that branch if anything actually changed.
+5. Posts a follow-up comment: ✅ if it pushed an update, ℹ️ if there was nothing to update, ❌ with
    a link to the run if something went wrong.
 
 That push automatically re-triggers the normal `pull_request: synchronize` event, so
@@ -472,10 +476,20 @@ generic failure. See the `[RESOLVED]` entry in section 11 for how this was found
 `frontend/`-specific change once the workflow itself is retargeted.)
 
 **Known limitation:** only works for PRs whose branch lives in this repository (not a fork) —
-`gh pr checkout` plus a push needs write access to the branch, which a fork's branch doesn't grant
+pushing an updated baseline needs write access to the branch, which a fork's branch doesn't grant
 the base repo's `GITHUB_TOKEN`, and the guard above now also refuses to try. Not a concern today
 (personal, single-maintainer repo) but this was a real, exploitable gap, not just a theoretical
 one, given the repo is public.
+
+**Permissions gotcha, found live (not in the REST docs):** both jobs grant `pull-requests: write`,
+not `issues: write` — even though `github.rest.reactions.createForIssueComment` /
+`github.rest.issues.createComment`'s own REST API docs say `issues: write` is what's needed, and
+the API path is literally `/issues/comments/{id}/...`. In practice, GitHub's actual token-scope
+check treats a comment that belongs to a pull request as a `pull-requests` resource regardless of
+which REST path reaches it — `issues: write` alone fails with `403: Resource not accessible by
+integration` for every comment this workflow ever touches, since `github.event.issue.pull_request
+!= null` is already required by the job's own `if:` condition (this workflow never runs against a
+plain, non-PR issue). See the workflow file's own `permissions:` comment for the full reasoning.
 
 ## 9. GitHub Pages
 
@@ -785,6 +799,29 @@ literal, so `${...}` never interpolated and the literal placeholder text got pos
 link — fixed by switching to an actual backtick template literal. **Takeaway:** embedded
 `script: |` blocks in workflow YAML are opaque strings to a YAML parser — YAML validation catches
 YAML structure problems, but says nothing about the JavaScript logic inside those blocks.
+
+### [RESOLVED] `/update-snapshots` 403'd on the reaction step — `issues: write` was the wrong scope
+
+Found live, on the very first real `/update-snapshots` run against `frontend/`'s port of this
+suite (after `web/` → `frontend/`): `actions/github-script@v7`'s `reactions.createForIssueComment`
+call failed with `RequestError [HttpError]: Resource not accessible by integration`, `status: 403`,
+even though the job's `permissions:` block granted `issues: write` — which is exactly what both the
+reactions and issue-comment REST endpoints document as sufficient, and matches the literal
+`/issues/comments/{id}/...` API path.
+
+**Root cause:** GitHub's actual `GITHUB_TOKEN` scope enforcement does not go by the REST path — a
+comment that belongs to a pull request is scoped as a `pull-requests` resource, full stop, and
+`issues: write` grants write access to a *different* resource that happens to share a REST
+endpoint prefix. Since this workflow's own `if:` condition already guarantees
+`github.event.issue.pull_request != null` (it only ever runs on PR comments, never a plain issue),
+`issues: write` was pure dead weight granting the wrong permission for the one thing this workflow
+actually does. Confirmed against multiple independent real-world reports of the identical 403 on
+the identical endpoint before concluding this wasn't an isolated fluke.
+
+**Fix:** both jobs' `permissions:` now grant `pull-requests: write` instead of `issues: write` (the
+`guard` job also dropped a redundant `pull-requests: read`, since `write` already implies `read` on
+the same resource). No code changes needed — `github.rest.issues.createComment`/
+`reactions.createForIssueComment` are still the right SDK calls; only the token scope was wrong.
 
 ### Design change: content-driven visual diffs are accepted via PR comment, not avoided
 

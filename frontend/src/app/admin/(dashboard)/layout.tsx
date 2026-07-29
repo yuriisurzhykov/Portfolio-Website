@@ -8,26 +8,12 @@ import { SessionKeepAlive } from "@/shared/lib/session-keepalive";
  * same as it would without the group; the group exists purely to give
  * `/admin/login` (a sibling, outside this group) a different layout tree.
  *
- * `requirePage()` is called here for the common case — a fresh/full page
- * load, where it redirects before any of the shared chrome (`AdminNav`,
- * `SessionKeepAlive`) even renders, avoiding a flash of protected UI.
- *
- * WRONG FIRST HYPOTHESIS, corrected after a real PR review comment: this
- * comment used to claim this was the ONE place the check needed to live,
- * since a shared layout supposedly re-runs before every page beneath it.
- * That's not true for CLIENT-SIDE navigation — Next.js's App Router
- * deliberately does NOT re-render a shared layout on every navigation
- * between sibling pages under it (that persistence is the whole point of
- * nested layouts). If a session is invalidated after the initial render,
- * clicking a `Link` to another page in this group can reach that page's
- * Server Component — several of which call `@portfolio/backend` functions
- * directly (`getPostForAdmin`, `getWorkBySlug`, ...) — without this
- * layout re-running at all. Fixed by applying the SAME "each protected
- * access point defends itself" principle `defineAdminRoute` already uses
- * for every `/api/admin/**` route (see `guard.ts`'s own comment): every
- * `page.tsx` under this group that reads admin/unpublished data now also
- * calls `requirePage()` itself — that per-page call, not this one, is the
- * real security boundary. This one stays only for the fast-redirect UX.
+ * `requirePage()` here only covers a fresh/full page load (fast redirect,
+ * no flash of protected chrome) — it does NOT re-run on client-side
+ * navigation between sibling pages (Next.js doesn't re-render a shared
+ * layout for that). The real security boundary is per-page `requirePage()`
+ * calls, added after a PR review caught pages reading admin data directly
+ * without one — see `frontend/src/shared/lib/auth/README.md`.
  */
 export default async function AdminDashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
     await requirePage();

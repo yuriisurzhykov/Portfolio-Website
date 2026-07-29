@@ -1,0 +1,132 @@
+name: Deploy to a target (reusable)
+
+# Called by deploy-frontend.yaml's `deploy-dev`/`deploy-prod` jobs — was two ~45-line,
+# near-byte-identical job definitions (differing only in base-dir, service name, deploy tag
+# source, and which VPS_HOST/UPSTASH_* secret suffix to use) before being extracted here. The same
+# duplication-drift risk this repo has already hit more than once this week with hand-copied CI
+# steps — see .github/actions/prepare-workspace/README.md — except here the duplicate was between
+# dev and prod specifically, which is worse: a fix applied to dev and forgotten in prod is exactly
+# the kind of gap that stays invisible until the next real prod deploy.
+#
+# A reusable workflow (workflow_call), not a composite action: deploy-dev/deploy-prod are already
+# independent jobs on their own runners, not steps sharing a job's filesystem with anything else
+# — the constraint that ruled out a reusable workflow for prepare-workspace doesn't apply here.
+#
+# Secrets are mapped explicitly per call site (never `secrets: inherit`), since dev/prod each need
+# their own Upstash secret (the `_DEV`/`_PROD` suffix) remapped onto this workflow's plain
+# UPSTASH_REDIS_REST_URL/_TOKEN names — `inherit` can't do that renaming, and explicit mapping also
+# means the call site itself shows exactly which secrets a given deploy touches.
+#
+# Why this mattered specifically for dev vs. prod, not just "duplication in general": a fix applied
+# to one and forgotten in the other stays invisible until the next real PROD deploy — worse than
+# the same drift in a test-only workflow, where the consequence is a red PR check, not broken
+# production. Dev and prod infrastructure are deliberately migrated at different times in this repo
+# (see the frontend/-rename plan) — that's a reason to keep THEM separate, not a reason to also let
+# the deploy MECHANISM they share drift apart.
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        required: true
+        type: string
+        description: 'Human-readable label for step names/logs (e.g. "dev", "prod")'
+      base-dir:
+        required: true
+        type: string
+        description: 'VPS release directory, e.g. /srv/apps/yuriisoft-frontend-dev'
+      service-name:
+        required: true
+        type: string
+        description: 'systemd unit name, e.g. yuriisoft-frontend-dev.service'
+      deploy-tag:
+        required: true
+        type: string
+        description: 'Release identifier passed to deploy-frontend.sh (commit SHA for dev, tag name for prod)'
+    secrets:
+      VPS_HOST:
+        required: true
+      VPS_PORT:
+        required: true
+      VPS_USER:
+        required: true
+      VPS_SSH_KEY:
+        required: true
+      UPSTASH_REDIS_REST_URL:
+        required: false
+      UPSTASH_REDIS_REST_TOKEN:
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # deploy-frontend.sh comes from the repo itself, not the build artifact —
+      # download-artifact alone doesn't check out the repo, so without this step
+      # .scripts/deploy-frontend.sh simply doesn't exist in this job's workspace and
+      # scp-action silently has nothing to send.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-release
+
+      - name: Copy files to Server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "release.tar.gz, .scripts/deploy-frontend.sh"
+          target: "/tmp/"
+
+      - name: Deploy on Server (${{ inputs.environment-name }})
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /tmp/.scripts/deploy-frontend.sh
+            /tmp/.scripts/deploy-frontend.sh "${{ inputs.deploy-tag }}" /tmp/release.tar.gz ${{ inputs.base-dir }} ${{ inputs.service-name }}
+            DEPLOY_EXIT_CODE=$?
+            rm -f /tmp/release.tar.gz
+            rm -rf /tmp/.scripts
+            if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+              echo "❌ Deployment FAILED with exit code $DEPLOY_EXIT_CODE"
+              exit $DEPLOY_EXIT_CODE
+            fi
+
+      # Additive-only sync of NEW OPTIONAL env vars (currently: Upstash Redis, for
+      # backend/src/auth/rate-limit.ts) into shared/.env, driven by GitHub Actions secrets rather
+      # than a human SSHing in — see .scripts/set-app-env-finish.sh and
+      # provision/12-set-app-env-helper.sh for the narrow, root-owned mechanism this calls into.
+      # DATABASE_URL/JWT_* are deliberately NOT here and never will be — those stay
+      # one-time/manual (provision/06-app-env.sh), never touched by CI, since resetting either one
+      # live invalidates every session or breaks the DB connection outright, which must always be
+      # a deliberate human act, not a side effect of an ordinary deploy. `continue-on-error`: a
+      # hiccup here (or the secrets simply not being configured yet) must never fail an otherwise-
+      # good deploy — this step only ever ADDS/UPDATES named keys, never deletes.
+      - name: Sync optional env vars (${{ inputs.environment-name }})
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            UPSTASH_URL="${{ secrets.UPSTASH_REDIS_REST_URL }}"
+            UPSTASH_TOKEN="${{ secrets.UPSTASH_REDIS_REST_TOKEN }}"
+            ARGS=()
+            [ -n "$UPSTASH_URL" ] && ARGS+=("UPSTASH_REDIS_REST_URL=$UPSTASH_URL")
+            [ -n "$UPSTASH_TOKEN" ] && ARGS+=("UPSTASH_REDIS_REST_TOKEN=$UPSTASH_TOKEN")
+            if [ ${#ARGS[@]} -eq 0 ]; then
+              echo "No optional env secrets configured yet — skipping."
+              exit 0
+            fi
+            sudo /usr/local/bin/set-app-env-finish.sh ${{ inputs.base-dir }} "${ARGS[@]}"

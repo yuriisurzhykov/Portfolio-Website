@@ -14,32 +14,13 @@ name: Accept Visual Baselines
 # frontend/tests/e2e/generate-pages-manifest.ts needs a real, seeded database to build the page
 # list.
 #
-# SECURITY (CWE-367, "Untrusted Checkout TOCTOU"): split into two jobs on purpose, not one.
-# `guard` makes the trust decision (comment author, same-repo-branch check) and captures an
-# IMMUTABLE commit SHA in the same API call that verifies the branch isn't a fork.
-# `update-snapshots` is gated on `needs.guard.outputs.is_fork != 'true'` at the JOB level and
-# only ever checks out that pinned SHA — never a mutable branch ref. Earlier this was one job
-# with an inline `core.setFailed()` guard step; that's functionally equivalent (a failed step
-# halts the job) but GitHub's own CodeQL scanner kept flagging it, because the ref it recognizes
-# as "provably immutable" is the literal `github.event.pull_request.head.sha` expression — a
-# value computed inside a github-script step's inline JS (as this workflow must do, since
-# `issue_comment` events carry no `pull_request.head` data at all, only a same-request API call
-# can get it) isn't something its dataflow analysis traces into. Splitting the trust check into
-# its own job with an explicit job-level `if:` gate mirrors the exact "environment approval" /
-# "label gate" shape CodeQL's query documentation shows as the recognized-safe pattern.
-#
-# KNOWN RESIDUAL FINDING, dismissed as a false positive (not fixed further): CodeQL's
-# `actions/untrusted-checkout-toctou` query only recognizes ONE literal source as "provably
-# immutable" — the `github.event.pull_request.head.sha` context expression (see its own query
-# help docs' examples, both built on `pull_request_target`). `issue_comment` events carry no
-# `pull_request.head` data at all (only `issue.pull_request`'s URL fields), so that literal
-# expression cannot exist here by construction — the SHA can only come from an API call inside a
-# `github-script` step, which CodeQL's dataflow analysis doesn't trace into. It keeps flagging the
-# checkout below even though `head_sha` is captured in the exact same API response used to verify
-# `sameRepo`, one job earlier, with no window for the branch to change in between — a tool
-# precision gap for this whole class of comment-command workflows, not an unaddressed
-# vulnerability. Verified by hand, not assumed: re-read the query's own two examples
-# (Deployment Environment Approval, Label Gates) — neither covers `issue_comment` at all.
+# SECURITY (CWE-367, "Untrusted Checkout TOCTOU"): split into two jobs so `guard` can capture an
+# IMMUTABLE commit SHA (via the same API call that checks the branch isn't a fork) for
+# `update-snapshots` to check out — never a mutable branch ref. CodeQL still flags the checkout as
+# a residual finding, dismissed as a false positive: its query only recognizes the literal
+# `github.event.pull_request.head.sha` expression as "provably immutable", which can't exist for
+# `issue_comment` events (no `pull_request.head` in the payload) — see dismissal note in the code
+# scanning UI for the full reasoning.
 on:
   issue_comment:
     types: [ created ]
@@ -51,9 +32,11 @@ jobs:
       contains(github.event.comment.body, '/update-snapshots') &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
+    # pull-requests: write, not issues: write — a comment on a PR is scoped as a
+    # pull-requests resource even via the /issues/comments/... REST path.
+    # issues: write 403'd here live (see frontend/tests/README.md section 11).
     permissions:
-      issues: write
-      pull-requests: read
+      pull-requests: write
     outputs:
       is_fork: ${{ steps.guard.outputs.is_fork }}
       head_sha: ${{ steps.guard.outputs.head_sha }}
@@ -70,19 +53,10 @@ jobs:
               content: "+1",
             });
 
-      # author_association above only vets who posted the comment, not whose CODE is about to be
-      # checked out and executed. Without this guard, a trusted maintainer commenting
-      # /update-snapshots on a malicious fork PR would cause that fork's code (npm postinstall
-      # scripts, playwright.config.ts, test files, ...) to run with a contents: write token still
-      # live — a classic "pwn request". Fail closed, before any PR content is fetched, if the
-      # PR's branch isn't actually in this repository. head_sha/head_ref are captured in this same
-      # API call so the downstream job checks out exactly the commit that was just verified, not
-      # whatever the branch happens to point at when that later job actually starts.
-      #
-      # The rejection comment is posted HERE, inline, rather than in a separate downstream job —
-      # a job gated on `needs: guard` only runs by default when guard SUCCEEDS, so a job meant to
-      # react to guard's *failure* would need an `always()` override, which is more moving parts
-      # than just posting the comment before calling core.setFailed().
+      # author_association only vets who posted the comment, not whose code is about to run — this
+      # step blocks fork PRs before any of their code is checked out ("pwn request" prevention).
+      # Rejection comment posted here, not in a separate job, since a job gated on `needs: guard`
+      # only runs by default when guard succeeds.
       - name: Verify the PR branch is not from a fork
         id: guard
         uses: actions/github-script@v7
@@ -121,17 +95,12 @@ jobs:
     needs: guard
     if: needs.guard.outputs.is_fork != 'true'
     runs-on: ubuntu-latest
-    # contents: write is needed by "Commit and push to the PR branch" below,
-    # issues: write by "Comment with the result" — GitHub Actions only
-    # supports `permissions:` at the job (or workflow) level, never on an
-    # individual step, so both live here rather than split per-step (a
-    # CodeQL Autofix suggestion tried exactly that split and was reverted —
-    # the step-level `permissions:` keys were silently ignored, leaving
-    # both steps running with whatever narrower scope this job block
-    # granted, which would have broken the push and the comment).
+    # contents: write for the push, pull-requests: write for the comment (see
+    # guard's comment above). Job-level only — GitHub Actions ignores
+    # permissions: on individual steps (a reverted CodeQL autofix tried that).
     permissions:
       contents: write
-      issues: write
+      pull-requests: write
 
     services:
       # Same reasoning as visual-tests.yml: frontend/tests/e2e/generate-pages-manifest.ts needs a
@@ -166,26 +135,13 @@ jobs:
           ref: ${{ needs.guard.outputs.head_sha }}
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Prepare workspace
+        uses: ./.github/actions/prepare-workspace
         with:
-          node-version: 20
-          cache: "npm"
-          # frontend/ and backend/ are npm workspace members (single package-lock.json at the
-          # repo root) — unlike the legacy Vite frontend/ this app replaced, which had its own
-          # standalone lockfile.
-          cache-dependency-path: package-lock.json
+          node-version: "20"
 
-      - name: Install workspace dependencies (frontend/ + backend/)
-        run: npm ci --ignore-scripts
-
-      - name: Apply migrations to the CI database
-        working-directory: backend
-        run: npx prisma migrate deploy
-
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
 
       - name: Regenerate baselines
         working-directory: frontend

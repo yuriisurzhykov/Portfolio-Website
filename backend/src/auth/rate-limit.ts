@@ -72,15 +72,9 @@ export interface RedisCommands {
 }
 
 /**
- * Increments the counter and sets its expiry as ONE atomic Redis operation
- * (a Lua script runs entirely server-side, in a single round trip) —
- * NOT two separate `incr` + `expire` calls. Two separate calls leave a real
- * gap: if the process is interrupted, or the `expire` request itself fails
- * over the network, after `incr` already succeeded, Redis is left with a
- * counter that has NO expiry at all. Every later call keeps incrementing
- * that same key forever with no TTL to reset it, permanently blocking
- * whatever key crossed the limit at that moment — found via a real PR
- * review comment, not hypothetically; see backend/src/auth/README.md.
+ * Increments and sets expiry in ONE atomic Redis round trip (Lua script) —
+ * not two separate `incr` + `expire` calls, which could leave a counter
+ * with no TTL if interrupted between them. Found via PR review, see README.
  */
 const INCR_AND_EXPIRE_SCRIPT = `
 local count = redis.call("INCR", KEYS[1])
@@ -104,11 +98,8 @@ export class UpstashRateLimiter implements RateLimiter {
     constructor(private readonly redis: RedisCommands) {}
 
     async checkAndRecord(key: string, limit: number, windowSeconds: number): Promise<RateLimitCheck> {
-        // Only the request that just created the key (count === 1, checked
-        // INSIDE the script) sets its expiry — every subsequent increment in
-        // the same window must NOT touch it, or a steady trickle of requests
-        // would keep pushing the window out forever and the limit would
-        // never reset.
+        // Expiry is set only on count === 1 (checked inside the script) so later
+        // increments don't keep pushing the window out forever.
         const count = await this.redis.eval<number>(INCR_AND_EXPIRE_SCRIPT, [key], [windowSeconds]);
 
         if (count > limit) {

@@ -9,12 +9,9 @@ name: Visual & Accessibility Tests
 # is merged its baselines are already correct, so this job's run on master is just a
 # confirmation, not a place that ever needs to write back to the repo.
 #
-# Retargeted from the legacy Vite frontend/ to web/ (Next.js + Postgres) once its tests/ were
-# ported over, then renamed again alongside web/ -> frontend/ once the legacy app was retired —
-# see .cursor/plans/retire_frontend_and_rename_web_204713a8.plan.md. The suite needs a real
-# database (its page list is generated FROM Postgres, not a static in-repo import), so this job
-# has a Postgres service container + DATABASE_URL/JWT_* env + a migration step, mirroring the
-# exact pattern already established in backend-web-checks.yml for the same reason.
+# The suite needs a real database (its page list is generated FROM Postgres, not a static in-repo
+# import), so this job has a Postgres service container + DATABASE_URL/JWT_* env + a migration
+# step, mirroring backend-web-checks.yml's own pattern for the same reason.
 
 on:
   pull_request:
@@ -68,26 +65,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Prepare workspace
+        uses: ./.github/actions/prepare-workspace
         with:
-          node-version: 20
-          cache: "npm"
-          # frontend/ and backend/ are npm workspace members (single package-lock.json at the
-          # repo root) — unlike the legacy Vite frontend/ this app replaced, which had its own
-          # standalone lockfile.
-          cache-dependency-path: package-lock.json
+          node-version: "20"
 
-      - name: Install workspace dependencies (frontend/ + backend/)
-        run: npm ci
-
-      - name: Apply migrations to the CI database
-        working-directory: backend
-        run: npx prisma migrate deploy
-
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
 
       - name: Run tests
         working-directory: frontend
