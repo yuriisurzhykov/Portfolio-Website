@@ -158,10 +158,17 @@ export const adminApi = {
     createPost: (input: PostInput) => request<PostSummary>("POST", "/api/admin/posts", input),
     updatePost: (slug: string, input: PostInput) => request<PostSummary>("PUT", `/api/admin/posts/${ encodeURIComponent(slug) }`, input),
     deletePost: (slug: string) => request<{ ok: true }>("DELETE", `/api/admin/posts/${ encodeURIComponent(slug) }`),
+    // No body — see the route's own comment (admin-posts.ts's
+    // `publishPost`/`unpublishPost`): these validate/flip whatever's
+    // already saved, they don't accept content changes.
+    publishPost: (slug: string) => request<PostSummary>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/publish`),
+    unpublishPost: (slug: string) => request<PostSummary>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/unpublish`),
 
     createWork: (input: WorkInput) => request<WorkSummary>("POST", "/api/admin/work", input),
     updateWork: (slug: string, input: WorkInput) => request<WorkSummary>("PUT", `/api/admin/work/${ encodeURIComponent(slug) }`, input),
     deleteWork: (slug: string) => request<{ ok: true }>("DELETE", `/api/admin/work/${ encodeURIComponent(slug) }`),
+    publishWork: (slug: string) => request<WorkSummary>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/publish`),
+    unpublishWork: (slug: string) => request<WorkSummary>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/unpublish`),
 
     // Separate from `updatePost`/`updateWork` — see the two `[slug]/translation`
     // route files' top comments — this is the only path that ever writes

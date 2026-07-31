@@ -2,12 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { AdminPostDetail, PostInput, PostStatus } from "@portfolio/backend";
+import type { AdminPostDetail, LifecycleState, PostInput, PostStatus } from "@portfolio/backend";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
 import { Field, Input, Textarea } from "@/shared/ui/form";
 import { Tag } from "@/shared/ui/tag";
+import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
@@ -69,8 +70,14 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
     const [slugTouched, setSlugTouched] = React.useState(isEditing);
     const blockEditorRef = React.useRef<BlockEditorHandle>(null);
     const [error, setError] = React.useState<string | null>(null);
+    // Separate from `error` — a successful save that also auto-unpublished
+    // the post (see admin-posts.ts's `updatePost` safety net) isn't a
+    // failure, it's information the admin needs to act on.
+    const [notice, setNotice] = React.useState<string | null>(null);
     const [submitting, setSubmitting] = React.useState(false);
     const [deleting, setDeleting] = React.useState(false);
+    const [lifecycleState, setLifecycleState] = React.useState<LifecycleState>(initialPost?.lifecycleState ?? "DRAFT");
+    const [lifecyclePending, setLifecyclePending] = React.useState(false);
 
     function update<K extends keyof FormState>(key: K, value: FormState[K]) {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -92,6 +99,7 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
     async function handleSubmit(event: React.FormEvent) {
         event.preventDefault();
         setError(null);
+        setNotice(null);
 
         const input: PostInput = {
             slug: form.slug.trim(),
@@ -105,16 +113,57 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
 
         setSubmitting(true);
         try {
-            if (isEditing && initialPost) {
-                await adminApi.updatePost(initialPost.slug, input);
-            } else {
-                await adminApi.createPost(input);
+            const wasPublished = lifecycleState === "PUBLISHED";
+            const result = isEditing && initialPost
+                ? await adminApi.updatePost(initialPost.slug, input)
+                : await adminApi.createPost(input);
+
+            // The auto-unpublish safety net (admin-posts.ts's `updatePost`)
+            // detected this save no longer satisfies the strict publish
+            // contract — surface that explicitly instead of silently
+            // redirecting away, which would hide the fact anything changed.
+            if (wasPublished && result.lifecycleState === "DRAFT") {
+                setLifecycleState("DRAFT");
+                setNotice("Saved, but automatically unpublished — the post no longer has everything required to stay public (e.g. a missing excerpt or category). Fill in what's missing, then Publish again.");
+                setSubmitting(false);
+                return;
             }
+
             router.push("/admin/journal");
             router.refresh();
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Something went wrong. Please try again.");
             setSubmitting(false);
+        }
+    }
+
+    async function handlePublish() {
+        if (!initialPost) return;
+        setError(null);
+        setNotice(null);
+        setLifecyclePending(true);
+        try {
+            const result = await adminApi.publishPost(initialPost.slug);
+            setLifecycleState(result.lifecycleState);
+        } catch (err) {
+            setError(err instanceof AdminApiError ? err.message : "Failed to publish.");
+        } finally {
+            setLifecyclePending(false);
+        }
+    }
+
+    async function handleUnpublish() {
+        if (!initialPost) return;
+        setError(null);
+        setNotice(null);
+        setLifecyclePending(true);
+        try {
+            const result = await adminApi.unpublishPost(initialPost.slug);
+            setLifecycleState(result.lifecycleState);
+        } catch (err) {
+            setError(err instanceof AdminApiError ? err.message : "Failed to unpublish.");
+        } finally {
+            setLifecyclePending(false);
         }
     }
 
@@ -153,6 +202,22 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
                     </div>
                 </div>
                 <div className="flex items-center gap-sm">
+                    {isEditing && (
+                        <>
+                            <StatusBadge tone={lifecycleState === "PUBLISHED" ? "success" : "warning"} withDot>
+                                {lifecycleState === "PUBLISHED" ? "Published" : "Draft"}
+                            </StatusBadge>
+                            {lifecycleState === "DRAFT" ? (
+                                <Button type="button" variant="secondary" size="sm" onClick={handlePublish} loading={lifecyclePending}>
+                                    Publish
+                                </Button>
+                            ) : (
+                                <Button type="button" variant="ghost" size="sm" onClick={handleUnpublish} loading={lifecyclePending}>
+                                    Unpublish
+                                </Button>
+                            )}
+                        </>
+                    )}
                     {isEditing && (
                         <Button type="button" variant="secondary" size="sm" onClick={() => router.push(`/admin/journal/${ initialPost?.slug }/translate`)}>
                             {initialPost?.title.ru ? "Edit translation" : "Add translation"}
@@ -198,6 +263,9 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
                 <BlockEditor ref={blockEditorRef} initialBlocks={initialPost?.blocks ?? []} />
             </div>
 
+            {notice && (
+                <Text variant="caption" className="text-status-warning" role="status">{notice}</Text>
+            )}
             {error && (
                 <Text variant="caption" className="text-status-error" role="alert">{error}</Text>
             )}
@@ -206,6 +274,11 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
                 <Button type="submit" loading={submitting}>{isEditing ? "Save changes" : "Create post"}</Button>
                 <Button type="button" variant="secondary" onClick={() => router.push("/admin/journal")}>Cancel</Button>
             </div>
+            {!isEditing && (
+                <Text variant="caption" tone="faint">
+                    Saved as a draft first — use the Publish button on the edit screen to make it live.
+                </Text>
+            )}
         </form>
     );
 }

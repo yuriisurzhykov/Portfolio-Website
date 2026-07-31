@@ -1,5 +1,16 @@
 # views/admin-work-editor — WorkEditorPage
 
+## 2026-07-31 — Фаза 2 (lifecycle state machine): Publish/Unpublish + auto-unpublish notice
+
+Идентично `admin-post-editor/README.md`'s одноимённой записи — тот же
+`lifecycleState` `useState`, тот же `<StatusBadge>` + Publish/Unpublish
+кнопка, вызывающие `adminApi.publishWork`/`unpublishWork`, тот же
+"остаться на странице вместо редиректа" ТОЛЬКО когда safety-net
+(`updateWork`) молча снял элемент с публикации. Единственное
+Work-специфичное отличие — формулировка `notice` упоминает "summary или
+case-study field" вместо "excerpt или category", отражая, какие поля
+`workPublishSchema` реально требует.
+
 ## 2026-07-19 — Фаза 4: "Has a case study" как единый переключатель
 
 **Что нужно сделать.** У `Work` кейс-стади — необязательный "пакет" из

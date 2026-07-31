@@ -1,5 +1,26 @@
 # views/admin-journal-list — AdminJournalListPage
 
+## 2026-07-31 — Фаза 2 (lifecycle state machine): вкладки Draft/Published
+
+`entries` prop теперь приходит из `getPostsForAdmin()` (backend), не
+публичной `getJournalEntries()` — Server Component (`app/admin/(dashboard)/
+journal/page.tsx`) грузит ВСЁ (оба `lifecycleState`) одним запросом.
+`lifecycleOptions()` считает количество в каждом состоянии и строит два
+`<StatusToggle>`-варианта ("Published (N)"/"Draft (N)") — фильтрация
+списка происходит на клиенте (`entries.filter(...)`), без отдельного
+запроса на переключение вкладки, ровно как и предполагал план (данные уже
+загружены целиком).
+
+Порядок вкладок — Published первой: возвращающийся администратор ожидает
+увидеть тот же список, что видел до появления этого разделения. Warning
+tone для Draft — то же визуальное значение, что уже используют
+`upcoming`/`in-progress` в этом же файле: "не полностью live".
+
+Бэйдж статуса на строке (`post.status`, published/upcoming) остался
+БЕЗ изменений — это другая, публичная ось (см. `backend/src/content/
+README.md`'s одноимённая запись); дублировать `lifecycleState` ещё и
+бэйджем на каждой строке избыточно, раз сама вкладка уже это говорит.
+
 ## 2026-07-19 — Фаза 4: список + delete, без loopback на собственный API для чтения
 
 Получает `entries: PostSummary[]` как prop — переданы Server Component'ом

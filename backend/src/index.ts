@@ -14,6 +14,8 @@ export type { CaseStudy, WorkDetail, WorkStatus, WorkSummary } from "./content/w
 export type { Block, BlockInput, BlockType } from "./content/blocks";
 export type { LocalizedText } from "./content/localized-text";
 export type { ContentLocale } from "./content/locale";
+export { isInvalidLifecycleTransitionError, nextState } from "./content/lifecycle";
+export type { LifecycleAction, LifecycleState } from "./content/lifecycle";
 
 export { getSiteContent, iconRefSchema, isSiteContentKey, SITE_CONTENT_KEYS, siteContentSchemas, updateSiteContent } from "./content/site-content";
 export type {
@@ -34,21 +36,28 @@ export {
     createPost,
     deletePost,
     getPostForAdmin,
+    getPostsForAdmin,
     getPostTranslationForAdmin,
-    postInputSchema,
+    postDraftInputSchema,
+    publishPost,
     translatePost,
     translatePostInputSchema,
+    unpublishPost,
     updatePost,
 } from "./content/admin-posts";
 export type { AdminPostDetail, AdminPostTranslation, PostInput, TranslatePostInput } from "./content/admin-posts";
 export {
     createWork,
     deleteWork,
+    getWorkDetailForAdmin,
+    getWorkForAdmin,
     getWorkTranslationForAdmin,
+    publishWork,
     translateWork,
     translateWorkInputSchema,
+    unpublishWork,
     updateWork,
-    workInputSchema,
+    workDraftInputSchema,
 } from "./content/admin-work";
 export type { AdminWorkTranslation, TranslateWorkInput, WorkInput } from "./content/admin-work";
 

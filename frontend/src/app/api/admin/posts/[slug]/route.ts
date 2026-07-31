@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deletePost, getPostForAdmin, postInputSchema, updatePost } from "@portfolio/backend";
+import { deletePost, getPostForAdmin, postDraftInputSchema, updatePost } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
@@ -25,7 +25,7 @@ export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => 
     try {
         const { slug } = await params;
         const body = await request.json();
-        const input = postInputSchema.parse(body);
+        const input = postDraftInputSchema.parse(body);
         const updated = await updatePost(slug, input);
         if (!updated) {
             return NextResponse.json({ error: "Post not found." }, { status: 404 });

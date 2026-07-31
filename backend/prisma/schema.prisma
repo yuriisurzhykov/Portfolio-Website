@@ -10,6 +10,23 @@ datasource db {
   provider = "postgresql"
 }
 
+/// Draft/publish visibility for `Post`/`Work` — whether a record is shown
+/// on the public site AT ALL, independent of `Post.status`/`Work.status`
+/// (which describe something else: how an ALREADY-visible record reads,
+/// e.g. "upcoming" vs "published", "shipped" vs "in-progress"). A REAL
+/// Prisma enum here, unlike `Block.type` (a plain `String` — see its own
+/// comment above `Block` for why): the set of lifecycle states is a fixed,
+/// closed transition graph owned by `content/lifecycle.ts` (`nextState()`)
+/// — it doesn't grow every time a new content shape is added the way block
+/// types do, so there's no "new enum value = a migration every time" cost
+/// to worry about here. Two fields, not a bigger state object, because
+/// that's genuinely all the state a two-state machine needs: which state
+/// it's in, and when it last entered PUBLISHED.
+enum LifecycleState {
+  DRAFT
+  PUBLISHED
+}
+
 /// A person who can log into /admin. One row today (you) — modeled as a
 /// real table from day one (not a hardcoded single-admin check) so adding a
 /// second user or a role later is a data change, not a redesign.
@@ -115,6 +132,19 @@ model Post {
   body             Document? @relation("PostBody", fields: [bodyDocumentId], references: [id])
   bodyDocumentIdRu String?   @unique
   bodyRu           Document? @relation("PostBodyRu", fields: [bodyDocumentIdRu], references: [id])
+  /// Defaults to DRAFT — a brand new post never appears on the public site
+  /// until an explicit `publishPost()` call (see admin-posts.ts), even
+  /// though `status` above already defaults to `"published"`. Existing
+  /// rows (all real content, predating this field) were backfilled to
+  /// PUBLISHED by the migration that introduced this column — see its
+  /// comment for why that backfill is mandatory, not optional.
+  lifecycleState   LifecycleState @default(DRAFT)
+  /// Set the first time this row transitions into PUBLISHED, then left
+  /// alone — an UNPUBLISH (explicit or the auto-unpublish safety net in
+  /// `updatePost`) does NOT clear it, so it keeps meaning "when was this
+  /// last published," not "is this published right now" (that's what
+  /// `lifecycleState` is for).
+  publishedAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -153,6 +183,12 @@ model Work {
   /// not a block list a translator restructures.
   caseStudyDocumentIdRu String?   @unique
   caseStudyRu           Document? @relation("WorkCaseStudyRu", fields: [caseStudyDocumentIdRu], references: [id])
+  /// Same field, same reasoning as `Post.lifecycleState` above — Post and
+  /// Work share one lifecycle graph (`content/lifecycle.ts`) even though
+  /// their public `status` unions are unrelated to each other.
+  lifecycleState        LifecycleState @default(DRAFT)
+  /// Same field, same reasoning as `Post.publishedAt` above.
+  publishedAt           DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }

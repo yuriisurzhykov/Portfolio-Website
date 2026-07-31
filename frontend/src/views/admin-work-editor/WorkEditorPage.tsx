@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { WorkDetail, WorkInput, WorkStatus } from "@portfolio/backend";
+import type { LifecycleState, WorkDetail, WorkInput, WorkStatus } from "@portfolio/backend";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
 import { Checkbox, Field, Input, Textarea } from "@/shared/ui/form";
+import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
@@ -70,8 +71,12 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
     const [slugTouched, setSlugTouched] = React.useState(isEditing);
     const blockEditorRef = React.useRef<BlockEditorHandle>(null);
     const [error, setError] = React.useState<string | null>(null);
+    // Separate from `error` — see admin-post-editor/PostEditorPage.tsx's identical field for why.
+    const [notice, setNotice] = React.useState<string | null>(null);
     const [submitting, setSubmitting] = React.useState(false);
     const [deleting, setDeleting] = React.useState(false);
+    const [lifecycleState, setLifecycleState] = React.useState<LifecycleState>(initialWork?.lifecycleState ?? "DRAFT");
+    const [lifecyclePending, setLifecyclePending] = React.useState(false);
 
     function update<K extends keyof FormState>(key: K, value: FormState[K]) {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -117,16 +122,56 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
 
         setSubmitting(true);
         try {
-            if (isEditing && initialWork) {
-                await adminApi.updateWork(initialWork.slug, input);
-            } else {
-                await adminApi.createWork(input);
+            const wasPublished = lifecycleState === "PUBLISHED";
+            const result = isEditing && initialWork
+                ? await adminApi.updateWork(initialWork.slug, input)
+                : await adminApi.createWork(input);
+
+            // Auto-unpublish safety net — see admin-work.ts's `updateWork`
+            // and PostEditorPage.tsx's identical check for why this stays
+            // on the page instead of redirecting away silently.
+            if (wasPublished && result.lifecycleState === "DRAFT") {
+                setLifecycleState("DRAFT");
+                setNotice("Saved, but automatically unpublished — this item no longer has everything required to stay public (e.g. a missing summary or case-study field). Fill in what's missing, then Publish again.");
+                setSubmitting(false);
+                return;
             }
+
             router.push("/admin/work");
             router.refresh();
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Something went wrong. Please try again.");
             setSubmitting(false);
+        }
+    }
+
+    async function handlePublish() {
+        if (!initialWork) return;
+        setError(null);
+        setNotice(null);
+        setLifecyclePending(true);
+        try {
+            const result = await adminApi.publishWork(initialWork.slug);
+            setLifecycleState(result.lifecycleState);
+        } catch (err) {
+            setError(err instanceof AdminApiError ? err.message : "Failed to publish.");
+        } finally {
+            setLifecyclePending(false);
+        }
+    }
+
+    async function handleUnpublish() {
+        if (!initialWork) return;
+        setError(null);
+        setNotice(null);
+        setLifecyclePending(true);
+        try {
+            const result = await adminApi.unpublishWork(initialWork.slug);
+            setLifecycleState(result.lifecycleState);
+        } catch (err) {
+            setError(err instanceof AdminApiError ? err.message : "Failed to unpublish.");
+        } finally {
+            setLifecyclePending(false);
         }
     }
 
@@ -159,6 +204,22 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
                     <StatusToggle value={form.status} onChange={(status) => update("status", status)} options={STATUS_OPTIONS} />
                 </div>
                 <div className="flex items-center gap-sm">
+                    {isEditing && (
+                        <>
+                            <StatusBadge tone={lifecycleState === "PUBLISHED" ? "success" : "warning"} withDot>
+                                {lifecycleState === "PUBLISHED" ? "Published" : "Draft"}
+                            </StatusBadge>
+                            {lifecycleState === "DRAFT" ? (
+                                <Button type="button" variant="secondary" size="sm" onClick={handlePublish} loading={lifecyclePending}>
+                                    Publish
+                                </Button>
+                            ) : (
+                                <Button type="button" variant="ghost" size="sm" onClick={handleUnpublish} loading={lifecyclePending}>
+                                    Unpublish
+                                </Button>
+                            )}
+                        </>
+                    )}
                     {isEditing && (
                         <Button type="button" variant="secondary" size="sm" onClick={() => router.push(`/admin/work/${ initialWork?.slug }/translate`)}>
                             {initialWork?.summary.ru ? "Edit translation" : "Add translation"}
@@ -281,6 +342,9 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
                 )}
             </Card>
 
+            {notice && (
+                <Text variant="caption" className="text-status-warning" role="status">{notice}</Text>
+            )}
             {error && (
                 <Text variant="caption" className="text-status-error" role="alert">{error}</Text>
             )}
@@ -289,6 +353,11 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
                 <Button type="submit" loading={submitting}>{isEditing ? "Save changes" : "Create work item"}</Button>
                 <Button type="button" variant="secondary" onClick={() => router.push("/admin/work")}>Cancel</Button>
             </div>
+            {!isEditing && (
+                <Text variant="caption" tone="faint">
+                    Saved as a draft first — use the Publish button on the edit screen to make it live.
+                </Text>
+            )}
         </form>
     );
 }

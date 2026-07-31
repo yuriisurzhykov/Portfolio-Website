@@ -2,14 +2,20 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { isSlugAlreadyExistsError } from "../errors";
+import { isInvalidLifecycleTransitionError } from "./lifecycle";
+import { getJournalEntries, getPostBySlug } from "./posts";
 import {
     createPost,
     deletePost,
-    getPostForAdmin,
-    getPostTranslationForAdmin,
     type PostInput,
+    postDraftInputSchema,
+    getPostForAdmin,
+    getPostsForAdmin,
+    getPostTranslationForAdmin,
+    publishPost,
     translatePost,
     type TranslatePostInput,
+    unpublishPost,
     updatePost,
 } from "./admin-posts";
 
@@ -78,6 +84,41 @@ describe("createPost", () => {
         // second attempt's blocks must never have been written.
         expect(await prisma.document.count()).toBe(1);
     });
+
+    it("defaults to lifecycleState DRAFT, invisible on the public site, regardless of the (public) status field", async () => {
+        await createPost(basePostInput); // status: "published"
+
+        const row = await prisma.post.findUnique({ where: { slug: "test-post" } });
+        expect(row?.lifecycleState).toBe("DRAFT");
+        expect(row?.publishedAt).toBeNull();
+        expect(await getPostBySlug("test-post")).toBeNull();
+    });
+
+    it("derives a slug from the title when none is given, appending -2 on collision", async () => {
+        const { slug: _omit, ...withoutSlug } = basePostInput;
+        await createPost(withoutSlug as PostInput);
+        await createPost({ ...(withoutSlug as PostInput), title: "Test Post" });
+
+        expect(await prisma.post.findUnique({ where: { slug: "test-post" } })).not.toBeNull();
+        expect(await prisma.post.findUnique({ where: { slug: "test-post-2" } })).not.toBeNull();
+    });
+
+    it("accepts the soft draft contract with only a title — every other field defaults", async () => {
+        // Parsed through the real schema, not an `as PostInput` cast — a
+        // cast would skip Zod's `.default()`s entirely and silently pass
+        // `undefined` straight to Prisma (found live: the first version of
+        // this test did exactly that and failed with a confusing Prisma
+        // "argument missing" error that had nothing to do with the actual
+        // behavior being tested).
+        const input = postDraftInputSchema.parse({ title: "Just a title" });
+        const created = await createPost(input);
+
+        expect(created.slug).toBe("just-a-title");
+        expect(created.category.en).toBe("");
+        expect(created.excerpt.en).toBe("");
+        expect(created.status).toBe("published");
+        expect(created.readMins).toBe(0);
+    });
 });
 
 describe("updatePost", () => {
@@ -130,6 +171,105 @@ describe("updatePost", () => {
 
         await expect(updatePost("renamed-post", { ...basePostInput, slug: "other-post" }))
             .rejects.toSatisfy(isSlugAlreadyExistsError);
+    });
+
+    it("omitting slug keeps the current slug rather than regenerating one from the title", async () => {
+        await createPost(basePostInput);
+        const updated = await updatePost("test-post", { ...basePostInput, slug: undefined, title: "A Whole New Title" });
+
+        expect(updated?.slug).toBe("test-post");
+    });
+
+    it("never rejects a soft-shaped save even when required publish fields are blanked out", async () => {
+        await createPost(basePostInput);
+        const updated = await updatePost("test-post", { ...basePostInput, category: "", excerpt: "" });
+
+        expect(updated).not.toBeNull();
+        expect(updated?.category.en).toBe("");
+    });
+
+    it("auto-unpublishes a PUBLISHED post whose update would fail the strict publish contract", async () => {
+        await createPost(basePostInput);
+        await publishPost("test-post");
+
+        const updated = await updatePost("test-post", { ...basePostInput, excerpt: "" });
+
+        expect(updated?.lifecycleState).toBe("DRAFT");
+        const row = await prisma.post.findUnique({ where: { slug: "test-post" } });
+        expect(row?.lifecycleState).toBe("DRAFT");
+    });
+
+    it("leaves a PUBLISHED post published when the update still satisfies the strict publish contract", async () => {
+        await createPost(basePostInput);
+        await publishPost("test-post");
+
+        const updated = await updatePost("test-post", { ...basePostInput, excerpt: "Still complete." });
+
+        expect(updated?.lifecycleState).toBe("PUBLISHED");
+    });
+});
+
+describe("getPostsForAdmin", () => {
+    it("returns both DRAFT and PUBLISHED posts, unlike the public getJournalEntries", async () => {
+        await createPost(basePostInput);
+        await createPost({ ...basePostInput, slug: "other" });
+        await publishPost("other");
+
+        const all = await getPostsForAdmin();
+        expect(all.map((p) => p.slug).sort()).toEqual(["other", "test-post"]);
+        expect(await getJournalEntries()).toHaveLength(1);
+    });
+});
+
+describe("publishPost", () => {
+    it("returns null when the slug doesn't exist", async () => {
+        expect(await publishPost("nope")).toBeNull();
+    });
+
+    it("moves a DRAFT post to PUBLISHED, sets publishedAt, and makes it visible publicly", async () => {
+        await createPost(basePostInput);
+
+        const published = await publishPost("test-post");
+        expect(published?.lifecycleState).toBe("PUBLISHED");
+        expect(published?.publishedAt).not.toBeNull();
+        expect(await getPostBySlug("test-post")).not.toBeNull();
+    });
+
+    it("is idempotent — publishing an already-PUBLISHED post succeeds and keeps the original publishedAt", async () => {
+        await createPost(basePostInput);
+        const first = await publishPost("test-post");
+
+        const second = await publishPost("test-post");
+        expect(second?.lifecycleState).toBe("PUBLISHED");
+        expect(second?.publishedAt).toBe(first?.publishedAt);
+    });
+
+    it("rejects publishing a post missing a required field (excerpt), listing what's missing", async () => {
+        await createPost({ ...basePostInput, excerpt: "" });
+
+        await expect(publishPost("test-post")).rejects.toMatchObject({ issues: expect.any(Array) });
+        expect(await getPostBySlug("test-post")).toBeNull();
+    });
+});
+
+describe("unpublishPost", () => {
+    it("returns null when the slug doesn't exist", async () => {
+        expect(await unpublishPost("nope")).toBeNull();
+    });
+
+    it("moves a PUBLISHED post back to DRAFT, hiding it from the public site, without clearing publishedAt", async () => {
+        await createPost(basePostInput);
+        const published = await publishPost("test-post");
+
+        const unpublished = await unpublishPost("test-post");
+        expect(unpublished?.lifecycleState).toBe("DRAFT");
+        expect(unpublished?.publishedAt).toBe(published?.publishedAt);
+        expect(await getPostBySlug("test-post")).toBeNull();
+    });
+
+    it("throws InvalidLifecycleTransitionError when the post is already DRAFT", async () => {
+        await createPost(basePostInput);
+        await expect(unpublishPost("test-post")).rejects.toSatisfy(isInvalidLifecycleTransitionError);
     });
 });
 

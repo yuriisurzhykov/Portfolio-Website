@@ -7,13 +7,16 @@
 //   `fileParallelism: false` because they share DB state (see
 //   vitest.config.ts), so rerunning them once per mutant would be extremely
 //   slow and would surface DB flakiness as mutation-testing flakiness.
-// - Also excludes content/{slug,locale,localized-text,site-content-defaults}.ts:
+// - Also excludes content/{locale,localized-text,site-content-defaults}.ts:
 //   verified (by grep) to have zero `prisma`/`db/client` imports themselves,
 //   BUT they have no dedicated unit test of their own either — they're only
 //   exercised indirectly through the DB-backed site-content.test.ts /
 //   work.test.ts. Mutating them would either need those DB tests to run
 //   anyway (defeating the exclusion above) or show every mutant as
 //   uncovered. Real candidates once/if they get direct unit tests.
+//   content/slug.ts graduated OUT of this exclusion (2026-07-31) once
+//   `generateUniqueSlug` got its own DB-free unit test (slug.test.ts,
+//   injected `isTaken` predicate instead of a real Prisma call).
 // - Everything listed below was verified (by grep) to have zero `prisma`/
 //   `db/client` imports AND has its own dedicated, DB-free test file — see
 //   errors.ts, which does import `Prisma` from `@prisma/client` for
@@ -40,6 +43,9 @@ const config = {
         "src/auth/rate-limit.ts",
         "src/content/reading-time.ts",
         "src/content/blocks.ts",
+        "src/content/lifecycle.ts",
+        "src/content/slug.ts",
+        "src/content/slugify.ts",
         "src/errors.ts",
     ],
     reporters: ["html", "clear-text", "progress"],

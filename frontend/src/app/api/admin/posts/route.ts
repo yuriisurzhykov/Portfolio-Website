@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createPost, getJournalEntries, postInputSchema } from "@portfolio/backend";
+import { createPost, getJournalEntries, postDraftInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
@@ -25,7 +25,7 @@ export const GET = defineAdminRoute(async () => {
 export const POST = defineAdminRoute(async (request) => {
     try {
         const body = await request.json();
-        const input = postInputSchema.parse(body);
+        const input = postDraftInputSchema.parse(body);
         const created = await createPost(input);
         return NextResponse.json(created, { status: 201 });
     } catch (error) {

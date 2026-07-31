@@ -1,6 +1,7 @@
 import { prisma } from "../db/client";
 import type { Block } from "./blocks";
 import { getDocumentBlocks } from "./document";
+import type { LifecycleState } from "./lifecycle";
 import { localizedTextSchema, type LocalizedText } from "./localized-text";
 import type { ContentLocale } from "./locale";
 
@@ -16,6 +17,20 @@ export interface PostSummary {
     excerpt: LocalizedText;
     status: PostStatus;
     relatedWorkSlug: string | null;
+    /**
+     * Draft/publish visibility — NOT the same axis as `status` above (see
+     * schema.prisma's comment on `Post.lifecycleState`). Every function in
+     * THIS file already filters to `PUBLISHED` only, so on every value
+     * this type ever actually flows through here it's always
+     * `"PUBLISHED"` — it's included in the shared summary type (rather
+     * than a public-only narrower type) because `admin-posts.ts`'s
+     * `getPostsForAdmin()` returns the exact same `PostSummary[]` shape
+     * for BOTH states, and one shared type is what lets it reuse
+     * `toPostSummary` at all.
+     */
+    lifecycleState: LifecycleState;
+    /** Mirrors `Post.publishedAt` — see schema.prisma's comment for why an UNPUBLISH never clears it. */
+    publishedAt: string | null;
 }
 
 export interface PostDetail extends PostSummary {
@@ -33,6 +48,8 @@ export function toPostSummary(row: {
     excerpt: unknown;
     status: string;
     relatedWorkSlug: string | null;
+    lifecycleState: LifecycleState;
+    publishedAt: Date | null;
 }): PostSummary {
     return {
         slug: row.slug,
@@ -43,19 +60,26 @@ export function toPostSummary(row: {
         excerpt: localizedTextSchema.parse(row.excerpt),
         status: row.status as PostStatus,
         relatedWorkSlug: row.relatedWorkSlug,
+        lifecycleState: row.lifecycleState,
+        publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     };
 }
 
 /**
- * Every journal entry (published AND upcoming stubs), newest first — the
- * commit-log view at /journal shows both, dimming the upcoming ones. Named
- * for what it actually returns, not "getPublishedPosts": an earlier draft
- * of this function was named that, then had to be renamed once it became
- * clear the /journal page needs upcoming stubs too, not just published
- * posts — see content/README.md.
+ * Every PUBLISHED journal entry (published AND upcoming `status` stubs
+ * alike — see `PostStatus`), newest first — the commit-log view at
+ * /journal shows both, dimming the upcoming ones. Named for what it
+ * actually returns, not "getPublishedPosts": an earlier draft of this
+ * function was named that, then had to be renamed once it became clear
+ * the /journal page needs upcoming stubs too, not just published posts —
+ * see content/README.md. `where: { lifecycleState: "PUBLISHED" }` added
+ * 2026-07-31 (content lifecycle state machine) — a DRAFT post/stub must
+ * never appear on the public site regardless of its `status`; the
+ * admin-only equivalent that returns both lifecycle states is
+ * `admin-posts.ts`'s `getPostsForAdmin()`.
  */
 export async function getJournalEntries(): Promise<PostSummary[]> {
-    const rows = await prisma.post.findMany({ orderBy: { date: "desc" } });
+    const rows = await prisma.post.findMany({ where: { lifecycleState: "PUBLISHED" }, orderBy: { date: "desc" } });
     return rows.map(toPostSummary);
 }
 
@@ -82,18 +106,25 @@ export async function getDistinctPostCategories(): Promise<string[]> {
     return [...categories].sort((a, b) => a.localeCompare(b));
 }
 
-/** The single most recent PUBLISHED post — landing page's "From the Journal" preview never shows an upcoming stub. */
+/**
+ * The single most recent live post — landing page's "From the Journal"
+ * preview never shows an upcoming (`status`) stub OR a DRAFT
+ * (`lifecycleState`) post; both conditions are required, since they guard
+ * two independent things (is it announced-but-unwritten vs. is it visible
+ * at all).
+ */
 export async function getLatestPublishedPost(): Promise<PostSummary | null> {
     const row = await prisma.post.findFirst({
-        where: { status: "published" },
+        where: { status: "published", lifecycleState: "PUBLISHED" },
         orderBy: { date: "desc" },
     });
     return row ? toPostSummary(row) : null;
 }
 
 /**
- * Full post, including its body blocks — null if the slug doesn't exist OR
- * the post has no body yet (upcoming stub), in EITHER language.
+ * Full post, including its body blocks — null if the slug doesn't exist,
+ * the post is a DRAFT (`lifecycleState`, not visible on the public site at
+ * all), OR the post has no body yet (upcoming stub), in EITHER language.
  *
  * `locale` picks which `Document` to read the body from — `bodyDocumentIdRu`
  * for `"ru"`, falling back to the English `bodyDocumentId` whenever no
@@ -106,7 +137,7 @@ export async function getLatestPublishedPost(): Promise<PostSummary | null> {
  */
 export async function getPostBySlug(slug: string, locale: ContentLocale = "en"): Promise<PostDetail | null> {
     const row = await prisma.post.findUnique({ where: { slug } });
-    if (!row) {
+    if (!row || row.lifecycleState !== "PUBLISHED") {
         return null;
     }
 
