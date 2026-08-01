@@ -51,22 +51,7 @@ function autosaveStatusLabel(status: AutosaveStatus): string | null {
     }
 }
 
-/**
- * English-only form — see the migration plan's "перевод — отдельная
- * страница, не параллельный ввод". `initialPost.title`/`category`/
- * `excerpt` are still full `{en, ru}` pairs (the read side hasn't
- * changed), this page just only ever shows/edits `.en` — the `ru` side
- * (if any exists already) is preserved server-side by `updatePost` (see
- * its comment in admin-posts.ts), never touched here. "Add translation"
- * below links to the one screen that does touch it.
- *
- * `status` defaults to `"upcoming"`, not `"published"` (2026-07-31, Phase
- * 3 — see this file's README) — a brand new post is a DRAFT
- * (`lifecycleState`, Prisma's own default) until explicitly published, so
- * defaulting the public-facing `status` field to `"published"` at the same
- * moment was a leftover contradiction from before that field existed, not
- * a deliberate choice. Freely editable either way from the first render.
- */
+/** English-only — see README. `status` defaults to `"upcoming"`, not `"published"`, since a new post starts as a DRAFT anyway. */
 function toFormState(post?: AdminPostDetail): FormState {
     return {
         slug: post?.slug ?? "",
@@ -99,15 +84,12 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
     const [deleting, setDeleting] = React.useState(false);
     const [lifecycleState, setLifecycleState] = React.useState<LifecycleState>(initialPost?.lifecycleState ?? "DRAFT");
     const [lifecyclePending, setLifecyclePending] = React.useState(false);
+    // Guards "Back to list"/"Add translation" — see `navigateAfterFlush` below.
+    const [navPending, setNavPending] = React.useState(false);
+    // The slug every action below actually targets, NOT `initialPost?.slug` — a rename via `update()` changes it, see README.
+    const [currentSlug, setCurrentSlug] = React.useState<string | null>(initialPost?.slug ?? null);
 
-    /**
-     * The single hook behind "type a title → a draft exists, every further
-     * edit is saved in the background" (2026-07-31, Phase 3 — see this
-     * file's README). `buildInput` closes over `form`/`blockEditorRef`
-     * fresh on every render (via the hook's own "always latest" ref
-     * pattern, see `use-autosave-draft.ts`) — this component never has to
-     * think about staleness itself.
-     */
+    // See `shared/lib/use-autosave-draft.ts` and this slice's README.
     const autosave = useAutosaveDraft<PostInput, PostSummary>({
         slug: initialPost?.slug ?? null,
         buildInput: () => ({
@@ -123,17 +105,13 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
         create: (input) => adminApi.createPost(input),
         update: (slug, input) => adminApi.updatePost(slug, input),
         getSlug: (result) => result.slug,
-        // Replaces the URL (not `push`) — the blank `/new` form and the
-        // now-real `/[slug]/edit` page are the same conceptual screen, an
-        // admin who navigates Back shouldn't land on the blank form again.
-        onCreated: (result) => router.replace(`/admin/journal/${ result.slug }/edit`),
+        // Fires on create AND on a later rename — keep `currentSlug` in sync and move the URL to match.
+        onSlugChanged: (result) => {
+            setCurrentSlug(result.slug);
+            router.replace(`/admin/journal/${ result.slug }/edit`);
+        },
         onSaved: (result) => {
-            // The auto-unpublish safety net (admin-posts.ts's `updatePost`)
-            // detected this save no longer satisfies the strict publish
-            // contract — surface that explicitly. Reads `lifecycleState`
-            // from THIS render's closure, refreshed on every render by the
-            // hook's own "always latest options" ref, so it always compares
-            // against the most recently known state, not a stale one.
+            // Auto-unpublish safety net (admin-posts.ts) silently demoted this post — surface it.
             if (lifecycleState === "PUBLISHED" && result.lifecycleState === "DRAFT") {
                 setNotice("Saved, but automatically unpublished — the post no longer has everything required to stay public (e.g. a missing excerpt or category). Fill in what's missing, then Publish again.");
             }
@@ -162,17 +140,24 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
     }
 
     async function handlePublish() {
-        if (!initialPost) return;
+        if (!currentSlug) return;
         setError(null);
         setNotice(null);
         setLifecyclePending(true);
+        // Flush first — publish validates what's already in the DB, so a pending debounced edit must land first. If it fails, publish must not run at all.
         try {
             // Flush first — the strict publish check (backend's
             // `postPublishSchema`) reads what's already IN THE DATABASE,
             // not the request body (publish takes none), so any edit still
             // sitting in the debounce window has to land first.
             await autosave.flush();
-            const result = await adminApi.publishPost(initialPost.slug);
+        } catch {
+            setError("Your latest changes couldn't be saved, so publishing was skipped. Check your connection and try again.");
+            setLifecyclePending(false);
+            return;
+        }
+        try {
+            const result = await adminApi.publishPost(currentSlug);
             setLifecycleState(result.lifecycleState);
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to publish.");
@@ -182,12 +167,12 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
     }
 
     async function handleUnpublish() {
-        if (!initialPost) return;
+        if (!currentSlug) return;
         setError(null);
         setNotice(null);
         setLifecyclePending(true);
         try {
-            const result = await adminApi.unpublishPost(initialPost.slug);
+            const result = await adminApi.unpublishPost(currentSlug);
             setLifecycleState(result.lifecycleState);
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to unpublish.");
@@ -197,17 +182,30 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
     }
 
     async function handleDelete() {
-        if (!initialPost) return;
-        if (!window.confirm(`Delete "${ initialPost.slug }"? This can't be undone.`)) return;
+        if (!currentSlug) return;
+        if (!window.confirm(`Delete "${ currentSlug }"? This can't be undone.`)) return;
 
         setDeleting(true);
         try {
-            await adminApi.deletePost(initialPost.slug);
+            await adminApi.deletePost(currentSlug);
             router.push("/admin/journal");
             router.refresh();
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to delete.");
             setDeleting(false);
+        }
+    }
+
+    /** Every button that navigates away must flush through here first — see README for why this lives here and not in the hook's unmount cleanup. */
+    async function navigateAfterFlush(path: string) {
+        setError(null);
+        setNavPending(true);
+        try {
+            await autosave.flush();
+            router.push(path);
+        } catch {
+            setError("Your latest changes couldn't be saved yet — please try again before leaving this page.");
+            setNavPending(false);
         }
     }
 
@@ -221,7 +219,7 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
         <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-start justify-between gap-md flex-wrap">
                 <div className="flex flex-col gap-sm">
-                    <Text as="h1" variant="h3">{isEditing ? `Edit post: ${ initialPost?.slug }` : "New post"}</Text>
+                    <Text as="h1" variant="h3">{isEditing ? `Edit post: ${ currentSlug }` : "New post"}</Text>
                     <div className="flex items-center gap-sm flex-wrap">
                         <StatusToggle value={form.status} onChange={(status) => update("status", status)} options={STATUS_OPTIONS} />
                         <Text variant="caption" tone="faint" className="font-mono">
@@ -263,7 +261,13 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
                         </>
                     )}
                     {isEditing && (
-                        <Button type="button" variant="secondary" size="sm" onClick={() => router.push(`/admin/journal/${ initialPost?.slug }/translate`)}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => navigateAfterFlush(`/admin/journal/${ currentSlug }/translate`)}
+                            loading={navPending}
+                        >
                             {initialPost?.title.ru ? "Edit translation" : "Add translation"}
                         </Button>
                     )}
@@ -315,7 +319,9 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
             )}
 
             <div className="flex gap-sm">
-                <Button type="button" variant="secondary" onClick={() => router.push("/admin/journal")}>Back to list</Button>
+                <Button type="button" variant="secondary" onClick={() => navigateAfterFlush("/admin/journal")} loading={navPending}>
+                    Back to list
+                </Button>
             </div>
         </form>
     );

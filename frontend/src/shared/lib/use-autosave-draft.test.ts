@@ -114,7 +114,7 @@ describe("useAutosaveDraft", () => {
     it("creates once via create(), then every later save goes through update() with the assigned slug — never create() again", async () => {
         const create = vi.fn().mockResolvedValue({ slug: "new-slug", title: "v1" });
         const update = vi.fn().mockResolvedValue({ slug: "new-slug", title: "v2" });
-        const onCreated = vi.fn();
+        const onSlugChanged = vi.fn();
         let input: TestInput = { title: "v1" };
         const { result } = renderHook(() =>
             useAutosaveDraft<TestInput, TestResult>({
@@ -124,7 +124,7 @@ describe("useAutosaveDraft", () => {
                 create,
                 update,
                 getSlug: (r) => r.slug,
-                onCreated,
+                onSlugChanged,
                 debounceMs: 100,
             }),
         );
@@ -134,7 +134,7 @@ describe("useAutosaveDraft", () => {
             await vi.advanceTimersByTimeAsync(100);
         });
         expect(create).toHaveBeenCalledTimes(1);
-        expect(onCreated).toHaveBeenCalledExactlyOnceWith({ slug: "new-slug", title: "v1" });
+        expect(onSlugChanged).toHaveBeenCalledExactlyOnceWith({ slug: "new-slug", title: "v1" });
         expect(result.current.status).toBe("saved");
 
         input = { title: "v2" };
@@ -145,6 +145,46 @@ describe("useAutosaveDraft", () => {
 
         expect(update).toHaveBeenCalledExactlyOnceWith("new-slug", { title: "v2" });
         expect(create).toHaveBeenCalledTimes(1);
+        // No further `onSlugChanged` call — the slug didn't change on this second save.
+        expect(onSlugChanged).toHaveBeenCalledTimes(1);
+    });
+
+    it("re-syncs its tracked slug when an UPDATE (not just the initial create) returns a DIFFERENT slug — e.g. the admin renamed the record via the Slug field", async () => {
+        const update = vi.fn()
+            .mockResolvedValueOnce({ slug: "renamed-slug", title: "v1" })
+            .mockResolvedValueOnce({ slug: "renamed-slug", title: "v2" });
+        const onSlugChanged = vi.fn();
+        let input: TestInput = { title: "v1" };
+        const { result } = renderHook(() =>
+            useAutosaveDraft<TestInput, TestResult>({
+                slug: "original-slug",
+                buildInput: () => input,
+                isEmpty: () => false,
+                create: vi.fn(),
+                update,
+                getSlug: (r) => r.slug,
+                onSlugChanged,
+                debounceMs: 100,
+            }),
+        );
+
+        act(() => result.current.scheduleSave());
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        expect(update).toHaveBeenNthCalledWith(1, "original-slug", { title: "v1" });
+        expect(onSlugChanged).toHaveBeenCalledExactlyOnceWith({ slug: "renamed-slug", title: "v1" });
+
+        // The bug this pins: without re-syncing, this next save would still
+        // target "original-slug" — which the backend already renamed away
+        // from, so a real `update()` there would 404.
+        input = { title: "v2" };
+        act(() => result.current.scheduleSave());
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        expect(update).toHaveBeenNthCalledWith(2, "renamed-slug", { title: "v2" });
+        expect(onSlugChanged).toHaveBeenCalledTimes(1); // no rename on the second save — no second call
     });
 
     it("coalesces edits that arrive while a save is in flight into exactly one follow-up save, using the LATEST input", async () => {
@@ -279,5 +319,108 @@ describe("useAutosaveDraft", () => {
         });
         expect(update).toHaveBeenCalledTimes(2);
         expect(result.current.status).toBe("saved");
+    });
+
+    it("flush() REJECTS when the save it triggers fails — a caller gating Publish on this must see the failure, not a false success", async () => {
+        const update = vi.fn().mockRejectedValue(new Error("network down"));
+        const input: TestInput = { title: "v1" };
+        const { result } = renderHook(() =>
+            useAutosaveDraft<TestInput, TestResult>({
+                slug: "s",
+                buildInput: () => input,
+                isEmpty: () => false,
+                create: vi.fn(),
+                update,
+                getSlug: (r) => r.slug,
+                debounceMs: 5_000,
+            }),
+        );
+
+        let flushError: unknown = "not yet settled";
+        await act(async () => {
+            await result.current.flush().catch((error: unknown) => {
+                flushError = error;
+            });
+        });
+
+        expect(flushError).toBeInstanceOf(Error);
+        expect((flushError as Error).message).toBe("network down");
+    });
+
+    it("still schedules a background retry after a flush()-triggered failure, and that retry can go on to succeed", async () => {
+        const update = vi.fn().mockRejectedValueOnce(new Error("network down")).mockResolvedValueOnce({ slug: "s", title: "v1" });
+        const input: TestInput = { title: "v1" };
+        const { result } = renderHook(() =>
+            useAutosaveDraft<TestInput, TestResult>({
+                slug: "s",
+                buildInput: () => input,
+                isEmpty: () => false,
+                create: vi.fn(),
+                update,
+                getSlug: (r) => r.slug,
+                debounceMs: 5_000,
+            }),
+        );
+
+        await act(async () => {
+            await result.current.flush().catch(() => {});
+        });
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("error");
+
+        // The bug this pins: rejecting `flush()` must not come at the cost
+        // of dropping the automatic background retry — the fix keeps both.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5_000);
+        });
+        expect(update).toHaveBeenCalledTimes(2);
+        expect(result.current.status).toBe("saved");
+    });
+
+    it("resolves flush() successfully when the original attempt fails but a coalesced follow-up (using the latest input) goes on to succeed", async () => {
+        const firstSave = deferred<TestResult>();
+        const update = vi.fn().mockReturnValueOnce(firstSave.promise).mockResolvedValueOnce({ slug: "s", title: "v2" });
+        let input: TestInput = { title: "v1" };
+        const { result } = renderHook(() =>
+            useAutosaveDraft<TestInput, TestResult>({
+                slug: "s",
+                buildInput: () => input,
+                isEmpty: () => false,
+                create: vi.fn(),
+                update,
+                getSlug: (r) => r.slug,
+                debounceMs: 5_000,
+            }),
+        );
+
+        let flushSettled: "pending" | "resolved" | "rejected" = "pending";
+        act(() => {
+            result.current
+                .flush()
+                .then(() => {
+                    flushSettled = "resolved";
+                })
+                .catch(() => {
+                    flushSettled = "rejected";
+                });
+        });
+
+        // A second edit arrives while the (about to fail) first request is still in flight.
+        input = { title: "v2" };
+        act(() => result.current.scheduleSave());
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(10_000);
+        });
+        expect(update).toHaveBeenCalledTimes(1); // coalesced follow-up hasn't fired yet — first request still unsettled
+
+        await act(async () => {
+            firstSave.reject(new Error("network down"));
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(update).toHaveBeenCalledTimes(2); // the coalesced follow-up (v2) fired despite the first failing
+        expect(flushSettled).toBe("resolved"); // the LATEST state is actually saved now — a real success, not masked by the earlier failure
     });
 });

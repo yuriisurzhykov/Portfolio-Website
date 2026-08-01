@@ -41,13 +41,8 @@ export interface UseAutosaveDraftOptions<TInput, TResult> {
      * agnostic of `PostSummary`/`WorkSummary`'s exact shape.
      * */
     getSlug: (result: TResult) => string;
-    /**
-     * Fires exactly once, right after `create()` first succeeds — the caller's one chance to `router.replace()`
-     * onto the real edit URL. Navigation is deliberately NOT this hook's own job (it knows nothing about
-     * `/admin/journal` vs `/admin/work` URL shapes) — that's the caller's concern, this hook only tracks
-     * "does a record exist yet."
-     * */
-    onCreated?: (result: TResult) => void;
+    /** Fires when the tracked slug actually changes — first creation, or a later rename via `update()`. Never fires for a same-slug save. See this file's README for the rename bug this closed. */
+    onSlugChanged?: (result: TResult) => void;
     /**
      * Fires after every successful save, create or update alike — e.g. so the caller can sync a locally-held
      * `lifecycleState` against the auto-unpublish safety net (`backend/src/content/admin-posts.ts`'s `updatePost`)
@@ -66,45 +61,25 @@ export interface UseAutosaveDraftResult {
      * */
     scheduleSave: () => void;
     /**
-     * Saves immediately, skipping any pending debounce — e.g. before Publish, so the strict publish check
-     * reads what's actually on screen. Resolves only once the ENTIRE chain (including any coalesced follow-up
-     * save queued while this one was in flight) has settled, not just the first request.
-     * */
+     * Saves immediately, skipping the debounce. Resolves once the whole
+     * chain settles (including a coalesced follow-up), and REJECTS if
+     * that final attempt failed — callers gating a real action (Publish)
+     * on "did this save" must await and handle that. A background retry
+     * is still scheduled regardless; see this file's README.
+     */
     flush: () => Promise<void>;
 }
 
 /**
- * The single hook behind "type a title → a draft exists in the database,
- * every further edit is saved in the background" (see the migration plan's
- * Phase 3, "Мгновенный черновик + непрерывный autosave"). Deliberately ONE
- * hook for both the create-on-first-keystroke transition AND every save
- * after — a page never has to know which one is about to happen, it just
- * calls `scheduleSave()`/`flush()` on every edit.
+ * Backs "type a title → a draft exists, every further edit saves in the
+ * background" (migration plan Phase 3). One hook for both the
+ * create-on-first-keystroke transition and every save after — the caller
+ * just calls `scheduleSave()`/`flush()` on every edit.
  *
- * **Concurrency: exactly one in-flight request, exactly one coalesced
- * follow-up.** If an edit arrives while a save is already in flight, this
- * does NOT cancel/race it and does NOT queue one request per edit — it sets
- * a single flag and, once the in-flight request settles, fires ONE more
- * save built from whatever `buildInput()` returns AT THAT LATER MOMENT
- * (always the latest edits, never a stale snapshot). This is what prevents
- * an older, slower response from a first save landing after a second,
- * newer save's response — there is never more than one request in flight,
- * so there is nothing for an out-of-order response to race against.
- *
- * **Known, accepted limitation.** The very first save's `create()` call
- * changes the page's URL (via the caller's `onCreated`, typically
- * `router.replace()`) to a DIFFERENT Next.js route (`/admin/journal/new` →
- * `/admin/journal/[slug]/edit`) — a real route-tree change, not a shallow
- * URL update, so the editor page actually remounts with server-fetched
- * data once that navigation completes. Keystrokes typed in the brief
- * window between `create()`'s response and that remount are covered by the
- * coalescing behavior above (they trigger exactly one `update()` using the
- * new slug before anything settles) — but on a slow connection there's no
- * hard guarantee the remount always waits for that follow-up `update()` to
- * land first. Accepted rather than engineered away: this is a narrow race
- * on a single roundtrip, and the alternative (blocking navigation on a
- * network round trip) would reintroduce the exact "stuck until a request
- * completes" feeling Phase 1 (resilient sessions) exists to remove.
+ * At most one request in flight; an edit arriving mid-request coalesces
+ * into exactly one follow-up using the latest input, never a queue. See
+ * this file's README for the bugs (and one rejected fix) found here by
+ * review, not by re-reading this file.
  */
 export function useAutosaveDraft<TInput, TResult>(
     options: UseAutosaveDraftOptions<TInput, TResult>,
@@ -126,6 +101,7 @@ export function useAutosaveDraft<TInput, TResult>(
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const mountedRef = React.useRef(true);
 
+    // Does NOT flush a pending edit on unmount — unsafe, not just ineffective; see the README for why. Callers flush explicitly before navigating instead.
     React.useEffect(
         () => () => {
             mountedRef.current = false;
@@ -143,6 +119,7 @@ export function useAutosaveDraft<TInput, TResult>(
         }
     }
 
+    /** Synchronous wrapper so `activeSaveRef` is set before this returns, with no gap for a same-tick caller to see a stale value. */
     function performSave(): Promise<void> {
         if (savingRef.current) {
             pendingRef.current = true;
@@ -152,10 +129,15 @@ export function useAutosaveDraft<TInput, TResult>(
             // "a save started at some point."
             return activeSaveRef.current ?? Promise.resolve();
         }
+        const promise = runSave();
+        activeSaveRef.current = promise;
+        return promise;
+    }
 
+    async function runSave(): Promise<void> {
         const input = optionsRef.current.buildInput();
         if (slugRef.current === null && optionsRef.current.isEmpty(input)) {
-            return Promise.resolve();
+            return;
         }
 
         savingRef.current = true;
@@ -164,58 +146,60 @@ export function useAutosaveDraft<TInput, TResult>(
         }
 
         const currentSlug = slugRef.current;
-        const save = (currentSlug === null ? optionsRef.current.create(input) : optionsRef.current.update(currentSlug, input))
-            .then((result) => {
-                if (currentSlug === null) {
-                    slugRef.current = optionsRef.current.getSlug(result);
-                    optionsRef.current.onCreated?.(result);
-                }
-                optionsRef.current.onSaved?.(result);
-                if (mountedRef.current) {
-                    setStatus("saved");
-                }
-            })
-            .catch((error: unknown) => {
-                if (mountedRef.current) {
-                    setStatus("error");
-                }
-                optionsRef.current.onError?.(error);
-                clearTimer();
-                timerRef.current = setTimeout(() => {
-                    timerRef.current = null;
-                    void performSave();
-                }, RETRY_DELAY_MS);
-            })
-            .finally(() => {
-                savingRef.current = false;
-                if (pendingRef.current) {
-                    pendingRef.current = false;
-                    // Returned (not just fired-and-forgotten) so `.finally()`
-                    // itself waits for this nested chain — see the spec
-                    // note in this hook's own tests: `Promise.finally`
-                    // delays settling on whatever its callback returns.
-                    // That's what makes `activeSaveRef.current`/anything
-                    // awaiting THIS `save` promise correctly wait for the
-                    // coalesced follow-up too, however deep it recurses.
-                    const next = performSave();
-                    activeSaveRef.current = next;
-                    return next;
-                }
-                activeSaveRef.current = null;
-            });
+        let hadError = false;
+        let caughtError: unknown;
+        try {
+            const result = currentSlug === null
+                ? await optionsRef.current.create(input)
+                : await optionsRef.current.update(currentSlug, input);
+            // Re-synced from every save, not just create() — update() can rename too.
+            const resolvedSlug = optionsRef.current.getSlug(result);
+            if (resolvedSlug !== currentSlug) {
+                slugRef.current = resolvedSlug;
+                optionsRef.current.onSlugChanged?.(result);
+            }
+            optionsRef.current.onSaved?.(result);
+            if (mountedRef.current) {
+                setStatus("saved");
+            }
+        } catch (error) {
+            hadError = true;
+            caughtError = error;
+            if (mountedRef.current) {
+                setStatus("error");
+            }
+            optionsRef.current.onError?.(error);
+            clearTimer();
+            timerRef.current = setTimeout(() => {
+                timerRef.current = null;
+                // Fire-and-forget — swallow so this doesn't surface as an unhandled rejection; `flush()` gets its own, un-swallowed promise.
+                void performSave().catch(() => {});
+            }, RETRY_DELAY_MS);
+        }
 
-        activeSaveRef.current = save;
-        return save;
+        savingRef.current = false;
+
+        if (pendingRef.current) {
+            pendingRef.current = false;
+            // Supersedes this attempt's outcome — `return` inside `async` adopts the follow-up's eventual state.
+            return performSave();
+        }
+
+        activeSaveRef.current = null;
+        if (hadError) {
+            throw caughtError;
+        }
     }
 
     function scheduleSave() {
         clearTimer();
         timerRef.current = setTimeout(() => {
             timerRef.current = null;
-            void performSave();
+            void performSave().catch(() => {});
         }, optionsRef.current.debounceMs ?? DEFAULT_DEBOUNCE_MS);
     }
 
+    /** Not swallowed — callers like `handlePublish` need the real rejection. */
     function flush(): Promise<void> {
         clearTimer();
         return performSave();

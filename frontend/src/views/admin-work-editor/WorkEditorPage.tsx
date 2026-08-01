@@ -99,6 +99,10 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
     const [deleting, setDeleting] = React.useState(false);
     const [lifecycleState, setLifecycleState] = React.useState<LifecycleState>(initialWork?.lifecycleState ?? "DRAFT");
     const [lifecyclePending, setLifecyclePending] = React.useState(false);
+    // Guards "Back to list"/"Add translation" — see `navigateAfterFlush` below.
+    const [navPending, setNavPending] = React.useState(false);
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical field — see its comment. */
+    const [currentSlug, setCurrentSlug] = React.useState<string | null>(initialWork?.slug ?? null);
 
     /** Same hook, same reasoning as `PostEditorPage`'s identical field — see its comment and this slice's README. */
     const autosave = useAutosaveDraft<WorkInput, WorkSummary>({
@@ -127,7 +131,11 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
         create: (input) => adminApi.createWork(input),
         update: (slug, input) => adminApi.updateWork(slug, input),
         getSlug: (result) => result.slug,
-        onCreated: (result) => router.replace(`/admin/work/${ result.slug }/edit`),
+        // Same reasoning as `PostEditorPage.tsx`'s identical field — fires for the initial create AND for a later rename.
+        onSlugChanged: (result) => {
+            setCurrentSlug(result.slug);
+            router.replace(`/admin/work/${ result.slug }/edit`);
+        },
         onSaved: (result) => {
             // Auto-unpublish safety net — see admin-work.ts's `updateWork`
             // and PostEditorPage.tsx's identical check for the full
@@ -160,14 +168,20 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
     }
 
     async function handlePublish() {
-        if (!initialWork) return;
+        if (!currentSlug) return;
         setError(null);
         setNotice(null);
         setLifecyclePending(true);
+        // Same reasoning as PostEditorPage.tsx's identical structure.
         try {
-            // See PostEditorPage.tsx's identical call for why `flush()` runs first.
             await autosave.flush();
-            const result = await adminApi.publishWork(initialWork.slug);
+        } catch {
+            setError("Your latest changes couldn't be saved, so publishing was skipped. Check your connection and try again.");
+            setLifecyclePending(false);
+            return;
+        }
+        try {
+            const result = await adminApi.publishWork(currentSlug);
             setLifecycleState(result.lifecycleState);
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to publish.");
@@ -177,12 +191,12 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
     }
 
     async function handleUnpublish() {
-        if (!initialWork) return;
+        if (!currentSlug) return;
         setError(null);
         setNotice(null);
         setLifecyclePending(true);
         try {
-            const result = await adminApi.unpublishWork(initialWork.slug);
+            const result = await adminApi.unpublishWork(currentSlug);
             setLifecycleState(result.lifecycleState);
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to unpublish.");
@@ -192,17 +206,30 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
     }
 
     async function handleDelete() {
-        if (!initialWork) return;
-        if (!window.confirm(`Delete "${ initialWork.slug }"? This can't be undone.`)) return;
+        if (!currentSlug) return;
+        if (!window.confirm(`Delete "${ currentSlug }"? This can't be undone.`)) return;
 
         setDeleting(true);
         try {
-            await adminApi.deleteWork(initialWork.slug);
+            await adminApi.deleteWork(currentSlug);
             router.push("/admin/work");
             router.refresh();
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to delete.");
             setDeleting(false);
+        }
+    }
+
+    /** Same hook, same reasoning, same fix as `PostEditorPage.tsx`'s identical function — see its comment for why this flushes BEFORE navigating rather than relying on `useAutosaveDraft`'s own unmount cleanup. */
+    async function navigateAfterFlush(path: string) {
+        setError(null);
+        setNavPending(true);
+        try {
+            await autosave.flush();
+            router.push(path);
+        } catch {
+            setError("Your latest changes couldn't be saved yet — please try again before leaving this page.");
+            setNavPending(false);
         }
     }
 
@@ -213,7 +240,7 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
         <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-start justify-between gap-md flex-wrap">
                 <div className="flex flex-col gap-sm">
-                    <Text as="h1" variant="h3">{isEditing ? `Edit work: ${ initialWork?.slug }` : "New work item"}</Text>
+                    <Text as="h1" variant="h3">{isEditing ? `Edit work: ${ currentSlug }` : "New work item"}</Text>
                     <Text variant="caption" tone="faint" className="max-w-[52ch]">
                         A project or system in the <code className="font-mono">/work</code> portfolio ledger —
                         “what you built.” A journal post, by contrast, is a dated essay about it —
@@ -251,7 +278,13 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
                         </>
                     )}
                     {isEditing && (
-                        <Button type="button" variant="secondary" size="sm" onClick={() => router.push(`/admin/work/${ initialWork?.slug }/translate`)}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => navigateAfterFlush(`/admin/work/${ currentSlug }/translate`)}
+                            loading={navPending}
+                        >
                             {initialWork?.summary.ru ? "Edit translation" : "Add translation"}
                         </Button>
                     )}
@@ -380,7 +413,9 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
             )}
 
             <div className="flex gap-sm">
-                <Button type="button" variant="secondary" onClick={() => router.push("/admin/work")}>Back to list</Button>
+                <Button type="button" variant="secondary" onClick={() => navigateAfterFlush("/admin/work")} loading={navPending}>
+                    Back to list
+                </Button>
             </div>
         </form>
     );

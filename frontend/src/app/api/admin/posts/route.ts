@@ -1,21 +1,17 @@
 import { NextResponse } from "next/server";
-import { createPost, getJournalEntries, postDraftInputSchema } from "@portfolio/backend";
+import { createPost, getPostsForAdmin, postDraftInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
 /**
- * GET here is what a future mobile client (or a script) would call to
- * list posts — the web admin UI's own `/admin/journal` list page does NOT
- * call this over HTTP; it's a Server Component that calls
- * `getJournalEntries()` directly (same as the public `/journal` page),
- * one process, no loopback network hop for something already running
- * server-side. This route exists so the full JSON contract exists and is
- * reusable, per the migration plan's Phase 4 goal — not because the web UI
- * itself needs to fetch its own API for a plain read.
+ * GET is for a future mobile client/script — the admin UI's own list page
+ * calls `getPostsForAdmin()` directly instead. Uses `getPostsForAdmin()`,
+ * not the public `getJournalEntries()` (PUBLISHED-only) — a real review
+ * comment caught this route quietly hiding drafts from an admin client.
  */
 export const GET = defineAdminRoute(async () => {
     try {
-        const entries = await getJournalEntries();
+        const entries = await getPostsForAdmin();
         return NextResponse.json(entries);
     } catch (error) {
         return toErrorResponse(error);
