@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { createPost } from "../src/content/admin-posts";
-import { createWork } from "../src/content/admin-work";
+import { createPost, publishPost } from "../src/content/admin-posts";
+import { createWork, publishWork } from "../src/content/admin-work";
 import { resetTestDatabase } from "../src/test-utils/db";
 import { prisma } from "../src/db/client";
 
@@ -37,6 +37,22 @@ import { prisma } from "../src/db/client";
  * studies/bodies correctly (see admin-work.ts/admin-posts.ts), so duplicating
  * that logic here would be a second place to keep in sync with the real
  * write path for no benefit.
+ *
+ * **Correction, 2026-07-31 (content lifecycle state machine).** `createWork`/
+ * `createPost` now always create a `DRAFT` (Prisma's own schema default —
+ * see admin-work.ts/admin-posts.ts's comments), and the PUBLIC
+ * `getAllWork()`/`getJournalEntries()` — the exact functions
+ * `generate-pages-manifest.ts` calls to build the page list this suite's
+ * fixtures are checked against — now filter to `lifecycleState: "PUBLISHED"`
+ * only. Without an explicit `publishWork()`/`publishPost()` call right
+ * after creating each fixture (added below), every single fixture silently
+ * stopped existing from the public site's point of view the moment that
+ * filter shipped — not found by re-reading this file, but live, from
+ * `visual.spec.ts` failing in CI with "visual-fixtures.manifest.ts
+ * references '/work/navigation-engine', but it no longer exists in
+ * pages.manifest.ts." Left this paragraph as a correction, not a silent
+ * fix, per this repo's own rule about keeping a wrong first assumption in
+ * the record.
  *
  * Deliberately covers BOTH branches of the two filters
  * `generate-pages-manifest.ts` applies (`hasCaseStudy`/"has a real body") —
@@ -188,11 +204,24 @@ async function main(): Promise<void> {
     // field-for-field (see admin-work.ts/admin-posts.ts), so it's passed
     // straight through rather than re-destructured — the fixture data IS
     // the input, there's no separate "test data" shape to translate from.
+    //
+    // `publishWork`/`publishPost` right after create — every fixture here
+    // is meant to be publicly visible (that's the whole point of a fixture
+    // the visual/a11y suite navigates to as a real visitor), but
+    // `createWork`/`createPost` alone only ever produce a DRAFT (see this
+    // file's top comment's 2026-07-31 correction). All three work items and
+    // all three posts satisfy the strict publish contract as written above
+    // (every required field is filled in) — if a future edit to `FIXTURES`
+    // ever doesn't, `publishWork`/`publishPost` throws immediately here,
+    // failing this seed script loudly instead of silently seeding
+    // unpublishable content.
     for (const work of Object.values(FIXTURES.work)) {
         await createWork(work);
+        await publishWork(work.slug);
     }
     for (const post of Object.values(FIXTURES.posts)) {
         await createPost(post);
+        await publishPost(post.slug);
     }
 
     console.log("Seeded e2e fixtures: 3 work items (2 with a case study, 1 without), 3 posts (2 with a body, 1 without).");
