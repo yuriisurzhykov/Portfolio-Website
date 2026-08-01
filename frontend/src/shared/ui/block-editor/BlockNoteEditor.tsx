@@ -20,6 +20,19 @@ export interface BlockEditorHandle {
 export interface BlockEditorProps {
     /** Read once, at mount — see the component body's comment on why this can't be a live/controlled prop the way `BlockListEditor`'s `blocks` was. */
     initialBlocks: Block[];
+    /**
+     * Fired on every change to the editor's document — subscribed via
+     * BlockNote's OWN `editor.onChange()` (see BlockNoteEditor.d.ts), not a
+     * React re-render on every keystroke. Added for autosave
+     * (`shared/lib/use-autosave-draft.ts`): the caller passes
+     * `scheduleSave` here, which just (re)starts a debounce timer — it does
+     * NOT read `getBlocks()` itself from this callback (that would defeat
+     * the whole point of not running `blocksToMarkdownLossy` on every
+     * keystroke, see this component's top comment); the debounced save
+     * calls `getBlocks()` once, later, through the same ref this component
+     * already exposes.
+     */
+    onChange?: () => void;
 }
 
 /**
@@ -78,7 +91,7 @@ export const BlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
     return <MountedBlockEditor {...props} ref={ref} />;
 });
 
-const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>(function MountedBlockEditor({ initialBlocks }, ref) {
+const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>(function MountedBlockEditor({ initialBlocks, onChange }, ref) {
     const { theme } = useTheme();
 
     // `useState(() => ...)`, not a plain call — `initialContent` is only
@@ -100,6 +113,18 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
         }),
         [editor],
     );
+
+    // `onChangeRef`, not `onChange` directly in the effect's dependency
+    // array — the caller (`PostEditorPage`/`WorkEditorPage`) passes a fresh
+    // `() => autosave.scheduleSave()` closure every render; depending on it
+    // directly would tear down and re-subscribe `editor.onChange()` on
+    // every keystroke elsewhere in the form for no benefit, since all this
+    // effect actually needs is to always CALL the latest callback, not to
+    // re-run itself when that callback's identity changes.
+    const onChangeRef = React.useRef(onChange);
+    onChangeRef.current = onChange;
+
+    React.useEffect(() => editor.onChange(() => onChangeRef.current?.()), [editor]);
 
     return (
         <div className="rounded-md border border-border-strong bg-surface-base overflow-hidden">

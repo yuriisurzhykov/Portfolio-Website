@@ -20,18 +20,50 @@ describe("getJournalEntries", () => {
         await prisma.post.create({
             data: {
                 slug: "older", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
-                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published",
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED",
             },
         });
         await prisma.post.create({
             data: {
                 slug: "upcoming-draft", date: "2026-02-01", title: { en: "b", ru: "b" }, category: { en: "b", ru: "b" },
-                readMins: 0, excerpt: { en: "b", ru: "b" }, status: "upcoming",
+                readMins: 0, excerpt: { en: "b", ru: "b" }, status: "upcoming", lifecycleState: "PUBLISHED",
             },
         });
 
         const entries = await getJournalEntries();
         expect(entries.map((e) => e.slug)).toEqual(["upcoming-draft", "older"]);
+    });
+
+    it("excludes a DRAFT (lifecycleState) post entirely, even though it'd otherwise sort first", async () => {
+        await prisma.post.create({
+            data: {
+                slug: "published", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED",
+            },
+        });
+        await prisma.post.create({
+            data: {
+                slug: "draft", date: "2026-02-01", title: { en: "b", ru: "b" }, category: { en: "b", ru: "b" },
+                readMins: 0, excerpt: { en: "b", ru: "b" }, status: "published", lifecycleState: "DRAFT",
+            },
+        });
+
+        const entries = await getJournalEntries();
+        expect(entries.map((e) => e.slug)).toEqual(["published"]);
+    });
+
+    it("surfaces lifecycleState and publishedAt on the returned summary", async () => {
+        const publishedAt = new Date("2026-01-15T00:00:00.000Z");
+        await prisma.post.create({
+            data: {
+                slug: "a", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED", publishedAt,
+            },
+        });
+
+        const [entry] = await getJournalEntries();
+        expect(entry.lifecycleState).toBe("PUBLISHED");
+        expect(entry.publishedAt).toBe(publishedAt.toISOString());
     });
 });
 
@@ -40,18 +72,29 @@ describe("getLatestPublishedPost", () => {
         await prisma.post.create({
             data: {
                 slug: "published-older", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
-                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published",
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED",
             },
         });
         await prisma.post.create({
             data: {
                 slug: "upcoming-newer", date: "2026-02-01", title: { en: "b", ru: "b" }, category: { en: "b", ru: "b" },
-                readMins: 0, excerpt: { en: "b", ru: "b" }, status: "upcoming",
+                readMins: 0, excerpt: { en: "b", ru: "b" }, status: "upcoming", lifecycleState: "PUBLISHED",
             },
         });
 
         const latest = await getLatestPublishedPost();
         expect(latest?.slug).toBe("published-older");
+    });
+
+    it("skips a DRAFT post even though its status is \"published\"", async () => {
+        await prisma.post.create({
+            data: {
+                slug: "draft-published-status", date: "2026-02-01", title: { en: "b", ru: "b" }, category: { en: "b", ru: "b" },
+                readMins: 0, excerpt: { en: "b", ru: "b" }, status: "published", lifecycleState: "DRAFT",
+            },
+        });
+
+        expect(await getLatestPublishedPost()).toBeNull();
     });
 
     it("returns null when there are no published posts at all", async () => {
@@ -68,7 +111,7 @@ describe("getPostBySlug", () => {
         await prisma.post.create({
             data: {
                 slug: "with-body", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
-                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", bodyDocumentId,
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED", bodyDocumentId,
             },
         });
 
@@ -84,11 +127,23 @@ describe("getPostBySlug", () => {
         await prisma.post.create({
             data: {
                 slug: "no-body-yet", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
-                readMins: 0, excerpt: { en: "a", ru: "a" }, status: "upcoming",
+                readMins: 0, excerpt: { en: "a", ru: "a" }, status: "upcoming", lifecycleState: "PUBLISHED",
             },
         });
 
         expect(await getPostBySlug("no-body-yet")).toBeNull();
+    });
+
+    it("returns null for a DRAFT post's slug, same as an unknown one — the lifecycle check runs before the body/status logic", async () => {
+        const bodyDocumentId = await makeDocument([{ type: "paragraph", text: "Body" }]);
+        await prisma.post.create({
+            data: {
+                slug: "draft-with-body", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "DRAFT", bodyDocumentId,
+            },
+        });
+
+        expect(await getPostBySlug("draft-with-body")).toBeNull();
     });
 
     it("locale=\"ru\" reads the Russian body Document when one exists", async () => {
@@ -97,7 +152,7 @@ describe("getPostBySlug", () => {
         await prisma.post.create({
             data: {
                 slug: "translated", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
-                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", bodyDocumentId, bodyDocumentIdRu,
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED", bodyDocumentId, bodyDocumentIdRu,
             },
         });
 
@@ -112,7 +167,7 @@ describe("getPostBySlug", () => {
         await prisma.post.create({
             data: {
                 slug: "untranslated", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
-                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", bodyDocumentId,
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED", bodyDocumentId,
             },
         });
 
@@ -147,5 +202,16 @@ describe("getDistinctPostCategories", () => {
 
     it("returns [] when there are no posts at all", async () => {
         expect(await getDistinctPostCategories()).toEqual([]);
+    });
+
+    it("includes categories from DRAFT posts too — this admin-facing helper isn't filtered by lifecycleState", async () => {
+        await prisma.post.create({
+            data: {
+                slug: "draft", date: "2026-01-01", title: { en: "a", ru: "" }, category: { en: "Drafts Only", ru: "" },
+                readMins: 1, excerpt: { en: "a", ru: "" }, status: "published", lifecycleState: "DRAFT",
+            },
+        });
+
+        expect(await getDistinctPostCategories()).toEqual(["Drafts Only"]);
     });
 });

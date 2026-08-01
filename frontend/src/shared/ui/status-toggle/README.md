@@ -9,6 +9,15 @@ same interaction/visual shape. Two independent copy-pasted segmented
 controls would drift the moment one gets a visual tweak the other
 doesn't.
 
+**2026-07-31 — подтверждено на практике.** `AdminJournalListPage`/
+`AdminWorkListPage` переиспользуют этот же компонент для Draft/Published
+вкладок (`lifecycleState`, не публичный `status`) — третий независимый
+value-тип (`LifecycleState`, не `PostStatus`/`WorkStatus`), ноль правок в
+самом `StatusToggle`. Единственная разница с предыдущими двумя
+потребителями: здесь `value`/`onChange` управляют клиентским фильтром
+списка, а не полем формы, отправляемым на сервер — сам компонент про это
+не знает и не должен.
+
 ## 2026-07-19 — Почему цветной тоггл, а не `<Select>` + текст
 
 **Что нужно сделать.** Пользователь: "status должен иметь какой-то

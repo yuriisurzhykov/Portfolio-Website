@@ -1,6 +1,7 @@
 import { prisma } from "../db/client";
 import type { Block } from "./blocks";
 import { getDocumentBlocks } from "./document";
+import type { LifecycleState } from "./lifecycle";
 import { type LocalizedText, localizedTextSchema } from "./localized-text";
 import type { ContentLocale } from "./locale";
 
@@ -18,6 +19,10 @@ export interface WorkSummary {
     relatedPostSlug: string | null;
     /** Whether /work/:slug has a real case study, without fetching its blocks. */
     hasCaseStudy: boolean;
+    /** Same field, same reasoning as `PostSummary.lifecycleState` (posts.ts) — Post and Work share one lifecycle graph (`content/lifecycle.ts`). */
+    lifecycleState: LifecycleState;
+    /** Mirrors `Work.publishedAt` — see schema.prisma's comment for why an UNPUBLISH never clears it. */
+    publishedAt: string | null;
 }
 
 export interface CaseStudy {
@@ -48,6 +53,8 @@ interface RawWorkRow {
     heroImage: string | null;
     caseStudyDocumentId: string | null;
     caseStudyDocumentIdRu?: string | null;
+    lifecycleState: LifecycleState;
+    publishedAt: Date | null;
 }
 
 /** Exported for reuse by admin-work.ts (Phase 4) — same reasoning as posts.ts's `toPostSummary`. */
@@ -63,19 +70,21 @@ export function toWorkSummary(row: RawWorkRow): WorkSummary {
         featured: row.featured,
         relatedPostSlug: row.relatedPostSlug,
         hasCaseStudy: row.caseStudyDocumentId !== null,
+        lifecycleState: row.lifecycleState,
+        publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     };
 }
 
-/** All work items, newest first — the /work ledger. */
+/** Every PUBLISHED work item, newest first — the /work ledger. `where: { lifecycleState: "PUBLISHED" }` added 2026-07-31 (content lifecycle state machine); the admin-only equivalent that returns both lifecycle states is `admin-work.ts`'s `getWorkForAdmin()`. */
 export async function getAllWork(): Promise<WorkSummary[]> {
-    const rows = await prisma.work.findMany({orderBy: {year: "desc"}});
+    const rows = await prisma.work.findMany({where: {lifecycleState: "PUBLISHED"}, orderBy: {year: "desc"}});
     return rows.map(toWorkSummary);
 }
 
-/** Only `featured: true` items — the landing page's "Selected Work" grid. */
+/** Only `featured: true` AND published items — the landing page's "Selected Work" grid. */
 export async function getFeaturedWork(): Promise<WorkSummary[]> {
     const rows = await prisma.work.findMany({
-        where: {featured: true},
+        where: {featured: true, lifecycleState: "PUBLISHED"},
         orderBy: {year: "desc"},
     });
     return rows.map(toWorkSummary);
@@ -83,9 +92,11 @@ export async function getFeaturedWork(): Promise<WorkSummary[]> {
 
 /**
  * Full work item, including its case study's blocks — null if the slug
- * doesn't exist. `caseStudy` itself (not the whole return value) is null
- * for items that never had a case study (e.g. small internal tools), same
- * as the current site's `item.caseStudy` optional field.
+ * doesn't exist OR the item is a DRAFT (`lifecycleState`, not visible on
+ * the public site at all). `caseStudy` itself (not the whole return
+ * value) is null for items that never had a case study (e.g. small
+ * internal tools), same as the current site's `item.caseStudy` optional
+ * field.
  *
  * `locale` picks which case-study `Document` to read blocks from — same
  * fallback reasoning as `posts.ts`'s `getPostBySlug`: `caseStudyDocumentIdRu`
@@ -96,7 +107,7 @@ export async function getFeaturedWork(): Promise<WorkSummary[]> {
  */
 export async function getWorkBySlug(slug: string, locale: ContentLocale = "en"): Promise<WorkDetail | null> {
     const row = await prisma.work.findUnique({where: {slug}});
-    if (!row) {
+    if (!row || row.lifecycleState !== "PUBLISHED") {
         return null;
     }
 

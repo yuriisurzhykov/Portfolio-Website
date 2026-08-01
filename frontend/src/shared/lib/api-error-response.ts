@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { formatValidationError, isDatabaseUnavailableError, isSlugAlreadyExistsError, isValidationError } from "@portfolio/backend";
+import { formatValidationError, isDatabaseUnavailableError, isInvalidLifecycleTransitionError, isSlugAlreadyExistsError, isValidationError } from "@portfolio/backend";
 
 /**
  * Reused by every auth Route Handler that touches the database
@@ -36,6 +36,13 @@ export function toErrorResponse(error: unknown): NextResponse {
     }
     if (isSlugAlreadyExistsError(error)) {
         return NextResponse.json({ error: error instanceof Error ? error.message : "Slug already exists." }, { status: 409 });
+    }
+    if (isInvalidLifecycleTransitionError(error)) {
+        // 409, same as a slug conflict above — the request is understood
+        // but conflicts with the record's current lifecycle state (e.g.
+        // unpublishing an already-DRAFT post). Added 2026-07-31 for the
+        // new `/api/admin/{posts,work}/[slug]/{publish,unpublish}` routes.
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid lifecycle transition." }, { status: 409 });
     }
     if (isValidationError(error)) {
         return NextResponse.json({ error: formatValidationError(error) }, { status: 400 });

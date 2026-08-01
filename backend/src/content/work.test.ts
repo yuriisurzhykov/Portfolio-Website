@@ -9,6 +9,10 @@ const baseWorkData = {
     status: "shipped",
     summary: { en: "s", ru: "s" },
     stack: ["Kotlin"],
+    // Every fixture in this file is published unless a test explicitly
+    // says otherwise — see "getAllWork / getFeaturedWork — lifecycle
+    // filtering" below for the DRAFT-exclusion behavior itself.
+    lifecycleState: "PUBLISHED" as const,
 };
 
 beforeEach(async () => {
@@ -113,5 +117,36 @@ describe("getWorkBySlug", () => {
 
         const untranslated = await getWorkBySlug("untranslated", "ru");
         expect(untranslated?.caseStudy?.blocks[0]).toMatchObject({ text: "English B" });
+    });
+});
+
+describe("lifecycleState filtering — content lifecycle state machine", () => {
+    it("getAllWork excludes DRAFT items entirely, even though they'd otherwise sort first", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "published", year: 2020 } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "draft", year: 2026, lifecycleState: "DRAFT" } });
+
+        const all = await getAllWork();
+        expect(all.map((w) => w.slug)).toEqual(["published"]);
+    });
+
+    it("getFeaturedWork excludes a featured DRAFT item", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "draft-featured", featured: true, lifecycleState: "DRAFT" } });
+
+        expect(await getFeaturedWork()).toEqual([]);
+    });
+
+    it("getWorkBySlug returns null for a DRAFT item's slug, same as an unknown one", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "draft-item", lifecycleState: "DRAFT" } });
+
+        expect(await getWorkBySlug("draft-item")).toBeNull();
+    });
+
+    it("toWorkSummary/getAllWork surface lifecycleState and publishedAt on the returned summary", async () => {
+        const publishedAt = new Date("2026-01-15T00:00:00.000Z");
+        await prisma.work.create({ data: { ...baseWorkData, slug: "published", publishedAt } });
+
+        const [item] = await getAllWork();
+        expect(item.lifecycleState).toBe("PUBLISHED");
+        expect(item.publishedAt).toBe(publishedAt.toISOString());
     });
 });

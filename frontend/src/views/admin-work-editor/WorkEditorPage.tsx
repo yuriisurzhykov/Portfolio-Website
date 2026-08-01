@@ -2,15 +2,17 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { WorkDetail, WorkInput, WorkStatus } from "@portfolio/backend";
+import type { LifecycleState, WorkDetail, WorkInput, WorkStatus, WorkSummary } from "@portfolio/backend";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
 import { Checkbox, Field, Input, Textarea } from "@/shared/ui/form";
+import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { slugify } from "@/shared/lib/slugify";
+import { type AutosaveStatus, useAutosaveDraft } from "@/shared/lib/use-autosave-draft";
 
 export interface WorkEditorPageProps {
     /** Absent for "create new"; present (already-saved) for "edit". */
@@ -39,13 +41,35 @@ interface FormState {
     heroImage: string;
 }
 
-/** English-only — same reasoning as `PostEditorPage`'s `toFormState`. `initialWork`'s localized fields stay full `{en, ru}` pairs on the read side; only `.en` is ever shown/edited here. */
+/** Same shape/reasoning as `PostEditorPage`'s identical helper — see its comment. */
+function autosaveStatusLabel(status: AutosaveStatus): string | null {
+    switch (status) {
+        case "saving":
+            return "Saving…";
+        case "saved":
+            return "Saved just now";
+        case "error":
+            return "Save failed — retrying";
+        case "idle":
+            return null;
+    }
+}
+
+/**
+ * English-only — same reasoning as `PostEditorPage`'s `toFormState`.
+ * `initialWork`'s localized fields stay full `{en, ru}` pairs on the read
+ * side; only `.en` is ever shown/edited here. `status` defaults to
+ * `"in-progress"`, not `"shipped"` — same reasoning as `PostEditorPage`'s
+ * identical change (2026-07-31, Phase 3): a brand new item is a DRAFT
+ * (`lifecycleState`) until explicitly published, "shipped" as the default
+ * was a leftover contradiction from before that field existed.
+ */
 function toFormState(work?: WorkDetail): FormState {
     return {
         slug: work?.slug ?? "",
         title: work?.title ?? "",
         year: work ? String(work.year) : String(new Date().getFullYear()),
-        status: work?.status ?? "shipped",
+        status: work?.status ?? "in-progress",
         summary: work?.summary.en ?? "",
         stack: work?.stack.join(", ") ?? "",
         coverImage: work?.coverImage ?? "",
@@ -70,32 +94,21 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
     const [slugTouched, setSlugTouched] = React.useState(isEditing);
     const blockEditorRef = React.useRef<BlockEditorHandle>(null);
     const [error, setError] = React.useState<string | null>(null);
-    const [submitting, setSubmitting] = React.useState(false);
+    // Separate from `error` — see admin-post-editor/PostEditorPage.tsx's identical field for why.
+    const [notice, setNotice] = React.useState<string | null>(null);
     const [deleting, setDeleting] = React.useState(false);
+    const [lifecycleState, setLifecycleState] = React.useState<LifecycleState>(initialWork?.lifecycleState ?? "DRAFT");
+    const [lifecyclePending, setLifecyclePending] = React.useState(false);
+    // Guards "Back to list"/"Add translation" — see `navigateAfterFlush` below.
+    const [navPending, setNavPending] = React.useState(false);
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical field — see its comment. */
+    const [currentSlug, setCurrentSlug] = React.useState<string | null>(initialWork?.slug ?? null);
 
-    function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-        setForm((prev) => ({ ...prev, [key]: value }));
-    }
-
-    function updateTitle(title: string) {
-        setForm((prev) => ({
-            ...prev,
-            title,
-            slug: slugTouched ? prev.slug : slugify(title),
-        }));
-    }
-
-    function updateSlugManually(slug: string) {
-        setSlugTouched(true);
-        update("slug", slug);
-    }
-
-    async function handleSubmit(event: React.FormEvent) {
-        event.preventDefault();
-        setError(null);
-
-        const input: WorkInput = {
-            slug: form.slug.trim(),
+    /** Same hook, same reasoning as `PostEditorPage`'s identical field — see its comment and this slice's README. */
+    const autosave = useAutosaveDraft<WorkInput, WorkSummary>({
+        slug: initialWork?.slug ?? null,
+        buildInput: () => ({
+            slug: form.slug.trim() || undefined,
             title: form.title.trim(),
             year: Number(form.year) || 0,
             status: form.status,
@@ -113,30 +126,92 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
                     blocks: blockEditorRef.current?.getBlocks() ?? [],
                 }
                 : null,
-        };
-
-        setSubmitting(true);
-        try {
-            if (isEditing && initialWork) {
-                await adminApi.updateWork(initialWork.slug, input);
-            } else {
-                await adminApi.createWork(input);
+        }),
+        isEmpty: (input) => input.title.trim().length === 0,
+        create: (input) => adminApi.createWork(input),
+        update: (slug, input) => adminApi.updateWork(slug, input),
+        getSlug: (result) => result.slug,
+        // Same reasoning as `PostEditorPage.tsx`'s identical field — fires for the initial create AND for a later rename.
+        onSlugChanged: (result) => {
+            setCurrentSlug(result.slug);
+            router.replace(`/admin/work/${ result.slug }/edit`);
+        },
+        onSaved: (result) => {
+            // Auto-unpublish safety net — see admin-work.ts's `updateWork`
+            // and PostEditorPage.tsx's identical check for the full
+            // reasoning.
+            if (lifecycleState === "PUBLISHED" && result.lifecycleState === "DRAFT") {
+                setNotice("Saved, but automatically unpublished — this item no longer has everything required to stay public (e.g. a missing summary or case-study field). Fill in what's missing, then Publish again.");
             }
-            router.push("/admin/work");
-            router.refresh();
+            setLifecycleState(result.lifecycleState);
+        },
+        onError: (err) => setError(err instanceof AdminApiError ? err.message : "Something went wrong while saving. Retrying automatically…"),
+    });
+
+    function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+        setForm((prev) => ({ ...prev, [key]: value }));
+        autosave.scheduleSave();
+    }
+
+    function updateTitle(title: string) {
+        setForm((prev) => ({
+            ...prev,
+            title,
+            slug: slugTouched ? prev.slug : slugify(title),
+        }));
+        autosave.scheduleSave();
+    }
+
+    function updateSlugManually(slug: string) {
+        setSlugTouched(true);
+        update("slug", slug);
+    }
+
+    async function handlePublish() {
+        if (!currentSlug) return;
+        setError(null);
+        setNotice(null);
+        setLifecyclePending(true);
+        // Same reasoning as PostEditorPage.tsx's identical structure.
+        try {
+            await autosave.flush();
+        } catch {
+            setError("Your latest changes couldn't be saved, so publishing was skipped. Check your connection and try again.");
+            setLifecyclePending(false);
+            return;
+        }
+        try {
+            const result = await adminApi.publishWork(currentSlug);
+            setLifecycleState(result.lifecycleState);
         } catch (err) {
-            setError(err instanceof AdminApiError ? err.message : "Something went wrong. Please try again.");
-            setSubmitting(false);
+            setError(err instanceof AdminApiError ? err.message : "Failed to publish.");
+        } finally {
+            setLifecyclePending(false);
+        }
+    }
+
+    async function handleUnpublish() {
+        if (!currentSlug) return;
+        setError(null);
+        setNotice(null);
+        setLifecyclePending(true);
+        try {
+            const result = await adminApi.unpublishWork(currentSlug);
+            setLifecycleState(result.lifecycleState);
+        } catch (err) {
+            setError(err instanceof AdminApiError ? err.message : "Failed to unpublish.");
+        } finally {
+            setLifecyclePending(false);
         }
     }
 
     async function handleDelete() {
-        if (!initialWork) return;
-        if (!window.confirm(`Delete "${ initialWork.slug }"? This can't be undone.`)) return;
+        if (!currentSlug) return;
+        if (!window.confirm(`Delete "${ currentSlug }"? This can't be undone.`)) return;
 
         setDeleting(true);
         try {
-            await adminApi.deleteWork(initialWork.slug);
+            await adminApi.deleteWork(currentSlug);
             router.push("/admin/work");
             router.refresh();
         } catch (err) {
@@ -145,22 +220,71 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
         }
     }
 
+    /** Same hook, same reasoning, same fix as `PostEditorPage.tsx`'s identical function — see its comment for why this flushes BEFORE navigating rather than relying on `useAutosaveDraft`'s own unmount cleanup. */
+    async function navigateAfterFlush(path: string) {
+        setError(null);
+        setNavPending(true);
+        try {
+            await autosave.flush();
+            router.push(path);
+        } catch {
+            setError("Your latest changes couldn't be saved yet — please try again before leaving this page.");
+            setNavPending(false);
+        }
+    }
+
+    const autosaveLabel = autosaveStatusLabel(autosave.status);
+
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-lg pb-4xl">
+        // See PostEditorPage.tsx's identical `onSubmit` comment — swallows the browser's implicit submit-on-Enter, there's no real submit action anymore.
+        <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-start justify-between gap-md flex-wrap">
                 <div className="flex flex-col gap-sm">
-                    <Text as="h1" variant="h3">{isEditing ? `Edit work: ${ initialWork?.slug }` : "New work item"}</Text>
+                    <Text as="h1" variant="h3">{isEditing ? `Edit work: ${ currentSlug }` : "New work item"}</Text>
                     <Text variant="caption" tone="faint" className="max-w-[52ch]">
                         A project or system in the <code className="font-mono">/work</code> portfolio ledger —
                         “what you built.” A journal post, by contrast, is a dated essay about it —
                         “what you wrote.” The two sections below map to the two things a visitor actually sees:
                         the card everyone gets, and an optional deep-dive page only some items have.
                     </Text>
-                    <StatusToggle value={form.status} onChange={(status) => update("status", status)} options={STATUS_OPTIONS} />
+                    <div className="flex items-center gap-sm flex-wrap">
+                        <StatusToggle value={form.status} onChange={(status) => update("status", status)} options={STATUS_OPTIONS} />
+                        {autosaveLabel && (
+                            <Text
+                                variant="caption"
+                                className={autosave.status === "error" ? "text-status-error" : "text-text-faint"}
+                                role="status"
+                            >
+                                {autosaveLabel}
+                            </Text>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center gap-sm">
                     {isEditing && (
-                        <Button type="button" variant="secondary" size="sm" onClick={() => router.push(`/admin/work/${ initialWork?.slug }/translate`)}>
+                        <>
+                            <StatusBadge tone={lifecycleState === "PUBLISHED" ? "success" : "warning"} withDot>
+                                {lifecycleState === "PUBLISHED" ? "Published" : "Draft"}
+                            </StatusBadge>
+                            {lifecycleState === "DRAFT" ? (
+                                <Button type="button" variant="secondary" size="sm" onClick={handlePublish} loading={lifecyclePending}>
+                                    Publish
+                                </Button>
+                            ) : (
+                                <Button type="button" variant="ghost" size="sm" onClick={handleUnpublish} loading={lifecyclePending}>
+                                    Unpublish
+                                </Button>
+                            )}
+                        </>
+                    )}
+                    {isEditing && (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => navigateAfterFlush(`/admin/work/${ currentSlug }/translate`)}
+                            loading={navPending}
+                        >
                             {initialWork?.summary.ru ? "Edit translation" : "Add translation"}
                         </Button>
                     )}
@@ -275,19 +399,23 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
                                     The narrative itself — same block editor as a journal post’s body.
                                 </Text>
                             </div>
-                            <BlockEditor ref={blockEditorRef} initialBlocks={initialWork?.caseStudy?.blocks ?? []} />
+                            <BlockEditor ref={blockEditorRef} initialBlocks={initialWork?.caseStudy?.blocks ?? []} onChange={autosave.scheduleSave} />
                         </div>
                     </>
                 )}
             </Card>
 
+            {notice && (
+                <Text variant="caption" className="text-status-warning" role="status">{notice}</Text>
+            )}
             {error && (
                 <Text variant="caption" className="text-status-error" role="alert">{error}</Text>
             )}
 
             <div className="flex gap-sm">
-                <Button type="submit" loading={submitting}>{isEditing ? "Save changes" : "Create work item"}</Button>
-                <Button type="button" variant="secondary" onClick={() => router.push("/admin/work")}>Cancel</Button>
+                <Button type="button" variant="secondary" onClick={() => navigateAfterFlush("/admin/work")} loading={navPending}>
+                    Back to list
+                </Button>
             </div>
         </form>
     );
