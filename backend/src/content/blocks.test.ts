@@ -3,8 +3,8 @@ import { parseBlock, parseBlockInputs, parseBlocks } from "./blocks";
 
 describe("parseBlock", () => {
     it("parses a lead block", () => {
-        const block = parseBlock({ id: "1", order: 0, type: "lead", text: "Hello", data: null });
-        expect(block).toEqual({ id: "1", order: 0, type: "lead", text: "Hello" });
+        const block = parseBlock({id: "1", order: 0, type: "lead", text: "Hello", data: null});
+        expect(block).toEqual({id: "1", order: 0, type: "lead", text: "Hello"});
     });
 
     it("parses a heading block with data: null — the exact case that broke on real imported data", () => {
@@ -15,12 +15,12 @@ describe("parseBlock", () => {
         // key. See the comment above `headingCore` in blocks.ts for the
         // full story — this was found by running the Phase 3 import script
         // against a real database, not by any type check.
-        const block = parseBlock({ id: "1", order: 0, type: "heading", text: "Title", data: null });
+        const block = parseBlock({id: "1", order: 0, type: "heading", text: "Title", data: null});
         expect(block.type).toBe("heading");
     });
 
     it("parses a heading block with an explicit level in data", () => {
-        const block = parseBlock({ id: "1", order: 0, type: "heading", text: "T", data: { level: 3 } });
+        const block = parseBlock({id: "1", order: 0, type: "heading", text: "T", data: {level: 3}});
         expect(block.type === "heading" && block.data?.level).toBe(3);
     });
 
@@ -30,7 +30,7 @@ describe("parseBlock", () => {
             order: 0,
             type: "code",
             text: null,
-            data: { filename: "a.kt", language: "kotlin", code: "fun main() {}" },
+            data: {filename: "a.kt", language: "kotlin", code: "fun main() {}"},
         });
         expect(block.type === "code" && block.data.filename).toBe("a.kt");
     });
@@ -41,7 +41,7 @@ describe("parseBlock", () => {
             order: 0,
             type: "approachList",
             text: null,
-            data: { items: [{ title: "A", description: "B" }] },
+            data: {items: [{title: "A", description: "B"}]},
         });
         expect(block.type === "approachList" && block.data.items).toHaveLength(1);
     });
@@ -52,9 +52,67 @@ describe("parseBlock", () => {
             order: 0,
             type: "image",
             text: null,
-            data: { src: "/img.png", alt: "alt" },
+            data: {src: "/img.png", alt: "alt"},
         });
         expect(block.type).toBe("image");
+    });
+
+    it("pases a diagram block for each valid engine type with its source intact", () => {
+        for (const engine of ["mermaid", "plantuml"] as const) {
+            const block = parseBlock({
+                id: "1",
+                order: 0,
+                type: "diagram",
+                text: null,
+                data: {engine, source: "A --> B"},
+            });
+            expect(block.type === "diagram" && block.data.engine).toBe(engine);
+            expect(block.type === "diagram" && block.data.source).toBe("A --> B");
+        }
+    });
+
+    it("rejects a diagram block with an invalid engine type", () => {
+        expect(() =>
+            parseBlock({
+                id: "1",
+                order: 0,
+                type: "diagram",
+                text: null,
+                data: {engine: "graphviz", source: "x"}
+            }),
+        ).toThrow();
+    });
+
+    it("rejects a diagram block with an empty source", () => {
+        expect(() =>
+            parseBlock({
+                id: "1",
+                order: 0,
+                type: "diagram",
+                text: null,
+                data: {engine: "mermaid", source: ""}
+            }),
+        ).toThrow();
+    });
+
+    it("parses a diagram block's optional caption", () => {
+        const withCaption = parseBlock({
+            id: "1",
+            order: 0,
+            type: "diagram",
+            text: "Fig. 1",
+            data: {engine: "mermaid", source: "A --> B"},
+        });
+        expect(withCaption.type === "diagram" && withCaption.text).toBe("Fig. 1");
+
+        const withoutCaption = parseBlock({
+            id: "1",
+            order: 0,
+            type: "diagram",
+            text: null,
+            data: {engine: "mermaid", source: "A --> B"},
+        });
+        expect(withoutCaption.type).toBe("diagram");
     });
 
     /**
@@ -129,19 +187,19 @@ describe("parseBlock", () => {
     });
 
     it("rejects an unknown block type", () => {
-        expect(() => parseBlock({ id: "1", order: 0, type: "not-a-real-type", text: null, data: null })).toThrow();
+        expect(() => parseBlock({id: "1", order: 0, type: "not-a-real-type", text: null, data: null})).toThrow();
     });
 
     it("rejects a block missing required fields for its type", () => {
         // "note" requires data.variant — omitting it must fail loudly
         // rather than silently rendering a broken block.
-        expect(() => parseBlock({ id: "1", order: 0, type: "note", text: "x", data: null })).toThrow();
+        expect(() => parseBlock({id: "1", order: 0, type: "note", text: "x", data: null})).toThrow();
     });
 
     it("parseBlocks preserves order and parses every row", () => {
         const blocks = parseBlocks([
-            { id: "1", order: 0, type: "heading", text: "A", data: null },
-            { id: "2", order: 1, type: "paragraph", text: "B", data: null },
+            {id: "1", order: 0, type: "heading", text: "A", data: null},
+            {id: "2", order: 1, type: "paragraph", text: "B", data: null},
         ]);
         expect(blocks.map((b) => b.type)).toEqual(["heading", "paragraph"]);
     });
@@ -150,14 +208,14 @@ describe("parseBlock", () => {
 describe("parseBlockInputs", () => {
     it("accepts the exact shape the admin block editor submits — no id/order", () => {
         const blocks = parseBlockInputs([
-            { type: "lead", text: "Lead" },
-            { type: "code", data: { filename: "a.kt", code: "fun main() {}" } },
+            {type: "lead", text: "Lead"},
+            {type: "code", data: {filename: "a.kt", code: "fun main() {}"}},
         ]);
         expect(blocks.map((b) => b.type)).toEqual(["lead", "code"]);
     });
 
     it("still rejects a block missing required fields for its type", () => {
-        expect(() => parseBlockInputs([{ type: "note", text: "x" }])).toThrow();
+        expect(() => parseBlockInputs([{type: "note", text: "x"}])).toThrow();
     });
 
     it("rejects id/order if present — the admin editor must not be able to set them directly", () => {
@@ -166,7 +224,7 @@ describe("parseBlockInputs", () => {
         // assuming it, since the whole point of BlockInput excluding
         // id/order is that the caller can't dictate row identity or
         // position (position comes from array order at save time instead).
-        const [block] = parseBlockInputs([{ type: "lead", text: "x", id: "should-be-ignored", order: 99 }]);
+        const [block] = parseBlockInputs([{type: "lead", text: "x", id: "should-be-ignored", order: 99}]);
         expect(block).not.toHaveProperty("id");
         expect(block).not.toHaveProperty("order");
     });

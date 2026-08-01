@@ -84,6 +84,14 @@ const approachListCore = z.object({
         items: z.array(z.object({ title: z.string(), description: z.string() })).min(1),
     }),
 });
+const diagramCore = z.object({
+    type: z.literal("diagram"),
+    text: z.string().nullish(),
+    data: z.object({
+        engine: z.enum(["mermaid", "plantuml"]),
+        source: z.string().min(1),
+    })
+});
 
 // One `.extend()` call per type, written out individually rather than
 // mapped over an array — a `.map()` here would widen every branch's
@@ -98,6 +106,7 @@ const noteBlock = noteCore.extend(baseFields);
 const imageBlock = imageCore.extend(baseFields);
 const codeBlock = codeCore.extend(baseFields);
 const approachListBlock = approachListCore.extend(baseFields);
+const diagramBlock = diagramCore.extend(baseFields);
 
 export const blockSchema = z.discriminatedUnion("type", [
     leadBlock,
@@ -108,6 +117,7 @@ export const blockSchema = z.discriminatedUnion("type", [
     imageBlock,
     codeBlock,
     approachListBlock,
+    diagramBlock,
 ]);
 
 /** Same block shapes, minus `id`/`order` — what the admin editor sends when saving a document's blocks (see content/document.ts's `replaceDocumentContent`). */
@@ -120,6 +130,7 @@ export const blockInputSchema = z.discriminatedUnion("type", [
     imageCore,
     codeCore,
     approachListCore,
+    diagramCore,
 ]);
 
 export type Block = z.infer<typeof blockSchema>;

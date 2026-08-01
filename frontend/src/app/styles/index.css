@@ -83,6 +83,47 @@
     --spacing-4xl: var(--space-4xl);
 
     /* ------------------------------------------------------------------------
+     * WIDTH-FAMILY RECLAIM
+     * Tailwind v4 checks --spacing-{key} BEFORE falling back to its own
+     * built-in --container-{key} scale for w-.../max-w-.../min-w-.../basis-...
+     * (see https://github.com/tailwindlabs/tailwindcss/issues/16047) — since
+     * our --spacing-* reuses the same key names (xs/sm/md/lg/xl/2xl/3xl/4xl),
+     * every one of those utilities was silently hijacked to a tiny spacing
+     * value instead of Tailwind's real container-sized scale. --width-.../
+     * --max-width-.../--min-width-... sit ahead of --spacing in that lookup
+     * order, so re-declaring them here (pointing at Tailwind's own built-in
+     * --container-* values, unchanged) restores the two scales' intended
+     * separation: --spacing-* for padding/margin/gap, this for w-.../max-w-.../
+     * min-w-.../basis-... — without renaming a single existing spacing token.
+     * ------------------------------------------------------------------------ */
+    --width-xs: var(--container-xs);
+    --width-sm: var(--container-sm);
+    --width-md: var(--container-md);
+    --width-lg: var(--container-lg);
+    --width-xl: var(--container-xl);
+    --width-2xl: var(--container-2xl);
+    --width-3xl: var(--container-3xl);
+    --width-4xl: var(--container-4xl);
+
+    --min-width-xs: var(--container-xs);
+    --min-width-sm: var(--container-sm);
+    --min-width-md: var(--container-md);
+    --min-width-lg: var(--container-lg);
+    --min-width-xl: var(--container-xl);
+    --min-width-2xl: var(--container-2xl);
+    --min-width-3xl: var(--container-3xl);
+    --min-width-4xl: var(--container-4xl);
+
+    --max-width-xs: var(--container-xs);
+    --max-width-sm: var(--container-sm);
+    --max-width-md: var(--container-md);
+    --max-width-lg: var(--container-lg);
+    --max-width-xl: var(--container-xl);
+    --max-width-2xl: var(--container-2xl);
+    --max-width-3xl: var(--container-3xl);
+    --max-width-4xl: var(--container-4xl);
+
+    /* ------------------------------------------------------------------------
      * RADII
      * ------------------------------------------------------------------------ */
     --radius-xs: var(--radius-xs);
