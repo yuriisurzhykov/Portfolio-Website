@@ -1,5 +1,29 @@
 # views/admin-work-editor — WorkEditorPage
 
+## 2026-07-31 — Фаза 3 (мгновенный черновик + непрерывный autosave)
+
+Идентично `admin-post-editor/README.md`'s одноимённой записи — тот же
+`useAutosaveDraft<WorkInput, WorkSummary>`, тот же убранный `handleSubmit`/
+Submit-кнопка (заменена на "Back to list" + `Saving…`/`Saved just now`/
+`Save failed — retrying` индикатор рядом с `<StatusToggle>`), тот же
+`onCreated` → `router.replace('/admin/work/[slug]/edit')`, тот же
+`autosave.flush()` перед Publish, тот же перенос auto-unpublish уведомления
+в `onSaved`. Единственные Work-специфичные детали:
+
+- `buildInput()` включает `caseStudy` целиком (или `null`) — ровно то же,
+  что `handleSubmit` собирало раньше, теперь просто читается на каждую
+  попытку сохранения, а не один раз при сабмите.
+- `<BlockEditor onChange={autosave.scheduleSave}>` подключен только внутри
+  секции "Case study", т.к. сам блочный редактор рендерится условно
+  (`form.hasCaseStudy`) — как и раньше, никакого Work-специфичного
+  ветвления внутри самого `BlockEditor`.
+- Дефолт `status` — `"in-progress"`, не `"shipped"` (то же рассуждение,
+  что у `PostEditorPage`'s `"upcoming"`, применённое к Work-терминологии).
+
+**SOLID.** Не появилось ни одной новой Work-специфичной абстракции — тот
+же дженерик-хук `useAutosaveDraft`, что и у `Post`, что и было целью его
+дизайна (см. `shared/lib/README.md`'s запись).
+
 ## 2026-07-31 — Фаза 2 (lifecycle state machine): Publish/Unpublish + auto-unpublish notice
 
 Идентично `admin-post-editor/README.md`'s одноимённой записи — тот же
