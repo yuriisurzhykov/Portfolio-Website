@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/shared/theme";
 import { colors, colorsLight } from "@/shared/ui/theme/tokens";
+import { DiagramSurface } from "@/shared/ui/diagram/DiagramSurface";
 
 export interface MermaidDiagramProps {
     source: string;
@@ -89,5 +90,5 @@ export function MermaidDiagram({source}: MermaidDiagramProps) {
         return <div className="h-30 rounded-md border border-border-subtle bg-surface-raised/50 animate-pulse"/>;
     }
 
-    return <div className="w-full [&_svg]:mx-auto [&_svg]:max-w-full [&_svg]:h-auto" dangerouslySetInnerHTML={{ __html: svg }} />;
+    return <DiagramSurface svg={ svg }/>;
 }
