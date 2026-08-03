@@ -15,5 +15,15 @@ services:
     volumes:
       - portfolio_postgres_data:/var/lib/postgresql/data
 
+  # Self-hosted PlantUML renderer — keeps diagram source private (never sent
+  # to a third-party server), same reasoning as postgres above being
+  # 127.0.0.1-only. PLANTUML_SECURITY_PROFILE defaults to "INTERNET" (the
+  # image's own safe default) — never lower it, per the image's own docs.
+  plantuml:
+    image: plantuml/plantuml-server:jetty
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+
 volumes:
   portfolio_postgres_data:
