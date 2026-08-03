@@ -54,7 +54,7 @@ function markdownToInlineContent(parsingEditor: PortfolioEditor, text: string): 
 
 /** The reverse of `markdownToInlineContent` — same "wrap as a bare paragraph first" reasoning, just serializing instead of parsing. */
 function inlineContentToMarkdown(editor: PortfolioEditor, content: InlineContent): string {
-    return editor.blocksToMarkdownLossy([{ type: "paragraph", content } as PortfolioPartialBlock]).trim();
+    return editor.blocksToMarkdownLossy([{type: "paragraph", content} as PortfolioPartialBlock]).trim();
 }
 
 /**
@@ -66,42 +66,47 @@ function inlineContentToMarkdown(editor: PortfolioEditor, content: InlineContent
  * `quote`/`note`).
  */
 export function blocksToPartialBlocks(blocks: Block[]): PortfolioPartialBlock[] {
-    const parsingEditor = BlockNoteEditor.create({ schema: blockNoteSchema }) as unknown as PortfolioEditor;
+    const parsingEditor = BlockNoteEditor.create({schema: blockNoteSchema}) as unknown as PortfolioEditor;
 
     return blocks.map((block): PortfolioPartialBlock => {
         switch (block.type) {
             case "lead":
             case "paragraph":
-                return { type: block.type, content: markdownToInlineContent(parsingEditor, block.text) };
+                return {type: block.type, content: markdownToInlineContent(parsingEditor, block.text)};
             case "heading":
                 return {
                     type: "heading",
-                    props: { level: block.data?.level ?? 2 },
+                    props: {level: block.data?.level ?? 2},
                     content: markdownToInlineContent(parsingEditor, block.text),
                 };
             case "quote":
                 return {
                     type: "quote",
-                    props: { attribution: block.data?.attribution ?? "" },
+                    props: {attribution: block.data?.attribution ?? ""},
                     content: markdownToInlineContent(parsingEditor, block.text),
                 };
             case "note":
                 return {
                     type: "note",
-                    props: { variant: block.data.variant },
+                    props: {variant: block.data.variant},
                     content: markdownToInlineContent(parsingEditor, block.text),
                 };
             case "image":
-                return { type: "image", props: { src: block.data.src, alt: block.data.alt, caption: block.text ?? "" } };
+                return {type: "image", props: {src: block.data.src, alt: block.data.alt, caption: block.text ?? ""}};
             case "code":
                 // BlockNote-internal type is "codeSnippet", not "code" —
                 // see blocks/CodeBlock.tsx's top comment.
                 return {
                     type: "codeSnippet",
-                    props: { filename: block.data.filename, language: block.data.language ?? "", code: block.data.code },
+                    props: {filename: block.data.filename, language: block.data.language ?? "", code: block.data.code},
                 };
             case "approachList":
-                return { type: "approachList", props: { itemsJson: JSON.stringify(block.data.items) } };
+                return {type: "approachList", props: {itemsJson: JSON.stringify(block.data.items)}};
+            case "diagram":
+                return {
+                    type: "diagram",
+                    props: {engine: block.data.engine, source: block.data.source, caption: block.text ?? ""}
+                };
         }
     });
 }
@@ -113,53 +118,60 @@ export function blocksToPartialBlocks(blocks: Block[]): PortfolioPartialBlock[] 
  * current inline content, styles included.
  */
 export function editorBlocksToBlockInputs(editor: PortfolioEditor, blocks: readonly PortfolioBlock[]): BlockInput[] {
-    return blocks.map((block): BlockInput => {
-        switch (block.type) {
-            case "lead":
-                return { type: "lead", text: inlineContentToMarkdown(editor, block.content) };
-            case "paragraph":
-                return { type: "paragraph", text: inlineContentToMarkdown(editor, block.content) };
-            case "heading":
-                // `block.props.level` types as a plain `number` here (the
-                // configured `levels: [2, 3]` option — see `../schema.ts` —
-                // is enforced by `createHeadingBlockSpec` at runtime, but
-                // doesn't narrow the generated prop's TS type down to the
-                // literal union); narrow explicitly rather than widen
-                // `BlockInput`'s `data.level` to `number` just for this.
-                return {
-                    type: "heading",
-                    text: inlineContentToMarkdown(editor, block.content),
-                    data: { level: block.props.level === 3 ? 3 : 2 },
-                };
-            case "quote":
-                return {
-                    type: "quote",
-                    text: inlineContentToMarkdown(editor, block.content),
-                    data: block.props.attribution ? { attribution: block.props.attribution } : undefined,
-                };
-            case "note":
-                return {
-                    type: "note",
-                    text: inlineContentToMarkdown(editor, block.content),
-                    data: { variant: block.props.variant },
-                };
-            case "image":
-                return {
-                    type: "image",
-                    text: block.props.caption || undefined,
-                    data: { src: block.props.src, alt: block.props.alt },
-                };
-            case "codeSnippet":
-                return {
-                    type: "code",
-                    data: {
-                        filename: block.props.filename,
-                        language: block.props.language || undefined,
-                        code: block.props.code,
-                    },
-                };
-            case "approachList":
-                return { type: "approachList", data: { items: parseApproachItems(block.props.itemsJson) } };
-        }
-    });
+    return blocks
+        .map((block): BlockInput => {
+            switch (block.type) {
+                case "lead":
+                    return {type: "lead", text: inlineContentToMarkdown(editor, block.content)};
+                case "paragraph":
+                    return {type: "paragraph", text: inlineContentToMarkdown(editor, block.content)};
+                case "heading":
+                    // `block.props.level` types as a plain `number` here (the
+                    // configured `levels: [2, 3]` option — see `../schema.ts` —
+                    // is enforced by `createHeadingBlockSpec` at runtime, but
+                    // doesn't narrow the generated prop's TS type down to the
+                    // literal union); narrow explicitly rather than widen
+                    // `BlockInput`'s `data.level` to `number` just for this.
+                    return {
+                        type: "heading",
+                        text: inlineContentToMarkdown(editor, block.content),
+                        data: {level: block.props.level === 3 ? 3 : 2},
+                    };
+                case "quote":
+                    return {
+                        type: "quote",
+                        text: inlineContentToMarkdown(editor, block.content),
+                        data: block.props.attribution ? {attribution: block.props.attribution} : undefined,
+                    };
+                case "note":
+                    return {
+                        type: "note",
+                        text: inlineContentToMarkdown(editor, block.content),
+                        data: {variant: block.props.variant},
+                    };
+                case "image":
+                    return {
+                        type: "image",
+                        text: block.props.caption || undefined,
+                        data: {src: block.props.src, alt: block.props.alt},
+                    };
+                case "codeSnippet":
+                    return {
+                        type: "code",
+                        data: {
+                            filename: block.props.filename,
+                            language: block.props.language || undefined,
+                            code: block.props.code,
+                        },
+                    };
+                case "approachList":
+                    return {type: "approachList", data: {items: parseApproachItems(block.props.itemsJson)}};
+                case "diagram":
+                    return {
+                        type: "diagram",
+                        text: block.props.caption || undefined,
+                        data: {engine: block.props.engine, source: block.props.source},
+                    };
+            }
+        });
 }

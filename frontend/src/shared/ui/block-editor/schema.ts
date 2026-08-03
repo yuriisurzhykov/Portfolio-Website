@@ -5,11 +5,12 @@ import { NoteBlock } from "./blocks/NoteBlock";
 import { ImageBlock } from "./blocks/ImageBlock";
 import { CodeBlock } from "./blocks/CodeBlock";
 import { ApproachListBlock } from "./blocks/ApproachListBlock";
+import { DiagramBlock } from "./blocks/DiagramBlock";
 
 /**
  * The editor's block schema — deliberately curated with `BlockNoteSchema.create({ blockSpecs: {...} })`
  * (a fixed list), NOT `BlockNoteSchema.create().extend({...})` (defaults +
- * additions). The site only ever renders the 8 block types
+ * additions). The site only ever renders the 9 block types
  * `backend/src/content/blocks.ts` knows about (see `<ContentBlocks>`) —
  * pulling in BlockNote's full default set (bullet/numbered/check lists,
  * tables, video, audio, file, its own `codeBlock`) would let an editor
@@ -36,7 +37,7 @@ import { ApproachListBlock } from "./blocks/ApproachListBlock";
 export const blockNoteSchema = BlockNoteSchema.create({
     blockSpecs: {
         paragraph: defaultBlockSpecs.paragraph,
-        heading: createHeadingBlockSpec({ levels: [2, 3], defaultLevel: 2, allowToggleHeadings: false }),
+        heading: createHeadingBlockSpec({levels: [2, 3], defaultLevel: 2, allowToggleHeadings: false}),
         // `createReactBlockSpec` returns a FACTORY (`(options?) => BlockSpec`),
         // not the spec itself — every custom block here takes no options,
         // but still has to be called to produce the actual `BlockSpec`
@@ -47,6 +48,7 @@ export const blockNoteSchema = BlockNoteSchema.create({
         image: ImageBlock(),
         codeSnippet: CodeBlock(),
         approachList: ApproachListBlock(),
+        diagram: DiagramBlock(),
     },
 });
 

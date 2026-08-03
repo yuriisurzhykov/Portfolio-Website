@@ -113,6 +113,25 @@ covers.
   SSR registry), **verify the dependency is actually used** — it may be a
   dead `package.json` entry from an earlier iteration.
 
+### Tailwind v4
+- **`w-*`/`max-w-*`/`min-w-*`/`basis-*` utilities check the project's own
+  `--spacing-*` theme variable BEFORE falling back to Tailwind's built-in
+  `--container-*` scale** (undocumented in the upgrade guide, widely reported:
+  [tailwindlabs/tailwindcss#16047](https://github.com/tailwindlabs/tailwindcss/issues/16047)).
+  This design system's spacing scale (`frontend/src/shared/ui/theme/tokens.ts`)
+  reuses the exact same key names Tailwind's container scale uses (`xs`/`sm`/
+  `md`/`lg`/`xl`/`2xl`/`3xl`/`4xl`) — so `max-w-2xl`, `w-lg`, etc. were silently
+  resolving to a tiny spacing value (e.g. `max-w-2xl` → `2.5rem`/40px, not the
+  expected `42rem`/672px) instead of erroring, which showed up as a real
+  element collapsing to 0 width (padding alone exceeded the hijacked
+  max-width) rather than looking merely "off". Fixed by re-declaring
+  `--width-*`/`--min-width-*`/`--max-width-*` in `frontend/src/app/styles/index.css`'s
+  `@theme` block, pointing at Tailwind's own `--container-*` values for the
+  colliding keys — those three namespaces are checked BEFORE `--spacing` in
+  Tailwind's own lookup order, so this restores the two scales' intended
+  separation (spacing for padding/margin/gap, this for width-family
+  utilities) without renaming a single existing spacing token.
+
 ### Prisma 7
 - `datasource.url` moved out of `schema.prisma` into `prisma.config.ts`;
   `PrismaClient` now requires an explicit driver adapter (`@prisma/adapter-pg`

@@ -47,6 +47,8 @@ export function extractProse(block: BlockInput): string {
             return block.data.items.map((item) => `${ item.title } ${ item.description }`).join(" ");
         case "code":
             return "";
+        case "diagram":
+            return block.text ?? "";
     }
 }
 

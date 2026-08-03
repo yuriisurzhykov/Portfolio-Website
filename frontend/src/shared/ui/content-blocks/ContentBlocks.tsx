@@ -8,12 +8,13 @@ import { Markdown } from "@/shared/ui/markdown";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import type { CodeLanguage } from "@/shared/lib/highlight/codeHighlighter";
+import { Diagram } from "@/shared/ui/diagram";
 
 export interface ContentBlocksProps {
     blocks: Block[];
 }
 
-const KNOWN_CODE_LANGUAGES = new Set<CodeLanguage>(["ts", "tsx", "js", "jsx", "kotlin"]);
+const KNOWN_CODE_LANGUAGES = new Set<CodeLanguage>(["ts", "tsx", "js", "jsx", "kotlin", "kts", "py", "java"]);
 
 /**
  * The database stores `language` as a free-form string (see
@@ -56,111 +57,111 @@ export const noteVariantClasses: Record<"info" | "warning" | "tip", string> = {
  * chrome — the copy/copied button labels below) still goes through
  * `useTranslation()`.
  */
-export function ContentBlocks({ blocks }: ContentBlocksProps) {
-    const { ln } = useTranslation();
+export function ContentBlocks({blocks}: ContentBlocksProps) {
+    const {ln} = useTranslation();
 
     return (
         <div className="flex flex-col gap-md">
-            {blocks.map((block) => {
+            { blocks.map((block) => {
                 switch (block.type) {
                     case "lead":
                         return (
-                            <React.Fragment key={block.id}>
+                            <React.Fragment key={ block.id }>
                                 <Text variant="body-lg" tone="secondary">
-                                    <Markdown text={block.text} />
+                                    <Markdown text={ block.text }/>
                                 </Text>
-                                <hr className="border-t border-border-subtle my-sm" />
+                                <hr className="border-t border-border-subtle my-sm"/>
                             </React.Fragment>
                         );
 
                     case "heading":
                         return (
-                            <Text key={block.id} as="h2" variant="h2" className="mt-lg">
-                                <Markdown text={block.text} />
+                            <Text key={ block.id } as="h2" variant="h2" className="mt-lg">
+                                <Markdown text={ block.text }/>
                             </Text>
                         );
 
                     case "paragraph":
                         return (
-                            <Text key={block.id} variant="body" tone="secondary">
-                                <Markdown text={block.text} />
+                            <Text key={ block.id } variant="body" tone="secondary">
+                                <Markdown text={ block.text }/>
                             </Text>
                         );
 
                     case "quote":
                         return (
                             <blockquote
-                                key={block.id}
+                                key={ block.id }
                                 className="border-l-2 border-border-default pl-md italic text-text-secondary"
                             >
-                                <Markdown text={block.text} />
-                                {block.data?.attribution && (
+                                <Markdown text={ block.text }/>
+                                { block.data?.attribution && (
                                     <Text as="footer" variant="caption" tone="faint" className="mt-xs not-italic">
-                                        — {block.data.attribution}
+                                        — { block.data.attribution }
                                     </Text>
-                                )}
+                                ) }
                             </blockquote>
                         );
 
                     case "note":
                         return (
                             <div
-                                key={block.id}
-                                className={cn("rounded-lg border p-md", noteVariantClasses[block.data.variant])}
+                                key={ block.id }
+                                className={ cn("rounded-lg border p-md", noteVariantClasses[block.data.variant]) }
                             >
-                                <Markdown text={block.text} />
+                                <Markdown text={ block.text }/>
                             </div>
                         );
 
                     case "image":
                         return (
-                            <figure key={block.id} className="my-sm">
-                                {/* eslint-disable-next-line @next/next/no-img-element -- src comes from admin-authored content, not a static/known-at-build-time asset Next.js's <Image> can optimize */}
+                            <figure key={ block.id } className="my-sm">
+                                {/* eslint-disable-next-line @next/next/no-img-element -- src comes from admin-authored content, not a static/known-at-build-time asset Next.js's <Image> can optimize */ }
                                 <img
-                                    src={block.data.src}
-                                    alt={block.data.alt}
-                                    width={block.data.width}
-                                    height={block.data.height}
+                                    src={ block.data.src }
+                                    alt={ block.data.alt }
+                                    width={ block.data.width }
+                                    height={ block.data.height }
                                     className="rounded-lg border border-border-subtle w-full"
                                 />
-                                {block.text && (
+                                { block.text && (
                                     <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
-                                        <Markdown text={block.text} />
+                                        <Markdown text={ block.text }/>
                                     </Text>
-                                )}
+                                ) }
                             </figure>
                         );
 
                     case "code":
                         return (
                             <CodeBlock
-                                key={block.id}
-                                title={block.data.filename}
-                                language={toCodeLanguage(block.data.language)}
+                                key={ block.id }
+                                title={ block.data.filename }
+                                language={ toCodeLanguage(block.data.language) }
                                 highlightEnabled
-                                showLineNumbers={false}
+                                showLineNumbers={ false }
                                 variant="default"
                                 className="my-sm"
-                                labels={{
+                                labels={ {
                                     copyButton: ln("label.button.copy"),
                                     copiedButton: ln("label.button.copied"),
                                     liveRegionCopied: ln("ui.codeBlock.liveRegion.copied"),
-                                }}
+                                } }
                             >
-                                {block.data.code}
+                                { block.data.code }
                             </CodeBlock>
                         );
 
                     case "approachList":
                         return (
                             <div
-                                key={block.id}
+                                key={ block.id }
                                 className="grid gap-4 mb-7"
-                                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}
+                                style={ {gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"} }
                             >
-                                {block.data.items.map((item, index) => (
+                                { block.data.items.map((item, index) => (
                                     <div
-                                        key={index}
+                                        key={ index }
                                         className="bg-surface-base border border-border-subtle rounded-lg p-5"
                                     >
                                         <Text
@@ -168,17 +169,31 @@ export function ContentBlocks({ blocks }: ContentBlocksProps) {
                                             variant="caption"
                                             className="font-mono font-semibold text-accent-text mb-2"
                                         >
-                                            {item.title}
+                                            { item.title }
                                         </Text>
                                         <Text as="div" variant="caption" tone="muted" className="leading-[1.6]">
-                                            {item.description}
+                                            { item.description }
                                         </Text>
                                     </div>
-                                ))}
+                                )) }
                             </div>
                         );
+                    case "diagram":
+                        if (!block.data.source) {
+                            return null;
+                        }
+                        return (
+                            <figure key={ block.id } className="my-sm">
+                                <Diagram engine={ block.data.engine } source={ block.data.source }/>
+                                { block.text && (
+                                    <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
+                                        <Markdown text={ block.text }/>
+                                    </Text>
+                                ) }
+                            </figure>
+                        );
                 }
-            })}
+            }) }
         </div>
     );
 }
