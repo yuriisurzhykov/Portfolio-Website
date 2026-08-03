@@ -89,7 +89,7 @@ const diagramCore = z.object({
     text: z.string().nullish(),
     data: z.object({
         engine: z.enum(["mermaid", "plantuml"]),
-        source: z.string().min(1),
+        source: z.string(),
     })
 });
 

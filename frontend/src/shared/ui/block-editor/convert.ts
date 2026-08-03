@@ -119,7 +119,7 @@ export function blocksToPartialBlocks(blocks: Block[]): PortfolioPartialBlock[] 
  */
 export function editorBlocksToBlockInputs(editor: PortfolioEditor, blocks: readonly PortfolioBlock[]): BlockInput[] {
     return blocks
-        .map((block): BlockInput | null => {
+        .map((block): BlockInput => {
             switch (block.type) {
                 case "lead":
                     return {type: "lead", text: inlineContentToMarkdown(editor, block.content)};
@@ -167,21 +167,11 @@ export function editorBlocksToBlockInputs(editor: PortfolioEditor, blocks: reado
                 case "approachList":
                     return {type: "approachList", data: {items: parseApproachItems(block.props.itemsJson)}};
                 case "diagram":
-                    // An in-progress diagram block (just inserted via the
-                    // slash menu, a source not typed yet) must never reach the
-                    // backend — blockInputSchema requires a non-empty source
-                    // (see blocks.ts) — so autosave drops it here instead of
-                    // failing the WHOLE document save over one unfinished
-                    // block. It reappears in the saved document the moment
-                    // its source has real content.
-                    return block.props.source
-                        ? {
-                            type: "diagram",
-                            text: block.props.caption || undefined,
-                            data: {engine: block.props.engine, source: block.props.source},
-                        }
-                        : null;
+                    return {
+                        type: "diagram",
+                        text: block.props.caption || undefined,
+                        data: {engine: block.props.engine, source: block.props.source},
+                    };
             }
-        })
-        .filter((block): block is BlockInput => block !== null);
+        });
 }

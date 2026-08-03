@@ -9,7 +9,7 @@ import "prismjs/components/prism-kotlin";
 /**
  * Supported languages for syntax highlighting.
  */
-export type CodeLanguage = "ts" | "tsx" | "js" | "jsx" | "kotlin";
+export type CodeLanguage = "ts" | "tsx" | "js" | "jsx" | "kotlin" | "kts" | "java" | "py";
 
 const languageMap: Record<CodeLanguage, string> = {
     ts: "typescript",
@@ -17,6 +17,9 @@ const languageMap: Record<CodeLanguage, string> = {
     js: "javascript",
     jsx: "jsx",
     kotlin: "kotlin",
+    kts: "kotlin",
+    java: "java",
+    py: "python",
 };
 
 /**

@@ -83,17 +83,17 @@ describe("parseBlock", () => {
         ).toThrow();
     });
 
-    it("rejects a diagram block with an empty source", () => {
-        expect(() =>
-            parseBlock({
-                id: "1",
-                order: 0,
-                type: "diagram",
-                text: null,
-                data: {engine: "mermaid", source: ""}
-            }),
-        ).toThrow();
+    it("accepts a diagram block with an empty source — an in-progress block, not yet written, must round-trip safely rather than be silently dropped", () => {
+        const block = parseBlock({
+            id: "1",
+            order: 0,
+            type: "diagram",
+            text: null,
+            data: {engine: "mermaid", source: ""},
+        });
+        expect(block.type === "diagram" && block.data.source).toBe("");
     });
+
 
     it("parses a diagram block's optional caption", () => {
         const withCaption = parseBlock({

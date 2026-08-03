@@ -14,7 +14,7 @@ export interface ContentBlocksProps {
     blocks: Block[];
 }
 
-const KNOWN_CODE_LANGUAGES = new Set<CodeLanguage>(["ts", "tsx", "js", "jsx", "kotlin"]);
+const KNOWN_CODE_LANGUAGES = new Set<CodeLanguage>(["ts", "tsx", "js", "jsx", "kotlin", "kts", "py", "java"]);
 
 /**
  * The database stores `language` as a free-form string (see
@@ -179,6 +179,9 @@ export function ContentBlocks({blocks}: ContentBlocksProps) {
                             </div>
                         );
                     case "diagram":
+                        if (!block.data.source) {
+                            return null;
+                        }
                         return (
                             <figure key={ block.id } className="my-sm">
                                 <Diagram engine={ block.data.engine } source={ block.data.source }/>
