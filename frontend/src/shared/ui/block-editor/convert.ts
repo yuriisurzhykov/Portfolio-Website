@@ -119,7 +119,7 @@ export function blocksToPartialBlocks(blocks: Block[]): PortfolioPartialBlock[] 
  */
 export function editorBlocksToBlockInputs(editor: PortfolioEditor, blocks: readonly PortfolioBlock[]): BlockInput[] {
     return blocks
-        .map((block): BlockInput => {
+        .map((block): BlockInput | null => {
             switch (block.type) {
                 case "lead":
                     return {type: "lead", text: inlineContentToMarkdown(editor, block.content)};
