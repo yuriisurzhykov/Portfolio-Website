@@ -52,6 +52,8 @@ on:
         required: true
       VPS_SSH_KEY:
         required: true
+      PLANTUML_SERVER_URL:
+        required: true
       UPSTASH_REDIS_REST_URL:
         required: false
       UPSTASH_REDIS_REST_TOKEN:
@@ -122,9 +124,11 @@ jobs:
           script: |
             UPSTASH_URL="${{ secrets.UPSTASH_REDIS_REST_URL }}"
             UPSTASH_TOKEN="${{ secrets.UPSTASH_REDIS_REST_TOKEN }}"
+            PLANTUML_SERVER_URL="${{ secrets.PLANTUML_SERVER_URL }}"
             ARGS=()
             [ -n "$UPSTASH_URL" ] && ARGS+=("UPSTASH_REDIS_REST_URL=$UPSTASH_URL")
-            [ -n "$UPSTASH_TOKEN" ] && ARGS+=("UPSTASH_REDIS_REST_TOKEN=$UPSTASH_TOKEN")
+            [ -n "$UPSTASH_TOKEN" ] && ARGS+=("UPSTASH_REDIS_REST_TOKEN=$UPSTASH_TOKEN") 
+            [ -n "$PLANTUML_SERVER_URL" ] && ARGS+=("PLANTUML_SERVER_URL=$PLANTUML_SERVER_URL")
             if [ ${#ARGS[@]} -eq 0 ]; then
               echo "No optional env secrets configured yet — skipping."
               exit 0
