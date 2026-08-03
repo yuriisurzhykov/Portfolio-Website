@@ -32,7 +32,7 @@ export function DiagramSurface({svg}: DiagramSurfaceProps) {
                 aria-label="Expand diagram"
                 className="group relative w-full rounded-md border border-border-subtle bg-surface-raised/30 p-sm cursor-zoom-in"
             >
-                <div className="[&_svg]:mx-auto [&_svg]:max-w-full [&_svg]:h-auto"
+                <div className="[&_svg]:mx-auto [&_svg]:max-w-full [&_svg]:h-auto!"
                      dangerouslySetInnerHTML={ {__html: svg} }/>
                 <span
                     className="absolute top-xs right-xs flex h-8 w-8 items-center justify-center rounded-md bg-surface-base border border-border-default text-text-secondary group-hover:text-text-primary">

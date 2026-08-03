@@ -93,7 +93,7 @@ export function DiagramLightbox({open, onClose, svg}: DiagramLightboxProps) {
                         </div>
                         <TransformComponent wrapperClass="!w-full !h-full" contentClass="!block !w-full !h-full">
                             <div className="flex h-full w-full items-center justify-center">
-                                <div className="w-full [&_svg]:mx-auto [&_svg]:max-w-full [&_svg]:h-auto" dangerouslySetInnerHTML={{ __html: svg }} />
+                                <div className="w-full [&_svg]:mx-auto [&_svg]:max-w-full [&_svg]:h-auto!" dangerouslySetInnerHTML={{ __html: svg }} />
                             </div>
                         </TransformComponent>
                     </>
