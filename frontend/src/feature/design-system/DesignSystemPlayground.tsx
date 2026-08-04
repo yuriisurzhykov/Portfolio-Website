@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ArrowRight, Code2, Database, Palette } from "lucide-react";
+import type { Block } from "@portfolio/backend";
 
 import { Card } from "@/shared/ui/card";
 import { IconBadge } from "@/shared/ui/icon-badge";
@@ -13,7 +14,63 @@ import { Surface } from "@/shared/ui/surface";
 import { Button } from "@/shared/ui/button";
 import { ThemeToggle } from "@/feature/theme-toggle";
 import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/code-block";
+import { Eyebrow } from "@/shared/ui/eyebrow";
+import { StatusBadge } from "@/shared/ui/status-badge";
+import { PlaceholderCover } from "@/shared/ui/placeholder-cover";
+import { Markdown } from "@/shared/ui/markdown";
+import { Diagram } from "@/shared/ui/diagram";
+import { ContentBlocks } from "@/shared/ui/content-blocks";
 import { useTranslation } from "@/shared/i18n";
+
+/**
+ * Fixed, literal Block[] just for this demo — mirrors the shape `getPostBySlug`/`getWorkBySlug`
+ * hand `<ContentBlocks>` on a real page, but with no database involved. Covers every block type
+ * whose markup isn't already exercised by another section on this page (lead/heading/paragraph
+ * reuse `<Text>`+`<Markdown>`, already covered by their own sections) — quote's blockquote style,
+ * note's tinted variants, code's `<CodeBlock>` wiring, approachList's grid, and diagram's mermaid
+ * engine are each otherwise untested in isolation. `image` is skipped: it would need a real static
+ * asset just to exist, for zero additional markup coverage beyond a plain `<img>`.
+ */
+const CONTENT_BLOCKS_DEMO: Block[] = [
+    {
+        id: "demo-quote",
+        order: 0,
+        type: "quote",
+        text: "Great UI is invisible until it breaks — then it's the only thing anyone notices.",
+        data: { attribution: "Design system playground" },
+    },
+    {
+        id: "demo-note",
+        order: 1,
+        type: "note",
+        text: "Notes reuse `noteVariantClasses` from `ContentBlocks.tsx` — the exact same mapping the block editor's live preview uses, so authoring and publishing never drift.",
+        data: { variant: "tip" },
+    },
+    {
+        id: "demo-code",
+        order: 2,
+        type: "code",
+        data: { filename: "example.ts", language: "ts", code: "export const answer = 42;" },
+    },
+    {
+        id: "demo-approach-list",
+        order: 3,
+        type: "approachList",
+        data: {
+            items: [
+                { title: "Discover", description: "Understand the real constraint before writing code." },
+                { title: "Ship", description: "A small, verifiable slice beats a big, unverified one." },
+            ],
+        },
+    },
+    {
+        id: "demo-diagram",
+        order: 4,
+        type: "diagram",
+        text: "Rendered client-side by Mermaid — no external service involved.",
+        data: { engine: "mermaid", source: "graph LR\n  A[Request] --> B[Service]\n  B --> C[(Database)]" },
+    },
+];
 
 export function DesignSystemPlayground() {
     const { ln } = useTranslation();
@@ -36,7 +93,7 @@ export function DesignSystemPlayground() {
             </header>
 
             {/* SECTION: TEXT */}
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="text">
                 <Text as="h2" variant="h2" className="font-semibold">
                     Text
                 </Text>
@@ -152,7 +209,7 @@ export function DesignSystemPlayground() {
             </section>
 
             {/* SECTION: SURFACE */}
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="surface">
                 <Text as="h2" variant="h2" className="font-semibold">
                     Surface
                 </Text>
@@ -184,7 +241,7 @@ export function DesignSystemPlayground() {
             </section>
 
             {/* SECTION: CARD */}
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="card">
                 <Text as="h2" variant="h2" className="font-semibold">
                     Card
                 </Text>
@@ -227,7 +284,7 @@ export function DesignSystemPlayground() {
             </section>
 
             {/* SECTION: ICONBADGE */}
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="icon-badge">
                 <Text as="h2" variant="h2" className="font-semibold">
                     IconBadge
                 </Text>
@@ -263,7 +320,7 @@ export function DesignSystemPlayground() {
             </section>
 
             {/* SECTION: TAG */}
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="tag">
                 <Text as="h2" variant="h2" className="font-semibold">
                     Tag
                 </Text>
@@ -300,7 +357,7 @@ export function DesignSystemPlayground() {
             </section>
 
             {/* SECTION: BUTTON */}
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="button">
                 <Text as="h2" variant="h2" className="font-semibold">
                     Button
                 </Text>
@@ -363,7 +420,7 @@ export function DesignSystemPlayground() {
             </section>
 
             {/* SECTION: PROGRESSBAR */}
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="progress">
                 <Text as="h2" variant="h2">
                     ProgressBar
                 </Text>
@@ -425,6 +482,101 @@ export function DesignSystemPlayground() {
                 </div>
             </section>
 
+            {/* SECTION: EYEBROW */}
+            <section className="space-y-md" data-component-id="eyebrow">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    Eyebrow
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Маленькая uppercase-метка над заголовками секций/страниц.
+                </Text>
+
+                <Surface className="p-lg flex flex-col gap-sm">
+                    <Eyebrow tone="accent">Case study</Eyebrow>
+                    <Eyebrow tone="muted">Selected work</Eyebrow>
+                </Surface>
+            </section>
+
+            {/* SECTION: STATUSBADGE */}
+            <section className="space-y-md" data-component-id="status-badge">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    StatusBadge
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Пилюля для статуса проекта, индикатора доступности и категорий журнала.
+                </Text>
+
+                <Surface className="p-lg flex flex-wrap gap-sm items-center">
+                    <StatusBadge tone="success">Shipped</StatusBadge>
+                    <StatusBadge tone="warning">In progress</StatusBadge>
+                    <StatusBadge tone="accent" withDot>Available</StatusBadge>
+                    <StatusBadge tone="neutral">Archived</StatusBadge>
+                </Surface>
+            </section>
+
+            {/* SECTION: PLACEHOLDERCOVER */}
+            <section className="space-y-md" data-component-id="placeholder-cover">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    PlaceholderCover
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Диагональная штриховка вместо обложки, когда у work-item ещё нет изображения.
+                </Text>
+
+                <PlaceholderCover
+                    label="No cover yet"
+                    className="h-40 w-full max-w-sm rounded-lg border border-border-subtle"
+                />
+            </section>
+
+            {/* SECTION: MARKDOWN */}
+            <section className="space-y-md" data-component-id="markdown">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    Markdown
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Инлайновый markdown (bold/italic/links) для текста блоков. Literal HTML
+                    (например, &lt;script&gt;) рендерится как безопасный текст, а не как разметка.
+                </Text>
+
+                <Surface className="p-lg">
+                    <Text variant="body">
+                        <Markdown text="**Bold**, _italic_, a [link](https://example.com), and a literal <script>alert(1)</script> tag rendered as plain, harmless text." />
+                    </Text>
+                </Surface>
+            </section>
+
+            {/* SECTION: DIAGRAM */}
+            <section className="space-y-md" data-component-id="diagram">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    Diagram
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Mermaid-движок рендерится полностью на клиенте. PlantUML здесь не показан —
+                    он зависит от отдельного self-hosted plantuml-server, который Playwright не
+                    поднимает (см. frontend/tests/README.md, section 4).
+                </Text>
+
+                <Surface className="p-lg">
+                    <Diagram engine="mermaid" source={"graph LR\n  A[Request] --> B[Service]\n  B --> C[(Database)]"} />
+                </Surface>
+            </section>
+
+            {/* SECTION: CONTENTBLOCKS */}
+            <section className="space-y-md" data-component-id="content-blocks">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    ContentBlocks
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Рендерер тела поста/case study: quote, note, code, approachList и diagram
+                    блоки в одном демонстрационном наборе.
+                </Text>
+
+                <Surface className="p-lg">
+                    <ContentBlocks blocks={CONTENT_BLOCKS_DEMO} />
+                </Surface>
+            </section>
+
             {/*SECTION: Theme Toggle*/}
             <section className="space-y-md">
                 <Text as="h2" variant="h2" tone="primary">
@@ -433,7 +585,7 @@ export function DesignSystemPlayground() {
                 <ThemeToggle />
             </section>
 
-            <section className="space-y-md">
+            <section className="space-y-md" data-component-id="code-block">
                 <Text variant="h2" tone="primary">
                     Code Block examples
                 </Text>

@@ -42,10 +42,22 @@ Playwright's built-in `toHaveScreenshot()` stores baseline images as plain PNGs 
 in this repo (`frontend/tests/visual-snapshots/`) — that's the "references" folder. Identical tooling
 choice to the legacy Vite SPA's `frontend/tests/` — nothing here needed to change to fit Next.js.
 
-**Matrix:** every real page × light/dark theme × 3 viewports (Desktop 1440×900, Tablet 834×1194,
-Mobile 390×844), all on Chromium. Locale is fixed to `en` (the site's default) to keep the matrix
-size reasonable; see section 4 for why *which* pages get pixel-diffed vs. just accessibility-
-scanned isn't the same list.
+**Two complementary visual suites, not one:**
+
+- `visual.spec.ts` — **page-level**: pixel-diffs 5 curated whole PAGES, catching "does the real
+  integrated page still look right" (routing, data-fetching, and template all together).
+- `component-gallery.spec.ts` — **component-level** (added 2026-08-03, closing out the
+  "Storybook-level component isolation" option filed in section 12's 2026-07-27 entry): pixel-diffs
+  individual `shared/ui` components in isolation on the `/storybook` playground, catching "did THIS
+  component's own appearance change" independent of whether any of the 5 curated pages happen to
+  render it in a way that would show the change. See this section's own subsection below for the
+  full design.
+
+**Matrix (page-level suite):** every real page × light/dark theme × 3 viewports (Desktop 1440×900,
+Tablet 834×1194, Mobile 390×844), all on Chromium. Locale is fixed to `en` (the site's default) to
+keep the matrix size reasonable; see section 4 for why *which* pages get pixel-diffed vs. just
+accessibility-scanned isn't the same list. The component-level suite uses a narrower matrix — see
+below — since it isn't trying to re-prove responsiveness, that's this suite's job already.
 
 **Baselines are accepted from the PR, before merging** — `master` has a repository ruleset that
 blocks direct pushes (even from a bot with `contents: write`), so it can't fix its own baselines
@@ -190,8 +202,10 @@ frontend/
       generate-pages-manifest.ts    # THE ONLY file here that talks to the database (portfolio_test, never dev)
       pages.manifest.ts             # sync reader of .generated/pages-manifest.json, used by a11y.spec.ts
       visual-fixtures.manifest.ts   # static — curated subset, used by visual.spec.ts only
+      component-gallery.manifest.ts # static — curated shared/ui components, used by component-gallery.spec.ts only
       utils/theme.ts                # seedTheme(page, "light" | "dark")
       visual.spec.ts
+      component-gallery.spec.ts
       a11y.spec.ts
       reporters/summary-reporter.ts
     visual-snapshots/               # committed baseline PNGs (the "references" folder)
@@ -206,6 +220,12 @@ frontend/
       work-navigation-engine/
       journal-list/
       journal-flowbus/
+      components/                  # component-gallery.spec.ts's baselines — one subfolder per component
+        button/
+          light-Desktop.png
+          dark-Desktop.png
+        card/                (same 2 files)
+        ...                  (one folder per frontend/tests/e2e/component-gallery.manifest.ts entry)
 ```
 
 One folder per page (5 folders × 6 files = 30), rather than 30 flat files — much easier to review
@@ -292,6 +312,67 @@ original `frontend/tests/` established with `WorkItem`/`JournalPost`. If you nee
 subset of pages for some future test type, create another manifest file, don't add a flag to the
 domain model.
 
+### Component-level snapshots (`component-gallery.spec.ts`)
+
+Unlike the page-level suite, this one doesn't need the database or a generated manifest at all —
+it screenshots individual `shared/ui` components rendered on the existing, public `/storybook`
+playground (`frontend/src/views/storybook/Storybook.tsx` +
+`frontend/src/feature/design-system/DesignSystemPlayground.tsx`), which already existed as a
+dev-only design-system showcase before this suite used it for anything.
+
+**The contract: `data-component-id`.** Every component demoed on that page sits inside a
+`<section data-component-id="<slug>">`. `component-gallery.manifest.ts` is a static
+`{ id, label }[]` array — same shape and same "hand-curated, not auto-discovered" philosophy as
+`visual-fixtures.manifest.ts` — that the spec iterates over to build one screenshot test per
+component × theme. The `id` is what ties a manifest entry to its live DOM element; it's
+deliberately decoupled from the section's visible heading text, so a copy change (renaming
+"ProgressBar" to something friendlier, say) never silently breaks a screenshot's identity.
+
+**Why hand-curated instead of just screenshotting every `<section>` found on the page:** same
+reasoning `visual-fixtures.manifest.ts` already gives for pages — explicit control over what's
+covered, and a clear place to explain *why* something is or isn't included (see the manifest
+file's own doc comment for the current exclusion list: admin-only/interactive components, and
+`Diagram`'s PlantUML engine specifically).
+
+**The staleness guard.** A hand-curated list drifting out of sync with the actual page is a real
+risk (forget to update the manifest after adding/removing a demo section — miscoverage either
+way, silently). `visual-fixtures.manifest.ts` solves this for pages by validating at *import time*
+(it throws if a path doesn't exist in the dynamic manifest). Components aren't loaded from a
+generated JSON file, so there's nothing to validate against at import time — instead,
+`component-gallery.spec.ts`'s first test navigates to `/storybook` once and asserts the exact set
+of `[data-component-id]` elements on the live page equals the manifest's `id` set. Add a demo
+section without a matching manifest entry (or vice versa) and this test fails loudly, immediately,
+instead of the gallery silently under- or over-covering the design system.
+
+**Matrix:** every manifest entry × light/dark theme, Desktop viewport only — deliberately narrower
+than the page-level suite's 3-viewport matrix. Component-level snapshots aren't trying to re-prove
+responsiveness (that's `visual.spec.ts`'s job on the 5 real pages); testing every atom at 3
+viewports would just be paying baseline-count cost for signal this suite already gets elsewhere.
+This falls out of `playwright.config.ts`'s existing project setup for free: the Tablet/Mobile
+projects already restrict to `testMatch: /visual\.spec\.ts/`, a regex `component-gallery.spec.ts`'s
+filename never matches — no config change was needed to get Desktop-only behavior.
+
+**Why PlantUML diagrams aren't demoed.** `Diagram`'s `mermaid` engine renders fully client-side —
+deterministic, no network call, safe to screenshot. Its `plantuml` engine fetches from a
+self-hosted `plantuml-server` via `/api/diagrams/plantuml/[encoded]`
+(`PLANTUML_SERVER_URL`, defaulting to `http://127.0.0.1:8081` — see that route's own comment),
+which nothing in this suite's `webServer` or CI job starts. Demoing it here would either always
+render the component's own error-fallback state (useless as a baseline) or require standing up a
+whole extra service just for this suite. Worth noting: the seed fixtures (`seed-e2e-fixtures.ts`)
+don't include a `diagram`-type block either, so this was already an *undocumented* gap in
+diagram-rendering coverage before this suite existed — not something this suite introduces, and it
+at least newly covers the Mermaid half of it.
+
+**How to add a new component to coverage:**
+
+1. Add a demo `<section data-component-id="your-slug">` to `DesignSystemPlayground.tsx` (or
+   `Storybook.tsx`, for anything that doesn't fit the playground's layout) with fixed, deterministic
+   props — no random data, no relative timestamps, nothing that would make two runs of the same
+   code produce different pixels.
+2. Add `{ id: "your-slug", label: "YourComponent" }` to `component-gallery.manifest.ts`.
+3. Run `npm run test:e2e:update:components` (or comment `/update-snapshots` on the PR — section 8 —
+   which now regenerates both suites together) to generate its first baseline.
+
 ### How to add pages
 
 - **New fixture journal post or work item, for template-variant coverage:** add it to
@@ -320,8 +401,9 @@ domain model.
 ```bash
 cd web
 
-npm run test:e2e              # seeds fixtures + generates the manifest, then runs everything (visual + a11y, all projects)
+npm run test:e2e              # seeds fixtures + generates the manifest, then runs everything (visual + components + a11y, all projects)
 npm run test:visual           # seeds fixtures + generates the manifest, then runs only tests/e2e/visual.spec.ts
+npm run test:visual:components # seeds fixtures + generates the manifest, then runs only tests/e2e/component-gallery.spec.ts
 npm run test:a11y             # seeds fixtures + generates the manifest, then runs only tests/e2e/a11y.spec.ts
 
 npx playwright test --project=Desktop         # only the Desktop viewport project
@@ -349,6 +431,14 @@ that check runs at module-import time (after the JSON manifest has already been 
 ```bash
 npm run test:e2e:update
 # equivalent to: npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts --update-snapshots
+# (page-level baselines only)
+
+npm run test:e2e:update:components
+# equivalent to: npm run test:e2e:prepare && playwright test tests/e2e/component-gallery.spec.ts --update-snapshots
+# (component-level baselines only)
+
+npm run test:e2e:update:all
+# both of the above together, in one Playwright invocation — what /update-snapshots (section 8) runs
 ```
 
 **Don't commit baselines generated this way on Windows.** As covered in section 2, Windows and
@@ -370,6 +460,9 @@ false diff the moment CI (Ubuntu) runs against it. Three options, in order of pr
      mcr.microsoft.com/playwright:v1.61.1-noble \
      bash -c "npm run test:e2e:prepare && npx playwright test tests/e2e/visual.spec.ts --update-snapshots"
    ```
+
+   (Swap `tests/e2e/visual.spec.ts` for `tests/e2e/component-gallery.spec.ts`, or drop the path
+   argument entirely, to regenerate the component-level or both suites' baselines the same way.)
 
    (Match the image tag's Playwright version to `frontend/package.json`'s `@playwright/test` version
    whenever you bump it — see section 10.) This runs the exact same Ubuntu/Chromium combination
@@ -1119,3 +1212,56 @@ real instead of returning an ignorable JSON body — that turned into a genuine 
 job-level env var in both `visual-tests.yml` and `accept-visual-baselines.yml`. Verified live:
 reproduced the hang, then confirmed `npm run test:e2e` completes cleanly (1.2m, zero timeouts)
 after the fix.
+
+### 2026-08-03 — Component-level snapshots added (`component-gallery.spec.ts`), closing the 2026-07-27 backlog item
+
+**What needed doing.** The 2026-07-27 "Correction" entry above listed four real data-strategy
+options for this suite and filed option 4 ("Storybook-level component isolation") as a future
+addition, not a rejected idea. Separately: `visual.spec.ts`'s 5 curated pages leave real gaps —
+several `shared/ui` components (`Eyebrow`, `StatusBadge`, `PlaceholderCover`, `Markdown`,
+`SkillCard`, `ContentBlocks`'s quote/note/approachList/diagram block types) don't render
+distinctively (or at all) on any of those 5 pages, so a real appearance regression in one of them
+could ship with the existing suite fully green.
+
+**What was actually done.** Added `component-gallery.manifest.ts` +
+`component-gallery.spec.ts` (see the new "Component-level snapshots" subsection in section 4 for
+the full design: the `data-component-id` contract, the manifest/live-page staleness guard, the
+narrower Desktop-only/2-theme matrix, and the PlantUML exclusion). Extended the existing
+`/storybook` playground (`DesignSystemPlayground.tsx` + `Storybook.tsx`) with `data-component-id`
+on its 8 existing demo sections plus 6 new ones (`eyebrow`, `status-badge`, `placeholder-cover`,
+`markdown`, `diagram`, `content-blocks`) and one on `Storybook.tsx`'s own `SkillsSection`
+(`skill-card`) — 15 components total. Added `test:visual:components` / `test:e2e:update:components`
+/ `test:e2e:update:all` npm scripts, and repointed `accept-visual-baselines.yml`'s regenerate step
+from `test:e2e:update` to `test:e2e:update:all` so a single `/update-snapshots` comment accepts
+both suites together. `visual-tests.yml` needed zero changes — it already runs bare
+`npm run test:e2e` (unscoped `playwright test`), which picks up the new spec file automatically.
+
+**A real, pre-existing gap surfaced while scoping this, not introduced by it:** confirmed (by
+reading `seed-e2e-fixtures.ts`) that no seeded fixture currently includes a `diagram`-type block —
+`Diagram`'s Mermaid *and* PlantUML rendering paths had zero automated visual coverage before this
+change, page-level or otherwise. This change closes the Mermaid half (fully client-side,
+deterministic, safe to screenshot). The PlantUML half stays open — its self-hosted
+`plantuml-server` dependency isn't started anywhere in this suite's `webServer` or CI job — and is
+called out explicitly as a known limitation in section 4 rather than silently left uncovered with
+no explanation.
+
+**Design decision worth recording:** considered auto-discovering every `[data-component-id]` (or
+even every `<section>`) on the page at runtime instead of maintaining a separate manifest file, to
+avoid the exact "two files can drift apart" risk `visual-fixtures.manifest.ts` already has for
+pages. Rejected for the same reason the page-level suite didn't do this either: Playwright's
+two-pass discovery model (section 11) needs a synchronous, statically-known test list at
+collection time, and a live DOM query can only happen inside a running test, not before one. Kept
+the manifest, but added the staleness-guard test as the mitigation — same trade-off the existing
+page-level suite already made, applied consistently rather than solved differently just because it
+was a second, later addition.
+
+**Verified live:** `npx tsc --noEmit` on both `frontend/tsconfig.json` (app code) and
+`frontend/tests/tsconfig.json` (spec/manifest code) — the only pre-existing error surfaced
+(`utils/theme.ts`'s `window` reference, `types: ["node"]` not including `"dom"`) was confirmed via
+`git stash` to already exist before this change, unrelated to it. Ran
+`npm run test:visual:components` locally against a real built/started app to confirm the guard
+test and every screenshot test actually execute (screenshot tests fail with "no baseline exists"
+on a fresh checkout, which is expected — same as the page-level suite's very first run before its
+initial baselines existed, per this section's 2026-07-17 entry). Real baselines get generated the
+same way the original ones were: CI or Docker (Linux), never a raw local Windows run — see section
+2's font-rendering explanation, unchanged and equally true for component screenshots.
