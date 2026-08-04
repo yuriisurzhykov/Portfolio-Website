@@ -1,0 +1,46 @@
+/**
+ * COMPONENT GALLERY — the curated list of `shared/ui` components screenshot-tested in isolation.
+ * ----------------------------------------------------------------------------------------------
+ * Complements `visual-fixtures.manifest.ts`: that file pixel-diffs whole PAGES (catches "does the
+ * real integrated page still look right"), this one pixel-diffs individual COMPONENTS rendered on
+ * the `/storybook` playground (catches "did THIS component's own appearance change", independent
+ * of whether any of the 5 curated pages happen to use it in a way that would show the change).
+ *
+ * Each `id` below must match exactly one `data-component-id="<id>"` attribute on a `<section>` in
+ * `frontend/src/feature/design-system/DesignSystemPlayground.tsx` or `frontend/src/views/storybook/Storybook.tsx`.
+ * `component-gallery.spec.ts`'s own guard test asserts this list and the live page's
+ * `[data-component-id]` elements are exactly the same set — so forgetting to add/remove an entry
+ * here when a demo section is added/removed fails loudly in CI instead of silently under- or
+ * over-covering the design system.
+ *
+ * Deliberately excluded (see frontend/tests/README.md, section 4, for the full reasoning):
+ * - Admin-only/interactive components (`admin-list-item`, `icon-picker`, `block-editor`, `drawer`,
+ *   `back-to-top`, `status-toggle`, `status-page`, `form/*`) — need auth context or real
+ *   interaction to show anything, or are better covered by page-level tests.
+ * - `Diagram`'s PlantUML engine — depends on a self-hosted `plantuml-server` that Playwright's
+ *   `webServer` never starts; only the fully client-side Mermaid engine is demoed.
+ * - `Section` — already exercised as the outer wrapper of this very page and of every page-level
+ *   fixture; a redundant isolated demo would add baseline weight with no new signal.
+ */
+export interface ComponentGalleryEntry {
+    id: string;
+    label: string;
+}
+
+export const componentGalleryManifest: ComponentGalleryEntry[] = [
+    { id: "text", label: "Text" },
+    { id: "surface", label: "Surface" },
+    { id: "card", label: "Card" },
+    { id: "icon-badge", label: "IconBadge" },
+    { id: "tag", label: "Tag" },
+    { id: "button", label: "Button" },
+    { id: "progress", label: "ProgressBar" },
+    { id: "code-block", label: "CodeBlock" },
+    { id: "eyebrow", label: "Eyebrow" },
+    { id: "status-badge", label: "StatusBadge" },
+    { id: "placeholder-cover", label: "PlaceholderCover" },
+    { id: "markdown", label: "Markdown" },
+    { id: "diagram", label: "Diagram (mermaid)" },
+    { id: "content-blocks", label: "ContentBlocks" },
+    { id: "skill-card", label: "SkillCard" },
+];
