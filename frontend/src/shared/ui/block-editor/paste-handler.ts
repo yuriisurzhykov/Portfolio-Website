@@ -229,11 +229,22 @@ function insertSegments(editor: PortfolioBlockNoteEditor, segments: PasteSegment
 
     let anchor = splitAnchorAtCursor(editor, editor.getTextCursorPosition().block);
     let firstNonTextSegment = true;
+    // True right after inserting a fence/quote block — see this function's
+    // doc comment for why that specific anchor is never safe to paste into
+    // directly.
+    let anchorIsFenceOrQuote = false;
 
     for (const segment of segments) {
         if (segment.kind === "text") {
             if (!segment.text.trim()) {
                 continue;
+            }
+            if (anchorIsFenceOrQuote) {
+                [anchor] = editor.insertBlocks(
+                    [{ type: "paragraph", content: [] } as PortfolioPartialBlock],
+                    anchor,
+                    "after",
+                ) as PortfolioBlock[];
             }
             editor.setTextCursorPosition(anchor, "end");
             // Not exercised by any automated test — jsdom has no
@@ -246,6 +257,7 @@ function insertSegments(editor: PortfolioBlockNoteEditor, segments: PasteSegment
             // documented jsdom limitation on mounted-editor behavior.
             editor.pasteMarkdown(segment.text);
             anchor = editor.getTextCursorPosition().block;
+            anchorIsFenceOrQuote = false;
             continue;
         }
 
@@ -257,6 +269,7 @@ function insertSegments(editor: PortfolioBlockNoteEditor, segments: PasteSegment
             [anchor] = editor.insertBlocks([block], anchor, "after") as PortfolioBlock[];
         }
         firstNonTextSegment = false;
+        anchorIsFenceOrQuote = true;
     }
 }
 

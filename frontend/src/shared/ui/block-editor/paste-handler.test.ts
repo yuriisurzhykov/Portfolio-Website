@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BlockNoteEditor, getBlockInfoFromTransaction } from "@blocknote/core";
 import { TextSelection, type Transaction } from "prosemirror-state";
 import { blockNoteSchema } from "./schema";
@@ -183,6 +183,63 @@ describe("smartPasteHandler", () => {
         expect(editor.document.map((b) => b.type)).toEqual(["codeSnippet", "quote"]);
         expect(editor.document[0]).toMatchObject({ props: { language: "js", code: "const x = 1;" } });
         expect(editor.document[1]).toMatchObject({ content: [{ type: "text", text: "Outro quote" }] });
+    });
+
+    /**
+     * Regression test for a real bug found pasting a long mixed document: a
+     * `"text"` segment right after a `"quote"` segment was pasted with the
+     * cursor left INSIDE the quote's own inline content (`setTextCursorPosition(quoteBlock, "end")`
+     * still sits inside that quote, not after it as a sibling), merging the
+     * next heading/paragraph into the quote's text instead of creating a
+     * real separate block. `pasteMarkdown` is stubbed to a no-op — this
+     * isn't testing what `pasteMarkdown` itself does with the text (that
+     * needs a real `ClipboardEvent`, see the comment on `insertSegments`'
+     * "text" branch), only that `insertSegments` hands it a cursor sitting
+     * on a fresh, ordinary paragraph — never inside the quote — which is the
+     * actual invariant this bug violated.
+     */
+    it("inserts a fresh empty paragraph before pasting text that follows a quote, instead of pasting inside the quote itself", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let cursorBlockTypeAtPasteTime: string | undefined;
+        const pasteMarkdownSpy = vi.spyOn(editor, "pasteMarkdown").mockImplementation(() => {
+            cursorBlockTypeAtPasteTime = editor.getTextCursorPosition().block.type;
+        });
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("> A quote\n## A heading"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["quote", "paragraph"]);
+        expect(editor.document[1]).toMatchObject({ content: [] });
+        expect(cursorBlockTypeAtPasteTime).toBe("paragraph");
+        expect(pasteMarkdownSpy).toHaveBeenCalledExactlyOnceWith("## A heading");
+    });
+
+    /**
+     * Same bug, but for the `"fence"` -> `"text"` transition: a `codeSnippet`/
+     * `diagram` anchor has `content: "none"` (no inline content at all), so
+     * pasting straight into it is even more clearly invalid than the quote
+     * case above.
+     */
+    it("inserts a fresh empty paragraph before pasting text that follows a fenced code block, instead of pasting into the content-less code block", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let cursorBlockTypeAtPasteTime: string | undefined;
+        const pasteMarkdownSpy = vi.spyOn(editor, "pasteMarkdown").mockImplementation(() => {
+            cursorBlockTypeAtPasteTime = editor.getTextCursorPosition().block.type;
+        });
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("```js\nconst x = 1;\n```\nSome explanatory text"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["codeSnippet", "paragraph"]);
+        expect(editor.document[1]).toMatchObject({ content: [] });
+        expect(cursorBlockTypeAtPasteTime).toBe("paragraph");
+        expect(pasteMarkdownSpy).toHaveBeenCalledExactlyOnceWith("Some explanatory text");
     });
 
     /**
