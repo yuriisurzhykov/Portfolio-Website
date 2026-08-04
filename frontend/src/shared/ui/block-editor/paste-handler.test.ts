@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BlockNoteEditor, getBlockInfoFromTransaction } from "@blocknote/core";
 import { TextSelection, type Transaction } from "prosemirror-state";
 import { blockNoteSchema } from "./schema";
-import { splitPastedMarkdown, smartPasteHandler } from "./paste-handler";
+import { splitPastedMarkdown, smartPasteHandler, normalizeLineEndings } from "./paste-handler";
 
 /** Places the cursor at a character offset within `block`'s own inline content — same `getBlockInfoFromTransaction` technique `paste-handler.ts`'s own split logic uses, so these tests exercise the exact position math it relies on. */
 function placeCursorAt(editor: ReturnType<typeof BlockNoteEditor.create>, block: { id: string }, offset: number) {
@@ -78,6 +78,16 @@ describe("splitPastedMarkdown", () => {
     });
 });
 
+describe("normalizeLineEndings", () => {
+    it("converts every CRLF to a bare LF", () => {
+        expect(normalizeLineEndings("a\r\nb\r\nc")).toBe("a\nb\nc");
+    });
+
+    it("leaves text with no CRLF completely unchanged", () => {
+        expect(normalizeLineEndings("a\nb\nc")).toBe("a\nb\nc");
+    });
+});
+
 describe("smartPasteHandler", () => {
     function fakeClipboardEvent(text: string): ClipboardEvent {
         return { clipboardData: { getData: () => text } } as unknown as ClipboardEvent;
@@ -96,6 +106,69 @@ describe("smartPasteHandler", () => {
         });
         expect(delegated).toBe(true);
         expect(result).toBe(true);
+    });
+
+    /**
+     * Regression test for a real bug found pasting in an ACTUAL browser
+     * (jsdom alone never would have caught this — see this file's other
+     * comments on `ClipboardEvent` not existing there): a real clipboard's
+     * `text/plain` uses `\r\n`, even when the copied source used bare
+     * `\n`. A plain markdown list with no fence/quote used to delegate
+     * straight to `defaultPasteHandler()`, which would re-read the
+     * clipboard itself and hand `@blocknote/core`'s own markdown-to-HTML
+     * tokenizer the UNNORMALIZED `\r\n` text — its list-item regex
+     * (`(.*)$`, no `/m` flag) never matches a `\r`-terminated line, so
+     * every list item silently became a plain paragraph with the literal
+     * `-`/`*` marker left in the text (verified directly against
+     * `markdownToHtml` — see paste-handler.ts's `normalizeLineEndings`
+     * comment). `pasteMarkdown` is stubbed to a no-op, same technique as
+     * the anchor-position regression tests below — this isn't testing
+     * BlockNote's own parser, only that OUR code hands it `\n`, never `\r`.
+     */
+    it("handles a CRLF plain-text list itself (not defaultPasteHandler), with line endings normalized to LF first", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        let textPassedToPasteMarkdown: string | undefined;
+        vi.spyOn(editor, "pasteMarkdown").mockImplementation((text: string) => {
+            textPassedToPasteMarkdown = text;
+        });
+
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("- a sequence number;\r\n- a timestamp;\r\n"),
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+
+        expect(delegated).toBe(false);
+        expect(result).toBe(true);
+        expect(textPassedToPasteMarkdown).toBe("- a sequence number;\n- a timestamp;\n");
+    });
+
+    it("still delegates to defaultPasteHandler for plain text with no fence/quote when there's no CRLF to normalize (no behavior change)", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("- a sequence number;\n- a timestamp;\n"),
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+        expect(delegated).toBe(true);
+        expect(result).toBe(true);
+    });
+
+    it("normalizes CRLF before segmenting too, so a fence/quote segment's text is already clean LF", () => {
+        const source = "> A quote\r\n\r\n```js\r\nconst x = 1;\r\n```";
+        expect(splitPastedMarkdown(normalizeLineEndings(source))).toEqual([
+            { kind: "quote", text: "A quote" },
+            { kind: "text", text: "" },
+            { kind: "fence", language: "js", code: "const x = 1;" },
+        ]);
     });
 
     it("delegates to defaultPasteHandler when clipboardData has no text/plain data at all", () => {

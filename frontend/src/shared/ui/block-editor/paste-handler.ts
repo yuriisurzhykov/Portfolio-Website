@@ -283,23 +283,60 @@ interface PasteHandlerContext {
 }
 
 /**
+ * Real clipboards hand back `\r\n` line endings — confirmed live, not
+ * assumed: a real Chromium paste (Playwright + a genuine OS clipboard
+ * round-trip, `navigator.clipboard.writeText()` then a real `Control+V`)
+ * returns `\r\n` in `clipboardData.getData("text/plain")` even when the
+ * text that was written used bare `\n` throughout. `@blocknote/core`'s own
+ * markdown-to-HTML tokenizer (`markdownToHtml.ts`, used internally by
+ * `editor.pasteMarkdown`) tokenizes line-by-line with several regexes
+ * shaped `(.*)$` and NO `/m` flag — JavaScript's `.` never matches `\r`
+ * (along with `\n`), and without `/m`, `$` only matches the literal end of
+ * the string, so a `\r`-terminated line can satisfy neither and the whole
+ * regex fails to match. The list-item regex is exactly this shape, so
+ * EVERY line of a pasted bullet/numbered list silently misses list
+ * detection and falls through to a plain paragraph, keeping the literal
+ * `-`/`*`/`1.` marker as visible text — verified directly: the exact same
+ * text produces a real `<ul><li>` for `\n` endings and a run of
+ * `<p>-   item</p>` for `\r\n`. (Headings/quotes happen to survive because
+ * their own regexes end in a `\s*` right before `$`, and `\s` — unlike
+ * `.` — does include `\r`.)
+ */
+export function normalizeLineEndings(text: string): string {
+    return text.replace(/\r\n/g, "\n");
+}
+
+/**
  * `useCreateBlockNote`'s `pasteHandler` option (see `BlockNoteEditor.tsx`).
  * Only steps in when the pasted plain text actually contains a fence or a
- * blockquote — anything else (including a paste BlockNote already handles
- * well: rich HTML from another app, a plain markdown heading/list) falls
- * straight through to `defaultPasteHandler()`, unchanged from BlockNote's
- * own default behavior.
+ * blockquote, OR needed CRLF normalization (see `normalizeLineEndings`) —
+ * anything else (rich HTML from another app, or already-`\n`-only plain
+ * markdown) falls straight through to `defaultPasteHandler()`, unchanged
+ * from BlockNote's own default behavior.
+ *
+ * The CRLF case can't simply normalize and still delegate:
+ * `defaultPasteHandler()` re-reads `event.clipboardData` itself rather
+ * than accepting the normalized string, so delegating would hand
+ * BlockNote's own `pasteMarkdown` the ORIGINAL, still-`\r\n` text and hit
+ * the exact bug this function exists to avoid. Handling it here instead
+ * (one direct `editor.pasteMarkdown` call with the normalized text) is
+ * the only way to guarantee the parser never sees a `\r`.
  */
 export function smartPasteHandler({ event, editor, defaultPasteHandler }: PasteHandlerContext): boolean | undefined {
-    const plainText = event.clipboardData?.getData("text/plain");
-    if (!plainText) {
+    const rawPlainText = event.clipboardData?.getData("text/plain");
+    if (!rawPlainText) {
         return defaultPasteHandler();
     }
+    const plainText = normalizeLineEndings(rawPlainText);
 
     const segments = splitPastedMarkdown(plainText);
-    const needsCustomHandling = segments.some((segment) => segment.kind !== "text");
-    if (!needsCustomHandling) {
-        return defaultPasteHandler();
+    const hasFenceOrQuote = segments.some((segment) => segment.kind !== "text");
+    if (!hasFenceOrQuote) {
+        if (plainText === rawPlainText) {
+            return defaultPasteHandler();
+        }
+        editor.pasteMarkdown(plainText);
+        return true;
     }
 
     insertSegments(editor, segments);
