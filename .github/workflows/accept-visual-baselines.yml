@@ -178,13 +178,13 @@ jobs:
             const outcome = "${{ job.status }}";
             const changed = "${{ steps.commit.outputs.changed }}";
             let body;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             if (outcome !== "success") {
-              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
               body = `❌ \`/update-snapshots\` failed — check the [workflow run](${runUrl}) for details.`;
             } else if (changed === "true") {
               body = "✅ Baselines updated and pushed to this PR's branch. The visual check will re-run automatically.";
             } else {
-              body = "ℹ️ No baseline differences found — nothing to update.";
+              body = "ℹ️ No baseline differences found — nothing to update. Check the [workflow run](${runUrl}) for details.";
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
