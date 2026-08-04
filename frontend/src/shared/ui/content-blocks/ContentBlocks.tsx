@@ -41,18 +41,21 @@ export const noteVariantClasses: Record<"info" | "warning" | "tip", string> = {
 };
 
 /**
- * Renders one level of a "list" block's nested `items` tree — recurses into
- * `item.children` for a sub-list, same shape the admin editor's Tab/Shift-Tab
- * nesting produces (see `shared/ui/block-editor/convert.ts`). A plain
- * `<ul>`/`<ol>` per level (not one shared list re-indented with padding) is
- * what lets a nested `<ol>` restart its own numbering from 1, matching
- * standard list semantics.
+ * Renders one level of a "list" block's `items`. A plain `<ul>`/`<ol>` per
+ * level (not one shared list re-indented with padding) is what lets a
+ * nested `<ol>` restart its own numbering from 1, matching standard list
+ * semantics.
  *
- * `item.blocks` — anything OTHER than a nested list item Tab-nested under
- * this item (an image/code/diagram/approachList/etc. — see `blocks.ts`'s
- * comment on `ListItemInput`) — renders via `renderBlock` AFTER the item's
- * own text and BEFORE any nested sub-list, keyed by array index (these
- * entries have no `id` of their own, same as `approachList`'s items).
+ * `item.blocks` — EVERYTHING Tab-nested under this item, in its real order
+ * (see `blocks.ts`'s comment on `ListItemInput`) — renders via `renderBlock`
+ * after the item's own text, keyed by array index (these entries have no
+ * `id` of their own, same as `approachList`'s items). A nested sub-list is
+ * just another entry in this same array (`renderBlock`'s own `case "list"`
+ * recurses back into `<ListItems>` for it, with ITS OWN `ordered` value —
+ * not this level's), not a separate field — see `convert.ts`'s comment on
+ * why a separate `children` field used to lose both a nested sub-list's own
+ * ordered-vs-unordered choice AND its real position relative to other
+ * attached content.
  */
 function ListItems({items, ordered, ln}: { items: ListItemInput[]; ordered: boolean; ln: Ln }) {
     const ListTag = ordered ? "ol" : "ul";
@@ -64,7 +67,6 @@ function ListItems({items, ordered, ln}: { items: ListItemInput[]; ordered: bool
                         <Markdown text={ item.text }/>
                     </Text>
                     { item.blocks.map((attached, attachedIndex) => renderBlock(attached, ln, attachedIndex)) }
-                    { item.children.length > 0 && <ListItems items={ item.children } ordered={ ordered } ln={ ln }/> }
                 </li>
             )) }
         </ListTag>

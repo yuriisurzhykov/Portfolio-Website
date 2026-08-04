@@ -13,7 +13,7 @@ const oneOfEachBlockType: Block[] = [
     { id: "6", order: 5, type: "image", text: "A caption", data: { src: "/x.png", alt: "alt text" } },
     { id: "7", order: 6, type: "code", data: { filename: "a.kt", language: "kotlin", code: "fun main() {}" } },
     { id: "8", order: 7, type: "approachList", data: { items: [{ title: "T", description: "D" }] } },
-    { id: "9", order: 8, type: "list", data: { ordered: false, items: [{ text: "An item", children: [], blocks: [] }] } },
+    { id: "9", order: 8, type: "list", data: { ordered: false, items: [{ text: "An item", blocks: [] }] } },
 ];
 
 describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression this guards", () => {
@@ -114,14 +114,21 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
                     items: [
                         {
                             text: "A **bold** top-level item",
-                            children: [{
-                                text: "A child item",
-                                children: [{ text: "A grandchild item", children: [], blocks: [] }],
-                                blocks: [],
+                            blocks: [{
+                                type: "list",
+                                data: {
+                                    ordered: false,
+                                    items: [{
+                                        text: "A child item",
+                                        blocks: [{
+                                            type: "list",
+                                            data: { ordered: false, items: [{ text: "A grandchild item", blocks: [] }] },
+                                        }],
+                                    }],
+                                },
                             }],
-                            blocks: [],
                         },
-                        { text: "A second top-level item", children: [], blocks: [] },
+                        { text: "A second top-level item", blocks: [] },
                     ],
                 },
             },
@@ -134,14 +141,17 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
         const list = result[0];
         expect(list.type === "list" && list.data.ordered).toBe(false);
         expect(list.type === "list" && list.data.items[0].text).toBe("A **bold** top-level item");
-        expect(list.type === "list" && list.data.items[0].children[0].text).toBe("A child item");
-        expect(list.type === "list" && list.data.items[0].children[0].children[0].text).toBe("A grandchild item");
+        const childList = list.type === "list" ? list.data.items[0].blocks[0] : undefined;
+        const child = childList?.type === "list" ? childList.data.items[0] : undefined;
+        expect(child?.text).toBe("A child item");
+        const grandchildList = child?.blocks[0];
+        expect(grandchildList?.type === "list" && grandchildList.data.items[0].text).toBe("A grandchild item");
         expect(list.type === "list" && list.data.items[1].text).toBe("A second top-level item");
     });
 
     it("round-trips an ordered list distinctly from an unordered one", () => {
         const blocks: Block[] = [
-            { id: "1", order: 0, type: "list", data: { ordered: true, items: [{ text: "First", children: [], blocks: [] }] } },
+            { id: "1", order: 0, type: "list", data: { ordered: true, items: [{ text: "First", blocks: [] }] } },
         ];
         const initialContent = blocksToPartialBlocks(blocks);
         const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
@@ -157,9 +167,9 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
      */
     it("splits into separate list blocks when interrupted by a non-list block, rather than merging them", () => {
         const blocks: Block[] = [
-            { id: "1", order: 0, type: "list", data: { ordered: false, items: [{ text: "First list item", children: [], blocks: [] }] } },
+            { id: "1", order: 0, type: "list", data: { ordered: false, items: [{ text: "First list item", blocks: [] }] } },
             { id: "2", order: 1, type: "paragraph", text: "Interrupting paragraph" },
-            { id: "3", order: 2, type: "list", data: { ordered: false, items: [{ text: "Second list item", children: [], blocks: [] }] } },
+            { id: "3", order: 2, type: "list", data: { ordered: false, items: [{ text: "Second list item", blocks: [] }] } },
         ];
         const initialContent = blocksToPartialBlocks(blocks);
         const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
@@ -175,9 +185,7 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
      * previous session: a non-list block (image/code/diagram/approachList)
      * Tab-nested under a list item used to lose its structure entirely on
      * save — either flattened to plain text or dropped outright. This
-     * round-trips through the REAL editor, exercising both directions
-     * (`blocksToPartialBlocks` builds the BlockNote `children` tree,
-     * `editorBlocksToBlockInputs` reads it back via `childToAttachedBlock`).
+     * round-trips through the REAL editor.
      */
     it("round-trips a non-list block (an image) attached to a list item via `blocks`, preserving its structure", () => {
         const blocks: Block[] = [
@@ -187,7 +195,6 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
                     ordered: false,
                     items: [{
                         text: "An item with an image under it",
-                        children: [],
                         blocks: [{ type: "image", data: { src: "/x.png", alt: "alt text" } }],
                     }],
                 },
@@ -211,29 +218,98 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
         });
     });
 
-    it("keeps an attached (non-list) block SEPARATE from real sub-list `children`, even when both are nested under the same item", () => {
+    /**
+     * Regression test for a real bug found by automated PR review, not by
+     * the tests above: a nested sub-list used to have nowhere to store its
+     * OWN `ordered` value — `listItemToPartialBlock` inherited the OUTER
+     * list's `itemType` for every descendant, so a numbered sub-list under
+     * a bullet parent silently became bullets on save. Folding sub-lists
+     * into `blocks` as ordinary nested `"list"` entries (each with its own
+     * `data.ordered`) fixes this structurally — this proves it survives a
+     * REAL round-trip through the editor, not just the schema in isolation
+     * (already covered in `blocks.test.ts`).
+     */
+    it("keeps a nested sub-list's OWN ordered value, independent of its parent's, through a real editor round-trip", () => {
         const blocks: Block[] = [
             {
                 id: "1", order: 0, type: "list",
                 data: {
-                    ordered: false,
+                    ordered: false, // outer: bullets
                     items: [{
                         text: "Parent item",
-                        children: [{ text: "A real sub-item", children: [], blocks: [] }],
-                        blocks: [{ type: "code", data: { filename: "a.kt", code: "fun main() {}" } }],
+                        blocks: [{
+                            type: "list",
+                            data: { ordered: true, items: [{ text: "Numbered sub-item", blocks: [] }] }, // inner: numbers
+                        }],
                     }],
                 },
             },
         ];
         const initialContent = blocksToPartialBlocks(blocks);
         const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
-        const result = editorBlocksToBlockInputs(editor, editor.document);
 
-        const item = result[0].type === "list" ? result[0].data.items[0] : undefined;
-        expect(item?.children).toHaveLength(1);
-        expect(item?.children[0].text).toBe("A real sub-item");
-        expect(item?.blocks).toHaveLength(1);
-        expect(item?.blocks[0]).toMatchObject({ type: "code", data: { filename: "a.kt", code: "fun main() {}" } });
+        // The nested item should be a real `numberedListItem` in the editor, not a `bulletListItem`.
+        const parentItemBlock = editor.document[0];
+        expect(parentItemBlock.type).toBe("bulletListItem");
+        expect(parentItemBlock.children[0].type).toBe("numberedListItem");
+
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        const outer = result[0];
+        expect(outer).toMatchObject({ type: "list", data: { ordered: false } });
+        const inner = outer.type === "list" ? outer.data.items[0].blocks[0] : undefined;
+        expect(inner).toMatchObject({ type: "list", data: { ordered: true } });
+        expect(inner?.type === "list" && inner.data.items[0].text).toBe("Numbered sub-item");
+    });
+
+    /**
+     * Regression test for the second bug found by automated PR review:
+     * splitting one ordered BlockNote `children` array into two
+     * separately-typed DB fields (a `children: ListItemInput[]` for
+     * sub-list items, `blocks: BlockInput[]` for everything else) lost the
+     * real relative order between them — reconstruction always put every
+     * sub-list item BEFORE every attached block, regardless of their
+     * actual order. Folding both into ONE `blocks` array (walked in its
+     * one true order) fixes this structurally. Proves it two ways: a
+     * sub-list BEFORE an attached image, and an attached image BEFORE a
+     * sub-list — if order were still being reshuffled, at least one of
+     * these would fail.
+     */
+    it("preserves the real relative order between a nested sub-list and an attached block, in either order", () => {
+        const subListFirst: Block[] = [{
+            id: "1", order: 0, type: "list",
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Item",
+                    blocks: [
+                        { type: "list", data: { ordered: false, items: [{ text: "Sub-item", blocks: [] }] } },
+                        { type: "image", data: { src: "/x.png", alt: "alt" } },
+                    ],
+                }],
+            },
+        }];
+        const imageFirst: Block[] = [{
+            id: "1", order: 0, type: "list",
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Item",
+                    blocks: [
+                        { type: "image", data: { src: "/x.png", alt: "alt" } },
+                        { type: "list", data: { ordered: false, items: [{ text: "Sub-item", blocks: [] }] } },
+                    ],
+                }],
+            },
+        }];
+
+        for (const [label, blocks] of [["sub-list first", subListFirst], ["image first", imageFirst]] as const) {
+            const initialContent = blocksToPartialBlocks(blocks);
+            const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+            const result = editorBlocksToBlockInputs(editor, editor.document);
+            const attached = result[0].type === "list" ? result[0].data.items[0].blocks : [];
+            const order = attached.map((b) => b.type);
+            expect(order, label).toEqual(label === "sub-list first" ? ["list", "image"] : ["image", "list"]);
+        }
     });
 
     /**
@@ -244,8 +320,8 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
      */
     it("splits into separate list blocks when the item type changes from bullet to numbered with no gap", () => {
         const blocks: Block[] = [
-            { id: "1", order: 0, type: "list", data: { ordered: false, items: [{ text: "Bullet item", children: [], blocks: [] }] } },
-            { id: "2", order: 1, type: "list", data: { ordered: true, items: [{ text: "Numbered item", children: [], blocks: [] }] } },
+            { id: "1", order: 0, type: "list", data: { ordered: false, items: [{ text: "Bullet item", blocks: [] }] } },
+            { id: "2", order: 1, type: "list", data: { ordered: true, items: [{ text: "Numbered item", blocks: [] }] } },
         ];
         const initialContent = blocksToPartialBlocks(blocks);
         const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });

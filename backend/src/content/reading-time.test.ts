@@ -33,7 +33,7 @@ describe("estimateReadMins", () => {
             {type: "code", data: {filename: "a.kt", code: words(10000)}}, // must not count
             {type: "image", text: words(20), data: {src: "/x.png", alt: "alt"}},
             {type: "approachList", data: {items: [{title: words(5), description: words(5)}]}},
-            {type: "list", data: {ordered: false, items: [{text: words(20), children: [], blocks: []}]}},
+            {type: "list", data: {ordered: false, items: [{text: words(20), blocks: []}]}},
         ];
         // 100 + 10 + 300 + 50 + 40 + 0 + 20 + 10 + 20 = 550 words -> 550/200 = 2.75 -> rounds to 3
         expect(estimateReadMins(blocks)).toBe(3);
@@ -91,23 +91,34 @@ describe("extractProse", () => {
         })).toBe("");
     })
 
-    it("joins list item text in order, flattening nested children depth-first", () => {
+    it("joins list item text in order, flattening a nested sub-list (via `blocks`) depth-first", () => {
         const block: BlockInput = {
             type: "list",
             data: {
                 ordered: false,
                 items: [
-                    {text: "a", children: [{text: "b", children: [], blocks: []}], blocks: []},
-                    {text: "c", children: [], blocks: []},
+                    {text: "a", blocks: [{type: "list", data: {ordered: true, items: [{text: "b", blocks: []}]}}]},
+                    {text: "c", blocks: []},
                 ],
             },
         };
         expect(extractProse(block)).toBe("a b c");
     });
 
-    it("returns an empty string for a list whose items have no text and no children", () => {
-        const block: BlockInput = {type: "list", data: {ordered: true, items: [{text: "", children: [], blocks: []}]}};
+    it("returns an empty string for a list whose items have no text and no blocks", () => {
+        const block: BlockInput = {type: "list", data: {ordered: true, items: [{text: "", blocks: []}]}};
         expect(extractProse(block)).toBe("");
+    });
+
+    it("counts an attached (non-list) block's own prose too — e.g. an image caption nested under a list item", () => {
+        const block: BlockInput = {
+            type: "list",
+            data: {
+                ordered: false,
+                items: [{text: "a", blocks: [{type: "image", text: "a caption", data: {src: "/x.png", alt: "alt"}}]}],
+            },
+        };
+        expect(extractProse(block)).toBe("a a caption");
     });
 });
 

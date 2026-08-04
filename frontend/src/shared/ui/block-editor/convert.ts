@@ -99,33 +99,31 @@ function inlineContentToMarkdown(editor: PortfolioEditor, content: InlineContent
 }
 
 /**
- * One `ListItemInput` (DB shape — `text`/`children`, no `type`) → one
- * BlockNote list-item `PartialBlock`, recursing into `children` for nested
- * sub-lists. `itemType` is threaded through from the parent `"list"`
- * block's `data.ordered` flag — every item in a single DB `"list"` block
- * shares one bullet-vs-numbered choice, matching how `data.ordered` is
- * stored once per block, not once per item.
+ * One `ListItemInput` (DB shape — `text`/`blocks`, no `type`) → one
+ * BlockNote list-item `PartialBlock`. `itemType` is threaded through from
+ * the parent `"list"` block's `data.ordered` flag — every item in a single
+ * DB `"list"` block shares one bullet-vs-numbered choice, matching how
+ * `data.ordered` is stored once per block, not once per item.
  *
- * `item.blocks` (anything OTHER than a nested list item — see `blocks.ts`'s
- * comment on `ListItemInput`) is converted via the SAME `blockToPartialBlocks`
- * used for top-level document blocks, and interleaved into the SAME
- * `children` array BlockNote itself uses — BlockNote doesn't distinguish
- * "a list-item child" from "some other block Tab-nested under this item",
- * both just live in one `children` array; this DB-side model is the one
- * that splits them into two fields, purely to keep `children`'s own type
- * (`ListItemInput[]`, always more list items) simple.
+ * `item.blocks` — EVERYTHING Tab-nested under this item, in their real
+ * order, including a continued sub-list as an ordinary nested `"list"`
+ * entry (see `blocks.ts`'s comment on `ListItemInput`) — converts via the
+ * SAME `blockToPartialBlocks` used for top-level document blocks, straight
+ * into BlockNote's own `children` array. A nested `"list"` entry expands
+ * through `blockToPartialBlocks`'s own `case "list"` into its own
+ * `bulletListItem`/`numberedListItem` siblings, WITH ITS OWN `itemType`
+ * derived from its own `data.ordered` — never the parent's — so a numbered
+ * sub-list under a bullet parent (or vice versa) round-trips correctly.
  */
 function listItemToPartialBlock(
     parsingEditor: PortfolioEditor,
     item: ListItemInput,
     itemType: ListItemBlockType,
 ): PortfolioPartialBlock {
-    const listItemChildren = item.children.map((child) => listItemToPartialBlock(parsingEditor, child, itemType));
-    const attachedChildren = item.blocks.flatMap((attached) => blockToPartialBlocks(parsingEditor, attached));
     return {
         type: itemType,
         content: markdownToInlineContent(parsingEditor, item.text),
-        children: [...listItemChildren, ...attachedChildren],
+        children: item.blocks.flatMap((attached) => blockToPartialBlocks(parsingEditor, attached)),
     } as PortfolioPartialBlock;
 }
 
@@ -262,70 +260,32 @@ function convertSingleBlock(editor: PortfolioEditor, block: NonListPortfolioBloc
 }
 
 /**
- * A block nested (via Tab) under a list item is normally another list item
- * — BlockNote's own `handleEnter`/`Tab` keep creating the same item type
- * while you're inside a list (see the plan's research into
- * `ListItemKeyboardShortcuts.ts`). Recurses into `ListItemInput.children`
- * for that expected case.
+ * Converts a FLAT array of sibling editor blocks into `BlockInput[]` —
+ * used for both the top-level document AND, recursively, for a list item's
+ * own `children` (which is exactly the same kind of flat sibling array,
+ * just nested one level down — BlockNote doesn't structurally distinguish
+ * "the document" from "a block's children", and neither does this
+ * function). Not a plain `.map()` — BlockNote represents an entire
+ * bullet/numbered list as N *sibling* blocks in whichever array they live
+ * in (nesting lives in each item's own `children`, not in a wrapping "list"
+ * node), but this site's DB model stores a whole (flat run of a) list as
+ * ONE `"list"` `BlockInput` (see `blocks.ts`'s top comment on `listCore`).
+ * Walks the array with an explicit index so it can group each maximal run
+ * of the SAME list-item type into one `"list"` — a run ends either at a
+ * non-list-item block or at a type change (bullet → numbered with no gap),
+ * since one `"list"` can only hold one `ordered` value.
  *
- * A NON-list block Tab-nested under a list item (an unusual, deliberate
- * action — nothing in this editor's UI suggests doing it) used to lose its
- * structure entirely — either flattened to plain text (if it had rich-text
- * content) or dropped outright (`content: "none"` types, which had no text
- * to fall back to). Fixed by converting it via `convertSingleBlock` — the
- * exact same per-type conversion a top-level block goes through — into
- * `ListItemInput.blocks` instead, so an image/code/diagram/approachList
- * Tab-nested under an item keeps its real structure, not just whatever
- * text it happened to have.
+ * Applying this SAME function to a list item's `children` (via
+ * `partialBlockToListItem` below), rather than a separate, simpler
+ * "flatten to `ListItemInput[]`" pass, is what makes a nested sub-list
+ * keep its own `ordered` value (a differently-typed nested list gets its
+ * own real `"list"` entry, grouped exactly like a top-level one — not
+ * silently inherited from the outer list) AND keeps a nested sub-list in
+ * its real position relative to any other attached block (this walks
+ * `children` in its one true order — there's no second array for anything
+ * to be pulled out of and reordered against).
  */
-function childToListItem(editor: PortfolioEditor, child: PortfolioBlock): ListItemInput | undefined {
-    if (child.type === "bulletListItem" || child.type === "numberedListItem") {
-        return partialBlockToListItem(editor, child);
-    }
-    return undefined;
-}
-
-function childToAttachedBlock(editor: PortfolioEditor, child: PortfolioBlock): BlockInput | undefined {
-    if (child.type === "bulletListItem" || child.type === "numberedListItem") {
-        return undefined;
-    }
-    return convertSingleBlock(editor, child as NonListPortfolioBlock);
-}
-
-function partialBlockToListItem(
-    editor: PortfolioEditor,
-    block: PortfolioBlock & { type: ListItemBlockType },
-): ListItemInput {
-    return {
-        text: inlineContentToMarkdown(editor, block.content as InlineContent),
-        children: block.children.flatMap((child) => {
-            const item = childToListItem(editor, child);
-            return item ? [item] : [];
-        }),
-        blocks: block.children.flatMap((child) => {
-            const attached = childToAttachedBlock(editor, child);
-            return attached ? [attached] : [];
-        }),
-    };
-}
-
-/**
- * The reverse — the editor's live document → `BlockInput[]`, what
- * `BlockNoteEditor.tsx` sends up on save. Takes the REAL editor (not a
- * throwaway one) since `blocksToMarkdownLossy` needs the actual document's
- * current inline content, styles included.
- *
- * Not a plain `.map()` — BlockNote represents an entire bullet/numbered
- * list as N *sibling* top-level blocks (nesting lives in each item's own
- * `children`, not in a wrapping "list" node), but this site's DB model
- * stores a whole list as ONE `"list"` block (see `blocks.ts`'s top comment
- * on `listCore`). This walks the flat array with an explicit index so it
- * can group each maximal run of the SAME list-item type into one `"list"`
- * `BlockInput` — a run ends either at a non-list-item block or at a type
- * change (bullet → numbered mid-document), since one `"list"` block can
- * only hold one `ordered` value.
- */
-export function editorBlocksToBlockInputs(editor: PortfolioEditor, blocks: readonly PortfolioBlock[]): BlockInput[] {
+function blockArrayToBlockInputs(editor: PortfolioEditor, blocks: readonly PortfolioBlock[]): BlockInput[] {
     const inputs: BlockInput[] = [];
     let i = 0;
     while (i < blocks.length) {
@@ -344,4 +304,27 @@ export function editorBlocksToBlockInputs(editor: PortfolioEditor, blocks: reado
         i++;
     }
     return inputs;
+}
+
+function partialBlockToListItem(
+    editor: PortfolioEditor,
+    block: PortfolioBlock & { type: ListItemBlockType },
+): ListItemInput {
+    return {
+        text: inlineContentToMarkdown(editor, block.content as InlineContent),
+        blocks: blockArrayToBlockInputs(editor, block.children),
+    };
+}
+
+/**
+ * The reverse of `blocksToPartialBlocks` — the editor's live document →
+ * `BlockInput[]`, what `BlockNoteEditor.tsx` sends up on save. Takes the
+ * REAL editor (not a throwaway one) since `blocksToMarkdownLossy` needs the
+ * actual document's current inline content, styles included. A thin public
+ * alias for `blockArrayToBlockInputs` — kept as a separate exported name
+ * since "the whole document" is the one call site outside this file, while
+ * the recursive "any block's children" case is this file's own concern.
+ */
+export function editorBlocksToBlockInputs(editor: PortfolioEditor, blocks: readonly PortfolioBlock[]): BlockInput[] {
+    return blockArrayToBlockInputs(editor, blocks);
 }

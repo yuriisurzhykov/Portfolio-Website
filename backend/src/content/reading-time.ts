@@ -1,8 +1,18 @@
 import type { BlockInput, ListItemInput } from "./blocks";
 
-/** Flattens a nested list-item tree into its text, depth-first — a sub-item's words count the same as a top-level one for this rough estimate. */
+/**
+ * Flattens a list item's own text plus everything nested under it
+ * (`item.blocks` — a continued sub-list, or any other attached block, in
+ * their real order — see `blocks.ts`'s comment on `ListItemInput`) into one
+ * string, depth-first. Recurses through `extractProse` itself, not a
+ * parallel "prose of a block" implementation — a sub-list's items and an
+ * attached image's caption count the exact same way they would at the top
+ * level, since they're the exact same `BlockInput` shapes.
+ */
 function extractListItemProse(items: ListItemInput[]): string {
-    return items.map((item) => [item.text, extractListItemProse(item.children)].filter(Boolean).join(" ")).join(" ");
+    return items
+        .map((item) => [item.text, ...item.blocks.map(extractProse)].filter(Boolean).join(" "))
+        .join(" ");
 }
 
 /**

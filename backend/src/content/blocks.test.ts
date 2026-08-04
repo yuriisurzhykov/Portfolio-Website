@@ -189,13 +189,21 @@ describe("parseBlock", () => {
     it("parses a flat list block's ordered flag and item text", () => {
         const block = parseBlock({
             id: "1", order: 0, type: "list", text: null,
-            data: {ordered: true, items: [{text: "First", children: []}, {text: "Second", children: []}]},
+            data: {ordered: true, items: [{text: "First"}, {text: "Second"}]},
         });
         expect(block.type === "list" && block.data.ordered).toBe(true);
         expect(block.type === "list" && block.data.items.map((i) => i.text)).toEqual(["First", "Second"]);
     });
 
-    it("parses a list block with nested (multi-level) children", () => {
+    /**
+     * Multi-level nesting is expressed as a nested `"list"` `BlockInput`
+     * inside `blocks`, not a separate `children` field (see `blocks.ts`'s
+     * comment on `ListItemInput` for the two real bugs a separate
+     * `children` field had). This also doubles as coverage for one of
+     * them: the INNER list keeps its OWN `ordered` value, independent of
+     * the outer one, rather than inheriting it.
+     */
+    it("parses a list block with nested (multi-level) sub-lists, each keeping its own ordered flag", () => {
         const block = parseBlock({
             id: "1", order: 0, type: "list", text: null,
             data: {
@@ -203,24 +211,28 @@ describe("parseBlock", () => {
                 items: [
                     {
                         text: "Parent",
-                        children: [{text: "Child", children: [{text: "Grandchild", children: []}]}],
+                        blocks: [{
+                            type: "list",
+                            data: {
+                                ordered: true,
+                                items: [{
+                                    text: "Child",
+                                    blocks: [{type: "list", data: {ordered: false, items: [{text: "Grandchild"}]}}],
+                                }],
+                            },
+                        }],
                     },
                 ],
             },
         });
-        expect(block.type === "list" && block.data.items[0].children[0].text).toBe("Child");
-        expect(block.type === "list" && block.data.items[0].children[0].children[0].text).toBe("Grandchild");
-    });
-
-    it("defaults a list item's children to an empty array when omitted", () => {
-        // The admin editor only ever sends `children` for items that actually
-        // have sub-items (see convert.ts) — every leaf item must still parse
-        // without the field present, not just with `children: []` spelled out.
-        const block = parseBlock({
-            id: "1", order: 0, type: "list", text: null,
-            data: {ordered: false, items: [{text: "Leaf"}]},
-        });
-        expect(block.type === "list" && block.data.items[0].children).toEqual([]);
+        const parent = block.type === "list" ? block.data.items[0] : undefined;
+        const childList = parent?.blocks[0];
+        expect(childList).toMatchObject({type: "list", data: {ordered: true}});
+        const child = childList?.type === "list" ? childList.data.items[0] : undefined;
+        expect(child?.text).toBe("Child");
+        const grandchildList = child?.blocks[0];
+        expect(grandchildList).toMatchObject({type: "list", data: {ordered: false}});
+        expect(grandchildList?.type === "list" && grandchildList.data.items[0].text).toBe("Grandchild");
     });
 
     it("defaults a list item's blocks to an empty array when omitted", () => {
