@@ -127,8 +127,8 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
       JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
       # See visual-tests.yml's own comment / frontend/src/proxy.ts's DISABLE_RATE_LIMIT comment —
-      # this run regenerates ALL 30 visual baselines in one go, at least as much traffic as the
-      # normal check, so it needs the same bypass.
+      # this run regenerates ALL page-level AND component-level baselines in one go, at least as
+      # much traffic as the normal check, so it needs the same bypass.
       DISABLE_RATE_LIMIT: "true"
 
     steps:
@@ -150,9 +150,11 @@ jobs:
       - name: Regenerate baselines
         working-directory: frontend
         # Chains the same seed-fixtures + generate-manifest prepare steps visual-tests.yml's "Run
-        # tests" step does — see frontend/tests/README.md section 4 — before re-running
-        # visual.spec.ts with --update-snapshots.
-        run: npm run test:e2e:update
+        # tests" step does — see frontend/tests/README.md section 4 — before re-running BOTH
+        # visual.spec.ts (page-level) and component-gallery.spec.ts (component-level) with
+        # --update-snapshots, so a single /update-snapshots comment accepts both suites' baselines
+        # together instead of needing two separate commands.
+        run: npm run test:e2e:update:all
 
       - name: Commit and push to the PR branch
         id: commit
@@ -176,13 +178,13 @@ jobs:
             const outcome = "${{ job.status }}";
             const changed = "${{ steps.commit.outputs.changed }}";
             let body;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             if (outcome !== "success") {
-              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
               body = `❌ \`/update-snapshots\` failed — check the [workflow run](${runUrl}) for details.`;
             } else if (changed === "true") {
               body = "✅ Baselines updated and pushed to this PR's branch. The visual check will re-run automatically.";
             } else {
-              body = "ℹ️ No baseline differences found — nothing to update.";
+              body = "ℹ️ No baseline differences found — nothing to update. Check the [workflow run](${runUrl}) for details.";
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
