@@ -93,6 +93,49 @@ const diagramCore = z.object({
     })
 });
 
+/**
+ * A whole nested bullet/numbered list is ONE block (like `approachList`),
+ * not one row per item — a flat `Document.blocks` array has no concept of
+ * "these five rows are one list," and the editor (BlockNote) already
+ * represents an item's sub-items as a `children` tree on that same item, so
+ * mirroring that shape here is what makes `convert.ts`'s round-trip a
+ * direct structural walk instead of inventing a second, DB-only nesting
+ * scheme. `z.lazy()` is required for the recursive `children` field — a
+ * plain object schema can't reference itself before it's finished being
+ * defined.
+ *
+ * `blocks` is separate from `children` — `children` is only ever more list
+ * items (a real sub-list; the admin editor's Tab/Shift-Tab nesting on a
+ * bulletListItem/numberedListItem produces more of the same type), `blocks`
+ * is for anything ELSE Tab-nested under an item (an image/code/diagram/
+ * approachList/nested-list, etc.) — an edge case, but one that silently
+ * lost all structure before this field existed (see `convert.ts`'s
+ * `childToListItem`). Reuses the ENTIRE existing `blockInputSchema` union
+ * recursively (mutual `z.lazy()` with it, same trick already used for
+ * `children`) rather than inventing a second, narrower "thing nested under
+ * a list item" concept — an item's non-list-item children are just
+ * ordinary blocks.
+ */
+export interface ListItemInput {
+    text: string;
+    children: ListItemInput[];
+    blocks: BlockInput[];
+}
+const listItemCore: z.ZodType<ListItemInput> = z.lazy(() =>
+    z.object({
+        text: z.string(),
+        children: z.array(listItemCore).default([]),
+        blocks: z.array(blockInputSchema).default([]),
+    }),
+);
+const listCore = z.object({
+    type: z.literal("list"),
+    data: z.object({
+        ordered: z.boolean(),
+        items: z.array(listItemCore).min(1),
+    }),
+});
+
 // One `.extend()` call per type, written out individually rather than
 // mapped over an array — a `.map()` here would widen every branch's
 // precise literal-discriminant type down to `ZodObject<any>`, which would
@@ -107,6 +150,7 @@ const imageBlock = imageCore.extend(baseFields);
 const codeBlock = codeCore.extend(baseFields);
 const approachListBlock = approachListCore.extend(baseFields);
 const diagramBlock = diagramCore.extend(baseFields);
+const listBlock = listCore.extend(baseFields);
 
 export const blockSchema = z.discriminatedUnion("type", [
     leadBlock,
@@ -118,6 +162,7 @@ export const blockSchema = z.discriminatedUnion("type", [
     codeBlock,
     approachListBlock,
     diagramBlock,
+    listBlock,
 ]);
 
 /** Same block shapes, minus `id`/`order` — what the admin editor sends when saving a document's blocks (see content/document.ts's `replaceDocumentContent`). */
@@ -131,6 +176,7 @@ export const blockInputSchema = z.discriminatedUnion("type", [
     codeCore,
     approachListCore,
     diagramCore,
+    listCore,
 ]);
 
 export type Block = z.infer<typeof blockSchema>;

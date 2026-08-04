@@ -186,6 +186,98 @@ describe("parseBlock", () => {
         ).toThrow();
     });
 
+    it("parses a flat list block's ordered flag and item text", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {ordered: true, items: [{text: "First", children: []}, {text: "Second", children: []}]},
+        });
+        expect(block.type === "list" && block.data.ordered).toBe(true);
+        expect(block.type === "list" && block.data.items.map((i) => i.text)).toEqual(["First", "Second"]);
+    });
+
+    it("parses a list block with nested (multi-level) children", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {
+                ordered: false,
+                items: [
+                    {
+                        text: "Parent",
+                        children: [{text: "Child", children: [{text: "Grandchild", children: []}]}],
+                    },
+                ],
+            },
+        });
+        expect(block.type === "list" && block.data.items[0].children[0].text).toBe("Child");
+        expect(block.type === "list" && block.data.items[0].children[0].children[0].text).toBe("Grandchild");
+    });
+
+    it("defaults a list item's children to an empty array when omitted", () => {
+        // The admin editor only ever sends `children` for items that actually
+        // have sub-items (see convert.ts) — every leaf item must still parse
+        // without the field present, not just with `children: []` spelled out.
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {ordered: false, items: [{text: "Leaf"}]},
+        });
+        expect(block.type === "list" && block.data.items[0].children).toEqual([]);
+    });
+
+    it("defaults a list item's blocks to an empty array when omitted", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {ordered: false, items: [{text: "Leaf"}]},
+        });
+        expect(block.type === "list" && block.data.items[0].blocks).toEqual([]);
+    });
+
+    /**
+     * A list item with a non-list block (an image) Tab-nested under it —
+     * the exact case that used to lose its structure entirely on save
+     * (see `convert.ts`'s `childToListItem`). `blocks` reuses the WHOLE
+     * `blockInputSchema` union recursively, so any block type — including
+     * another nested `"list"` — is valid here, not just a hand-picked
+     * subset.
+     */
+    it("parses a list item with a non-list block (an image) attached via `blocks`", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Item with an image under it",
+                    blocks: [{type: "image", data: {src: "/x.png", alt: "alt"}}],
+                }],
+            },
+        });
+        expect(block.type === "list" && block.data.items[0].blocks[0]).toMatchObject({
+            type: "image",
+            data: {src: "/x.png", alt: "alt"},
+        });
+    });
+
+    it("parses a list item with a nested `list` block attached via `blocks` (recursive union, not just a hand-picked subset)", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Outer item",
+                    blocks: [{type: "list", data: {ordered: true, items: [{text: "Inner"}]}}],
+                }],
+            },
+        });
+        const attached = block.type === "list" && block.data.items[0].blocks[0];
+        expect(attached).toMatchObject({type: "list", data: {ordered: true}});
+        expect(attached && attached.type === "list" && attached.data.items[0].text).toBe("Inner");
+    });
+
+    it("rejects a list block with zero items", () => {
+        expect(() =>
+            parseBlock({id: "1", order: 0, type: "list", text: null, data: {ordered: false, items: []}}),
+        ).toThrow();
+    });
+
     it("rejects an unknown block type", () => {
         expect(() => parseBlock({id: "1", order: 0, type: "not-a-real-type", text: null, data: null})).toThrow();
     });

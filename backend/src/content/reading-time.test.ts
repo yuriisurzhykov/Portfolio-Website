@@ -33,8 +33,9 @@ describe("estimateReadMins", () => {
             {type: "code", data: {filename: "a.kt", code: words(10000)}}, // must not count
             {type: "image", text: words(20), data: {src: "/x.png", alt: "alt"}},
             {type: "approachList", data: {items: [{title: words(5), description: words(5)}]}},
+            {type: "list", data: {ordered: false, items: [{text: words(20), children: [], blocks: []}]}},
         ];
-        // 100 + 10 + 300 + 50 + 40 + 0 + 20 + 10 = 530 words -> 530/200 = 2.65 -> rounds to 3
+        // 100 + 10 + 300 + 50 + 40 + 0 + 20 + 10 + 20 = 550 words -> 550/200 = 2.75 -> rounds to 3
         expect(estimateReadMins(blocks)).toBe(3);
     });
 
@@ -89,6 +90,25 @@ describe("extractProse", () => {
             data: {engine: "mermaid", source: "A --> B"}
         })).toBe("");
     })
+
+    it("joins list item text in order, flattening nested children depth-first", () => {
+        const block: BlockInput = {
+            type: "list",
+            data: {
+                ordered: false,
+                items: [
+                    {text: "a", children: [{text: "b", children: [], blocks: []}], blocks: []},
+                    {text: "c", children: [], blocks: []},
+                ],
+            },
+        };
+        expect(extractProse(block)).toBe("a b c");
+    });
+
+    it("returns an empty string for a list whose items have no text and no children", () => {
+        const block: BlockInput = {type: "list", data: {ordered: true, items: [{text: "", children: [], blocks: []}]}};
+        expect(extractProse(block)).toBe("");
+    });
 });
 
 describe("countWords", () => {

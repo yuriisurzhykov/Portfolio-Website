@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Block } from "@portfolio/backend";
+import type { Block, BlockInput, ListItemInput } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { CodeBlock } from "@/shared/ui/code-block";
 import { Markdown } from "@/shared/ui/markdown";
@@ -41,6 +41,215 @@ export const noteVariantClasses: Record<"info" | "warning" | "tip", string> = {
 };
 
 /**
+ * Renders one level of a "list" block's nested `items` tree — recurses into
+ * `item.children` for a sub-list, same shape the admin editor's Tab/Shift-Tab
+ * nesting produces (see `shared/ui/block-editor/convert.ts`). A plain
+ * `<ul>`/`<ol>` per level (not one shared list re-indented with padding) is
+ * what lets a nested `<ol>` restart its own numbering from 1, matching
+ * standard list semantics.
+ *
+ * `item.blocks` — anything OTHER than a nested list item Tab-nested under
+ * this item (an image/code/diagram/approachList/etc. — see `blocks.ts`'s
+ * comment on `ListItemInput`) — renders via `renderBlock` AFTER the item's
+ * own text and BEFORE any nested sub-list, keyed by array index (these
+ * entries have no `id` of their own, same as `approachList`'s items).
+ */
+function ListItems({items, ordered, ln}: { items: ListItemInput[]; ordered: boolean; ln: Ln }) {
+    const ListTag = ordered ? "ol" : "ul";
+    return (
+        <ListTag className={cn("pl-lg space-y-xs", ordered ? "list-decimal" : "list-disc")}>
+            { items.map((item, index) => (
+                <li key={ index }>
+                    <Text as="span" variant="body" tone="secondary">
+                        <Markdown text={ item.text }/>
+                    </Text>
+                    { item.blocks.map((attached, attachedIndex) => renderBlock(attached, ln, attachedIndex)) }
+                    { item.children.length > 0 && <ListItems items={ item.children } ordered={ ordered } ln={ ln }/> }
+                </li>
+            )) }
+        </ListTag>
+    );
+}
+
+type Ln = (key: string, vars?: Record<string, string | number>) => string;
+
+/**
+ * The `switch` this used to be, factored into its own function so it can be
+ * reused for a standalone top-level block, inside a grouped run of
+ * consecutive `"list"` blocks (see `groupConsecutiveLists` below), AND for
+ * a non-list block attached to a list item via `ListItemInput.blocks`
+ * (`ListItems` above) — without duplicating a single case. Takes `ln` as a
+ * plain argument, not a hook call — this needs to run inside a loop/helper,
+ * not as its own component, so it can't call `useTranslation()` itself.
+ *
+ * Takes `key` as an explicit argument rather than reading `block.id`
+ * internally — an ATTACHED block (`ListItemInput.blocks`, a `BlockInput`)
+ * has no `id` of its own (same as `approachList`'s items), so this needs to
+ * work for both a real `Block` (top-level, keyed by its own `id`) and a
+ * `BlockInput` (attached, keyed by its array index) uniformly.
+ */
+function renderBlock(block: Block | BlockInput, ln: Ln, key: React.Key): React.ReactNode {
+    switch (block.type) {
+        case "lead":
+            return (
+                <React.Fragment key={ key }>
+                    <Text variant="body-lg" tone="secondary">
+                        <Markdown text={ block.text }/>
+                    </Text>
+                    <hr className="border-t border-border-subtle my-sm"/>
+                </React.Fragment>
+            );
+
+        case "heading":
+            return (
+                <Text key={ key } as="h2" variant="h2" className="mt-lg">
+                    <Markdown text={ block.text }/>
+                </Text>
+            );
+
+        case "paragraph":
+            return (
+                <Text key={ key } variant="body" tone="secondary">
+                    <Markdown text={ block.text }/>
+                </Text>
+            );
+
+        case "quote":
+            return (
+                <blockquote
+                    key={ key }
+                    className="border-l-2 border-border-default pl-md italic text-text-secondary"
+                >
+                    <Markdown text={ block.text }/>
+                    { block.data?.attribution && (
+                        <Text as="footer" variant="caption" tone="faint" className="mt-xs not-italic">
+                            — { block.data.attribution }
+                        </Text>
+                    ) }
+                </blockquote>
+            );
+
+        case "note":
+            return (
+                <div
+                    key={ key }
+                    className={ cn("rounded-lg border p-md", noteVariantClasses[block.data.variant]) }
+                >
+                    <Markdown text={ block.text }/>
+                </div>
+            );
+
+        case "image":
+            return (
+                <figure key={ key } className="my-sm">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- src comes from admin-authored content, not a static/known-at-build-time asset Next.js's <Image> can optimize */ }
+                    <img
+                        src={ block.data.src }
+                        alt={ block.data.alt }
+                        width={ block.data.width }
+                        height={ block.data.height }
+                        className="rounded-lg border border-border-subtle w-full"
+                    />
+                    { block.text && (
+                        <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
+                            <Markdown text={ block.text }/>
+                        </Text>
+                    ) }
+                </figure>
+            );
+
+        case "code":
+            return (
+                <CodeBlock
+                    key={ key }
+                    title={ block.data.filename }
+                    language={ toCodeLanguage(block.data.language) }
+                    highlightEnabled
+                    showLineNumbers={ false }
+                    variant="default"
+                    className="my-sm"
+                    labels={ {
+                        copyButton: ln("label.button.copy"),
+                        copiedButton: ln("label.button.copied"),
+                        liveRegionCopied: ln("ui.codeBlock.liveRegion.copied"),
+                    } }
+                >
+                    { block.data.code }
+                </CodeBlock>
+            );
+
+        case "approachList":
+            return (
+                <div
+                    key={ key }
+                    className="grid gap-4 mb-7"
+                    style={ {gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"} }
+                >
+                    { block.data.items.map((item, index) => (
+                        <div
+                            key={ index }
+                            className="bg-surface-base border border-border-subtle rounded-lg p-5"
+                        >
+                            <Text
+                                as="div"
+                                variant="caption"
+                                className="font-mono font-semibold text-accent-text mb-2"
+                            >
+                                { item.title }
+                            </Text>
+                            <Text as="div" variant="caption" tone="muted" className="leading-[1.6]">
+                                { item.description }
+                            </Text>
+                        </div>
+                    )) }
+                </div>
+            );
+        case "diagram":
+            if (!block.data.source) {
+                return null;
+            }
+            return (
+                <figure key={ key } className="my-sm">
+                    <Diagram engine={ block.data.engine } source={ block.data.source }/>
+                    { block.text && (
+                        <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
+                            <Markdown text={ block.text }/>
+                        </Text>
+                    ) }
+                </figure>
+            );
+
+        case "list":
+            return <ListItems key={ key } items={ block.data.items } ordered={ block.data.ordered } ln={ ln }/>;
+    }
+}
+
+/**
+ * `convert.ts`'s save-time grouping splits a list into two adjacent
+ * `"list"` blocks the moment the item type changes (bullet <-> numbered)
+ * mid-edit — structurally required, since one block only has one `ordered`
+ * value. Left to the top-level `gap-md` below, that split would render with
+ * a paragraph-sized gap between the two halves, making a single "retype one
+ * bullet as numbered" edit look like two unrelated lists. Groups every
+ * MAXIMAL run of consecutive `"list"` blocks so the caller can render each
+ * run inside one ungapped wrapper instead.
+ */
+function groupConsecutiveLists(blocks: Block[]): (Block | Block[])[] {
+    const groups: (Block | Block[])[] = [];
+    for (const block of blocks) {
+        const lastGroup = groups[groups.length - 1];
+        if (block.type === "list" && Array.isArray(lastGroup)) {
+            lastGroup.push(block);
+        } else if (block.type === "list") {
+            groups.push([block]);
+        } else {
+            groups.push(block);
+        }
+    }
+    return groups;
+}
+
+/**
  * ContentBlocks
  * -------------
  * Renders a post body or case-study narrative from `Block[]` (see
@@ -62,137 +271,20 @@ export function ContentBlocks({blocks}: ContentBlocksProps) {
 
     return (
         <div className="flex flex-col gap-md">
-            { blocks.map((block) => {
-                switch (block.type) {
-                    case "lead":
-                        return (
-                            <React.Fragment key={ block.id }>
-                                <Text variant="body-lg" tone="secondary">
-                                    <Markdown text={ block.text }/>
-                                </Text>
-                                <hr className="border-t border-border-subtle my-sm"/>
-                            </React.Fragment>
-                        );
-
-                    case "heading":
-                        return (
-                            <Text key={ block.id } as="h2" variant="h2" className="mt-lg">
-                                <Markdown text={ block.text }/>
-                            </Text>
-                        );
-
-                    case "paragraph":
-                        return (
-                            <Text key={ block.id } variant="body" tone="secondary">
-                                <Markdown text={ block.text }/>
-                            </Text>
-                        );
-
-                    case "quote":
-                        return (
-                            <blockquote
-                                key={ block.id }
-                                className="border-l-2 border-border-default pl-md italic text-text-secondary"
-                            >
-                                <Markdown text={ block.text }/>
-                                { block.data?.attribution && (
-                                    <Text as="footer" variant="caption" tone="faint" className="mt-xs not-italic">
-                                        — { block.data.attribution }
-                                    </Text>
-                                ) }
-                            </blockquote>
-                        );
-
-                    case "note":
-                        return (
-                            <div
-                                key={ block.id }
-                                className={ cn("rounded-lg border p-md", noteVariantClasses[block.data.variant]) }
-                            >
-                                <Markdown text={ block.text }/>
-                            </div>
-                        );
-
-                    case "image":
-                        return (
-                            <figure key={ block.id } className="my-sm">
-                                {/* eslint-disable-next-line @next/next/no-img-element -- src comes from admin-authored content, not a static/known-at-build-time asset Next.js's <Image> can optimize */ }
-                                <img
-                                    src={ block.data.src }
-                                    alt={ block.data.alt }
-                                    width={ block.data.width }
-                                    height={ block.data.height }
-                                    className="rounded-lg border border-border-subtle w-full"
-                                />
-                                { block.text && (
-                                    <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
-                                        <Markdown text={ block.text }/>
-                                    </Text>
-                                ) }
-                            </figure>
-                        );
-
-                    case "code":
-                        return (
-                            <CodeBlock
-                                key={ block.id }
-                                title={ block.data.filename }
-                                language={ toCodeLanguage(block.data.language) }
-                                highlightEnabled
-                                showLineNumbers={ false }
-                                variant="default"
-                                className="my-sm"
-                                labels={ {
-                                    copyButton: ln("label.button.copy"),
-                                    copiedButton: ln("label.button.copied"),
-                                    liveRegionCopied: ln("ui.codeBlock.liveRegion.copied"),
-                                } }
-                            >
-                                { block.data.code }
-                            </CodeBlock>
-                        );
-
-                    case "approachList":
-                        return (
-                            <div
-                                key={ block.id }
-                                className="grid gap-4 mb-7"
-                                style={ {gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"} }
-                            >
-                                { block.data.items.map((item, index) => (
-                                    <div
-                                        key={ index }
-                                        className="bg-surface-base border border-border-subtle rounded-lg p-5"
-                                    >
-                                        <Text
-                                            as="div"
-                                            variant="caption"
-                                            className="font-mono font-semibold text-accent-text mb-2"
-                                        >
-                                            { item.title }
-                                        </Text>
-                                        <Text as="div" variant="caption" tone="muted" className="leading-[1.6]">
-                                            { item.description }
-                                        </Text>
-                                    </div>
-                                )) }
-                            </div>
-                        );
-                    case "diagram":
-                        if (!block.data.source) {
-                            return null;
-                        }
-                        return (
-                            <figure key={ block.id } className="my-sm">
-                                <Diagram engine={ block.data.engine } source={ block.data.source }/>
-                                { block.text && (
-                                    <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
-                                        <Markdown text={ block.text }/>
-                                    </Text>
-                                ) }
-                            </figure>
-                        );
+            { groupConsecutiveLists(blocks).map((item) => {
+                if (!Array.isArray(item)) {
+                    return renderBlock(item, ln, item.id);
                 }
+                // Every single `"list"` block also arrives here as a
+                // length-1 array (not just real multi-block runs) — an
+                // extra `flex flex-col` wrapper around one child has no
+                // visual effect, so this doesn't need a separate branch
+                // for the (far more common) unsplit case.
+                return (
+                    <div key={ item[0].id } className="flex flex-col">
+                        { item.map((block) => renderBlock(block, ln, block.id)) }
+                    </div>
+                );
             }) }
         </div>
     );

@@ -1,4 +1,9 @@
-import type { BlockInput } from "./blocks";
+import type { BlockInput, ListItemInput } from "./blocks";
+
+/** Flattens a nested list-item tree into its text, depth-first — a sub-item's words count the same as a top-level one for this rough estimate. */
+function extractListItemProse(items: ListItemInput[]): string {
+    return items.map((item) => [item.text, extractListItemProse(item.children)].filter(Boolean).join(" ")).join(" ");
+}
 
 /**
  * A commonly-cited average adult silent-reading speed for prose in
@@ -49,6 +54,8 @@ export function extractProse(block: BlockInput): string {
             return "";
         case "diagram":
             return block.text ?? "";
+        case "list":
+            return extractListItemProse(block.data.items);
     }
 }
 

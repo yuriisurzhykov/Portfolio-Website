@@ -64,5 +64,27 @@ export const CodeBlock = createReactBlockSpec(
                 </div>
             );
         },
+        /**
+         * Without this, `toExternalHTML` falls back to `render` above (see
+         * `@blocknote/react`'s `createReactBlockSpec`) — copying/dragging a
+         * WHOLE selected code block (not just text inside its `<Textarea>`)
+         * exported the edit-mode FORM markup itself (labels, `<input>`s) as
+         * "the code", not the code. `<pre><code data-language>` is the exact
+         * shape `htmlToMarkdown.ts`'s `serializeCodeBlock` looks for
+         * (`data-language` attr, or a `language-*` class) to turn back into a
+         * real ` ```lang ` fenced block — the same shape this editor's own
+         * `paste-handler.ts` recognizes on the way back in, so copy-then-paste
+         * (even into this same editor) round-trips as a real code block.
+         */
+        toExternalHTML: (props) => {
+            const { language, code } = props.block.props;
+            return (
+                <pre>
+                    <code data-language={language} className={language ? `language-${language}` : undefined}>
+                        {code}
+                    </code>
+                </pre>
+            );
+        },
     },
 );

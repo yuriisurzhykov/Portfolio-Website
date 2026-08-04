@@ -11,6 +11,8 @@ import { useTheme } from "@/shared/theme";
 import { blockNoteSchema } from "./schema";
 import { blocksToPartialBlocks, editorBlocksToBlockInputs } from "./convert";
 import { getSlashMenuItems } from "./slash-menu";
+import { smartPasteHandler } from "./paste-handler";
+import { fenceShortcutExtension } from "./fence-shortcut";
 
 export interface BlockEditorHandle {
     /** Serializes the editor's current document to `BlockInput[]` — called at submit time (`PostEditorPage`/`WorkEditorPage`/the translate pages), not on every keystroke; BlockNote owns its own live document state between mount and submit, this component is deliberately NOT a controlled `value`/`onChange` input like the old `BlockListEditor`. */
@@ -104,6 +106,10 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
     const editor = useCreateBlockNote({
         schema: blockNoteSchema,
         initialContent: initialContent.length > 0 ? initialContent : undefined,
+        // See paste-handler.ts — only intercepts a fence/blockquote, everything else falls through to BlockNote's own default paste behavior unchanged.
+        pasteHandler: smartPasteHandler,
+        // See fence-shortcut.ts — typing "```lang" then Enter converts the current (plain paragraph) block to a code/diagram block.
+        extensions: [fenceShortcutExtension],
     });
 
     React.useImperativeHandle(

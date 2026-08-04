@@ -186,6 +186,14 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
         if (!window.confirm(`Delete "${ currentSlug }"? This can't be undone.`)) return;
 
         setDeleting(true);
+        // Clicking "Delete" blurs whatever field had focus, which fires the
+        // form's own `onBlur` flush in the background — without waiting for
+        // it here first, that flush's `update()` could land on the server
+        // AFTER this delete already removed the row (a 404, swallowed
+        // silently by its own `.catch`, but still a real race). Not gated on
+        // success — there's nothing left worth saving once the record is
+        // gone, so a failed flush shouldn't block the delete.
+        await autosave.flush().catch(() => {});
         try {
             await adminApi.deletePost(currentSlug);
             router.push("/admin/journal");
@@ -211,12 +219,26 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
 
     const autosaveLabel = autosaveStatusLabel(autosave.status);
 
+    /**
+     * Fires on blur of ANY field in the form, including the embedded
+     * `<BlockEditor>` — React's `onBlur` is implemented via the native
+     * `focusout` event, which bubbles, so one handler here catches every
+     * field/block losing focus without wiring each one individually. Not
+     * awaited/surfaced to the user (unlike `handlePublish`/
+     * `navigateAfterFlush`'s explicit `await autosave.flush()`) — this
+     * isn't a deliberate action to gate on, and a failure here still
+     * retries automatically via the hook's own retry timer.
+     */
+    function flushOnBlur() {
+        void autosave.flush().catch(() => {});
+    }
+
     return (
         // `onSubmit` only exists to swallow the browser's own implicit
         // submit-on-Enter (a `<form>` with a single text input submits on
         // Enter even with no submit button) — there is no explicit submit
         // action anymore, every field saves itself via autosave.
-        <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-lg pb-4xl">
+        <form onSubmit={(e) => e.preventDefault()} onBlur={flushOnBlur} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-start justify-between gap-md flex-wrap">
                 <div className="flex flex-col gap-sm">
                     <Text as="h1" variant="h3">{isEditing ? `Edit post: ${ currentSlug }` : "New post"}</Text>
