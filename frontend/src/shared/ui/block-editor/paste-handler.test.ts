@@ -1,0 +1,280 @@
+import { describe, expect, it } from "vitest";
+import { BlockNoteEditor, getBlockInfoFromTransaction } from "@blocknote/core";
+import { TextSelection, type Transaction } from "prosemirror-state";
+import { blockNoteSchema } from "./schema";
+import { splitPastedMarkdown, smartPasteHandler } from "./paste-handler";
+
+/** Places the cursor at a character offset within `block`'s own inline content — same `getBlockInfoFromTransaction` technique `paste-handler.ts`'s own split logic uses, so these tests exercise the exact position math it relies on. */
+function placeCursorAt(editor: ReturnType<typeof BlockNoteEditor.create>, block: { id: string }, offset: number) {
+    editor.setTextCursorPosition(block, "start");
+    editor.transact((tr: Transaction) => {
+        const blockInfo = getBlockInfoFromTransaction(tr);
+        if (!blockInfo.isBlockContainer) {
+            throw new Error("expected a block-container block in this test");
+        }
+        const contentStart = blockInfo.blockContent.beforePos + 1;
+        tr.setSelection(TextSelection.near(tr.doc.resolve(contentStart + offset)));
+    });
+}
+
+describe("splitPastedMarkdown", () => {
+    it("returns a single text segment for plain markdown with no fence or blockquote", () => {
+        expect(splitPastedMarkdown("Hello **world**")).toEqual([{ kind: "text", text: "Hello **world**" }]);
+    });
+
+    it("extracts a fenced code block's language and code, separately from surrounding text", () => {
+        const source = "Before\n```kotlin\nfun main() {}\n```\nAfter";
+        expect(splitPastedMarkdown(source)).toEqual([
+            { kind: "text", text: "Before" },
+            { kind: "fence", language: "kotlin", code: "fun main() {}" },
+            { kind: "text", text: "After" },
+        ]);
+    });
+
+    it("extracts a fence with no language specified", () => {
+        expect(splitPastedMarkdown("```\nplain\n```")).toEqual([{ kind: "fence", language: "", code: "plain" }]);
+    });
+
+    it("keeps everything collected so far for an unterminated fence, instead of dropping it", () => {
+        expect(splitPastedMarkdown("```js\nconst x = 1;")).toEqual([{ kind: "fence", language: "js", code: "const x = 1;" }]);
+    });
+
+    it("preserves multiple lines and blank lines inside a fence's code", () => {
+        const source = "```\nline1\n\nline3\n```";
+        expect(splitPastedMarkdown(source)).toEqual([{ kind: "fence", language: "", code: "line1\n\nline3" }]);
+    });
+
+    it("groups consecutive '> ' lines into one quote segment, stripping the marker", () => {
+        const source = "> Line one\n> Line two";
+        expect(splitPastedMarkdown(source)).toEqual([{ kind: "quote", text: "Line one\nLine two" }]);
+    });
+
+    it("strips a bare '>' with no following space the same as '> '", () => {
+        expect(splitPastedMarkdown(">Line one")).toEqual([{ kind: "quote", text: "Line one" }]);
+    });
+
+    it("ends a quote run at the first non-'>' line, starting a new text segment", () => {
+        const source = "> Quoted\nNot quoted";
+        expect(splitPastedMarkdown(source)).toEqual([
+            { kind: "quote", text: "Quoted" },
+            { kind: "text", text: "Not quoted" },
+        ]);
+    });
+
+    it("does not mistake a '> ' line INSIDE a fence's code for a blockquote", () => {
+        const source = "```\n> not a quote, just code\n```";
+        expect(splitPastedMarkdown(source)).toEqual([{ kind: "fence", language: "", code: "> not a quote, just code" }]);
+    });
+
+    it("handles a document with a fence, a quote, and plain text all interleaved", () => {
+        const source = "Intro\n```py\nprint(1)\n```\nMiddle\n> A quote\nOutro";
+        expect(splitPastedMarkdown(source)).toEqual([
+            { kind: "text", text: "Intro" },
+            { kind: "fence", language: "py", code: "print(1)" },
+            { kind: "text", text: "Middle" },
+            { kind: "quote", text: "A quote" },
+            { kind: "text", text: "Outro" },
+        ]);
+    });
+});
+
+describe("smartPasteHandler", () => {
+    function fakeClipboardEvent(text: string): ClipboardEvent {
+        return { clipboardData: { getData: () => text } } as unknown as ClipboardEvent;
+    }
+
+    it("delegates to defaultPasteHandler when the pasted text has no fence or blockquote", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("## Just a heading"),
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+        expect(delegated).toBe(true);
+        expect(result).toBe(true);
+    });
+
+    it("delegates to defaultPasteHandler when clipboardData has no text/plain data at all", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        const result = smartPasteHandler({
+            event: { clipboardData: { getData: () => "" } } as unknown as ClipboardEvent,
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+        expect(delegated).toBe(true);
+        expect(result).toBe(true);
+    });
+
+    it("inserts a fenced code block as a real codeSnippet block, overwriting the empty starting paragraph", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("```kotlin\nfun main() {}\n```"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(result).toBe(true);
+        expect(editor.document).toHaveLength(1);
+        expect(editor.document[0]).toMatchObject({
+            type: "codeSnippet",
+            props: { language: "kotlin", code: "fun main() {}" },
+        });
+    });
+
+    it("inserts a ```mermaid fence as a real diagram block, not a codeSnippet", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        smartPasteHandler({
+            event: fakeClipboardEvent("```mermaid\ngraph TD;\nA-->B;\n```"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document[0]).toMatchObject({
+            type: "diagram",
+            props: { engine: "mermaid", source: "graph TD;\nA-->B;" },
+        });
+    });
+
+    it("inserts a blockquote as a real quote block with its inline formatting parsed", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        smartPasteHandler({
+            event: fakeClipboardEvent("> A **bold** quote"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        const block = editor.document[0];
+        expect(block.type).toBe("quote");
+        expect(block.type === "quote" && block.content).toEqual([
+            { type: "text", text: "A ", styles: {} },
+            { type: "text", text: "bold", styles: { bold: true } },
+            { type: "text", text: " quote", styles: {} },
+        ]);
+    });
+
+    // A leading/trailing/interleaved "text" segment (e.g. "Intro\n```js...")
+    // goes through `editor.pasteMarkdown`, which — unlike
+    // `tryParseMarkdownToBlocks`/`blocksToMarkdownLossy` elsewhere in this
+    // slice — needs a REAL mounted ProseMirror view with genuine clipboard
+    // API support, not just a constructed-but-unmounted editor (jsdom
+    // doesn't implement `ClipboardEvent`, confirmed by running this against
+    // a `.mount()`-ed editor and hitting `ReferenceError: ClipboardEvent is
+    // not defined` inside prosemirror-view). Matches this slice's own
+    // documented limitation (`README.md`'s "Тесты и проверка" section) —
+    // this test instead proves ordering across two fence/quote segments
+    // with NO plain-text segment between them, which doesn't need
+    // `pasteMarkdown` at all.
+    it("keeps a fence followed directly by a quote in the right order, as two separate blocks", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        smartPasteHandler({
+            event: fakeClipboardEvent("```js\nconst x = 1;\n```\n> Outro quote"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["codeSnippet", "quote"]);
+        expect(editor.document[0]).toMatchObject({ props: { language: "js", code: "const x = 1;" } });
+        expect(editor.document[1]).toMatchObject({ content: [{ type: "text", text: "Outro quote" }] });
+    });
+
+    /**
+     * Regression test for the bug found in the self-review of the previous
+     * session: pasting mid-text left the text AFTER the cursor attached to
+     * the original block, landing BEFORE the pasted content instead of
+     * after it.
+     */
+    it("splits the block at the cursor when pasting a fence mid-text, keeping text after the cursor AFTER the paste", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [{ type: "paragraph", content: "HelloWorld" }],
+        });
+        placeCursorAt(editor, editor.document[0], 5); // between "Hello" and "World"
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("```js\nconst x = 1;\n```"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["paragraph", "codeSnippet", "paragraph"]);
+        expect(editor.document[0]).toMatchObject({ content: [{ text: "Hello" }] });
+        expect(editor.document[1]).toMatchObject({ props: { language: "js", code: "const x = 1;" } });
+        expect(editor.document[2]).toMatchObject({ content: [{ text: "World" }] });
+    });
+
+    it("preserves per-run styling (bold) when splitting mid-styled-text at the cursor", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [
+                {
+                    type: "paragraph",
+                    content: [
+                        { type: "text", text: "plain ", styles: {} },
+                        { type: "text", text: "boldtext", styles: { bold: true } },
+                    ],
+                },
+            ],
+        });
+        // Split inside the bold run, after "bold" but before "text" (6 plain chars + 4 bold chars = offset 10).
+        placeCursorAt(editor, editor.document[0], 10);
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("> a quote"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["paragraph", "quote", "paragraph"]);
+        expect(editor.document[0].content).toEqual([
+            { type: "text", text: "plain ", styles: {} },
+            { type: "text", text: "bold", styles: { bold: true } },
+        ]);
+        expect(editor.document[2].content).toEqual([{ type: "text", text: "text", styles: { bold: true } }]);
+    });
+
+    it("does not split anything when the cursor is at the end of the block (the common case) — no regression", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [{ type: "paragraph", content: "Hello" }],
+        });
+        placeCursorAt(editor, editor.document[0], 5); // exactly at the end
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("```js\nconst x = 1;\n```"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["paragraph", "codeSnippet"]);
+        expect(editor.document[0]).toMatchObject({ content: [{ text: "Hello" }] });
+    });
+
+    it("replaces a real (non-collapsed) text selection instead of leaving it untouched next to the paste", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [{ type: "paragraph", content: "HelloWorld" }],
+        });
+        // Select "World" (offsets 5-10) before pasting over it.
+        placeCursorAt(editor, editor.document[0], 5);
+        editor.transact((tr: Transaction) => {
+            tr.setSelection(TextSelection.create(tr.doc, tr.selection.from, tr.selection.from + 5));
+        });
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("```js\nconst x = 1;\n```"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["paragraph", "codeSnippet"]);
+        expect(editor.document[0]).toMatchObject({ content: [{ text: "Hello" }] });
+    });
+});

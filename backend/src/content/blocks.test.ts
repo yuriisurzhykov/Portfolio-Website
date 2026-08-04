@@ -186,6 +186,110 @@ describe("parseBlock", () => {
         ).toThrow();
     });
 
+    it("parses a flat list block's ordered flag and item text", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {ordered: true, items: [{text: "First"}, {text: "Second"}]},
+        });
+        expect(block.type === "list" && block.data.ordered).toBe(true);
+        expect(block.type === "list" && block.data.items.map((i) => i.text)).toEqual(["First", "Second"]);
+    });
+
+    /**
+     * Multi-level nesting is expressed as a nested `"list"` `BlockInput`
+     * inside `blocks`, not a separate `children` field (see `blocks.ts`'s
+     * comment on `ListItemInput` for the two real bugs a separate
+     * `children` field had). This also doubles as coverage for one of
+     * them: the INNER list keeps its OWN `ordered` value, independent of
+     * the outer one, rather than inheriting it.
+     */
+    it("parses a list block with nested (multi-level) sub-lists, each keeping its own ordered flag", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {
+                ordered: false,
+                items: [
+                    {
+                        text: "Parent",
+                        blocks: [{
+                            type: "list",
+                            data: {
+                                ordered: true,
+                                items: [{
+                                    text: "Child",
+                                    blocks: [{type: "list", data: {ordered: false, items: [{text: "Grandchild"}]}}],
+                                }],
+                            },
+                        }],
+                    },
+                ],
+            },
+        });
+        const parent = block.type === "list" ? block.data.items[0] : undefined;
+        const childList = parent?.blocks[0];
+        expect(childList).toMatchObject({type: "list", data: {ordered: true}});
+        const child = childList?.type === "list" ? childList.data.items[0] : undefined;
+        expect(child?.text).toBe("Child");
+        const grandchildList = child?.blocks[0];
+        expect(grandchildList).toMatchObject({type: "list", data: {ordered: false}});
+        expect(grandchildList?.type === "list" && grandchildList.data.items[0].text).toBe("Grandchild");
+    });
+
+    it("defaults a list item's blocks to an empty array when omitted", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {ordered: false, items: [{text: "Leaf"}]},
+        });
+        expect(block.type === "list" && block.data.items[0].blocks).toEqual([]);
+    });
+
+    /**
+     * A list item with a non-list block (an image) Tab-nested under it —
+     * the exact case that used to lose its structure entirely on save
+     * (see `convert.ts`'s `childToListItem`). `blocks` reuses the WHOLE
+     * `blockInputSchema` union recursively, so any block type — including
+     * another nested `"list"` — is valid here, not just a hand-picked
+     * subset.
+     */
+    it("parses a list item with a non-list block (an image) attached via `blocks`", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Item with an image under it",
+                    blocks: [{type: "image", data: {src: "/x.png", alt: "alt"}}],
+                }],
+            },
+        });
+        expect(block.type === "list" && block.data.items[0].blocks[0]).toMatchObject({
+            type: "image",
+            data: {src: "/x.png", alt: "alt"},
+        });
+    });
+
+    it("parses a list item with a nested `list` block attached via `blocks` (recursive union, not just a hand-picked subset)", () => {
+        const block = parseBlock({
+            id: "1", order: 0, type: "list", text: null,
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Outer item",
+                    blocks: [{type: "list", data: {ordered: true, items: [{text: "Inner"}]}}],
+                }],
+            },
+        });
+        const attached = block.type === "list" && block.data.items[0].blocks[0];
+        expect(attached).toMatchObject({type: "list", data: {ordered: true}});
+        expect(attached && attached.type === "list" && attached.data.items[0].text).toBe("Inner");
+    });
+
+    it("rejects a list block with zero items", () => {
+        expect(() =>
+            parseBlock({id: "1", order: 0, type: "list", text: null, data: {ordered: false, items: []}}),
+        ).toThrow();
+    });
+
     it("rejects an unknown block type", () => {
         expect(() => parseBlock({id: "1", order: 0, type: "not-a-real-type", text: null, data: null})).toThrow();
     });

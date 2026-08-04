@@ -4,7 +4,18 @@ import * as React from "react";
 
 export type AutosaveStatus = "idle" | "saving" | "saved" | "error";
 
-const DEFAULT_DEBOUNCE_MS = 800;
+/**
+ * Long on purpose — an admin actively typing shouldn't see a "saving…"
+ * indicator (or trigger a real save request) on every pause longer than a
+ * second; 800ms was found live to be too aggressive, firing mid-sentence.
+ * Safe to raise this far: every navigate-away path (`navigateAfterFlush`,
+ * `handlePublish` in `PostEditorPage.tsx`/`WorkEditorPage.tsx`) already
+ * calls `flush()` unconditionally before leaving, and those same pages now
+ * also flush on blur (see their `<form onBlur>`) — so this timer only
+ * governs how long an edit sits unsaved while the admin stays on the page,
+ * mid-field, not whether it's saved before they leave it.
+ */
+const DEFAULT_DEBOUNCE_MS = 3 * 60 * 1000;
 /**
  * How long to wait before automatically retrying after a failed save — separate from `debounceMs`,
  * since a retry isn't "the admin typed again," it's "the last attempt didn't make it."

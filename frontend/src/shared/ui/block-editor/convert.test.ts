@@ -13,6 +13,7 @@ const oneOfEachBlockType: Block[] = [
     { id: "6", order: 5, type: "image", text: "A caption", data: { src: "/x.png", alt: "alt text" } },
     { id: "7", order: 6, type: "code", data: { filename: "a.kt", language: "kotlin", code: "fun main() {}" } },
     { id: "8", order: 7, type: "approachList", data: { items: [{ title: "T", description: "D" }] } },
+    { id: "9", order: 8, type: "list", data: { ordered: false, items: [{ text: "An item", blocks: [] }] } },
 ];
 
 describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression this guards", () => {
@@ -54,6 +55,7 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
         expect(result[5]).toMatchObject({ type: "image", text: "A caption", data: { src: "/x.png", alt: "alt text" } });
         expect(result[6]).toMatchObject({ type: "code", data: { filename: "a.kt", language: "kotlin", code: "fun main() {}" } });
         expect(result[7]).toMatchObject({ type: "approachList", data: { items: [{ title: "T", description: "D" }] } });
+        expect(result[8]).toMatchObject({ type: "list", data: { ordered: false, items: [{ text: "An item" }] } });
     });
 
     /**
@@ -101,6 +103,297 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
         const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
         const result = editorBlocksToBlockInputs(editor, editor.document);
         expect(result[0]).toMatchObject({ type: "lead", text: "" });
+    });
+
+    it("round-trips a nested list, preserving ordered/unordered, item text (with marks), and multi-level nesting", () => {
+        const blocks: Block[] = [
+            {
+                id: "1", order: 0, type: "list",
+                data: {
+                    ordered: false,
+                    items: [
+                        {
+                            text: "A **bold** top-level item",
+                            blocks: [{
+                                type: "list",
+                                data: {
+                                    ordered: false,
+                                    items: [{
+                                        text: "A child item",
+                                        blocks: [{
+                                            type: "list",
+                                            data: { ordered: false, items: [{ text: "A grandchild item", blocks: [] }] },
+                                        }],
+                                    }],
+                                },
+                            }],
+                        },
+                        { text: "A second top-level item", blocks: [] },
+                    ],
+                },
+            },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+
+        expect(result).toHaveLength(1);
+        const list = result[0];
+        expect(list.type === "list" && list.data.ordered).toBe(false);
+        expect(list.type === "list" && list.data.items[0].text).toBe("A **bold** top-level item");
+        const childList = list.type === "list" ? list.data.items[0].blocks[0] : undefined;
+        const child = childList?.type === "list" ? childList.data.items[0] : undefined;
+        expect(child?.text).toBe("A child item");
+        const grandchildList = child?.blocks[0];
+        expect(grandchildList?.type === "list" && grandchildList.data.items[0].text).toBe("A grandchild item");
+        expect(list.type === "list" && list.data.items[1].text).toBe("A second top-level item");
+    });
+
+    it("round-trips an ordered list distinctly from an unordered one", () => {
+        const blocks: Block[] = [
+            { id: "1", order: 0, type: "list", data: { ordered: true, items: [{ text: "First", blocks: [] }] } },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result[0]).toMatchObject({ type: "list", data: { ordered: true } });
+    });
+
+    /**
+     * A run boundary test, not just "one list works" — proves the grouping
+     * loop in `editorBlocksToBlockInputs` actually STOPS a run at a
+     * non-list-item block and STARTS a new one afterwards, rather than
+     * merging every list-item block in the document into a single "list".
+     */
+    it("splits into separate list blocks when interrupted by a non-list block, rather than merging them", () => {
+        const blocks: Block[] = [
+            { id: "1", order: 0, type: "list", data: { ordered: false, items: [{ text: "First list item", blocks: [] }] } },
+            { id: "2", order: 1, type: "paragraph", text: "Interrupting paragraph" },
+            { id: "3", order: 2, type: "list", data: { ordered: false, items: [{ text: "Second list item", blocks: [] }] } },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+
+        expect(result.map((b) => b.type)).toEqual(["list", "paragraph", "list"]);
+        expect(result[0].type === "list" && result[0].data.items[0].text).toBe("First list item");
+        expect(result[2].type === "list" && result[2].data.items[0].text).toBe("Second list item");
+    });
+
+    /**
+     * Regression test for the gap flagged in the self-review of the
+     * previous session: a non-list block (image/code/diagram/approachList)
+     * Tab-nested under a list item used to lose its structure entirely on
+     * save — either flattened to plain text or dropped outright. This
+     * round-trips through the REAL editor.
+     */
+    it("round-trips a non-list block (an image) attached to a list item via `blocks`, preserving its structure", () => {
+        const blocks: Block[] = [
+            {
+                id: "1", order: 0, type: "list",
+                data: {
+                    ordered: false,
+                    items: [{
+                        text: "An item with an image under it",
+                        blocks: [{ type: "image", data: { src: "/x.png", alt: "alt text" } }],
+                    }],
+                },
+            },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+
+        // The image should be a real editor block, nested as a `children` entry.
+        const listItemBlock = editor.document[0];
+        expect(listItemBlock.type).toBe("bulletListItem");
+        expect(listItemBlock.children).toHaveLength(1);
+        expect(listItemBlock.children[0]).toMatchObject({ type: "image", props: { src: "/x.png", alt: "alt text" } });
+
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result).toHaveLength(1);
+        const list = result[0];
+        expect(list.type === "list" && list.data.items[0].blocks[0]).toMatchObject({
+            type: "image",
+            data: { src: "/x.png", alt: "alt text" },
+        });
+    });
+
+    /**
+     * Regression test for a real bug found by automated PR review, not by
+     * the tests above: a nested sub-list used to have nowhere to store its
+     * OWN `ordered` value — `listItemToPartialBlock` inherited the OUTER
+     * list's `itemType` for every descendant, so a numbered sub-list under
+     * a bullet parent silently became bullets on save. Folding sub-lists
+     * into `blocks` as ordinary nested `"list"` entries (each with its own
+     * `data.ordered`) fixes this structurally — this proves it survives a
+     * REAL round-trip through the editor, not just the schema in isolation
+     * (already covered in `blocks.test.ts`).
+     */
+    it("keeps a nested sub-list's OWN ordered value, independent of its parent's, through a real editor round-trip", () => {
+        const blocks: Block[] = [
+            {
+                id: "1", order: 0, type: "list",
+                data: {
+                    ordered: false, // outer: bullets
+                    items: [{
+                        text: "Parent item",
+                        blocks: [{
+                            type: "list",
+                            data: { ordered: true, items: [{ text: "Numbered sub-item", blocks: [] }] }, // inner: numbers
+                        }],
+                    }],
+                },
+            },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+
+        // The nested item should be a real `numberedListItem` in the editor, not a `bulletListItem`.
+        const parentItemBlock = editor.document[0];
+        expect(parentItemBlock.type).toBe("bulletListItem");
+        expect(parentItemBlock.children[0].type).toBe("numberedListItem");
+
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        const outer = result[0];
+        expect(outer).toMatchObject({ type: "list", data: { ordered: false } });
+        const inner = outer.type === "list" ? outer.data.items[0].blocks[0] : undefined;
+        expect(inner).toMatchObject({ type: "list", data: { ordered: true } });
+        expect(inner?.type === "list" && inner.data.items[0].text).toBe("Numbered sub-item");
+    });
+
+    /**
+     * Regression test for the second bug found by automated PR review:
+     * splitting one ordered BlockNote `children` array into two
+     * separately-typed DB fields (a `children: ListItemInput[]` for
+     * sub-list items, `blocks: BlockInput[]` for everything else) lost the
+     * real relative order between them — reconstruction always put every
+     * sub-list item BEFORE every attached block, regardless of their
+     * actual order. Folding both into ONE `blocks` array (walked in its
+     * one true order) fixes this structurally. Proves it two ways: a
+     * sub-list BEFORE an attached image, and an attached image BEFORE a
+     * sub-list — if order were still being reshuffled, at least one of
+     * these would fail.
+     */
+    it("preserves the real relative order between a nested sub-list and an attached block, in either order", () => {
+        const subListFirst: Block[] = [{
+            id: "1", order: 0, type: "list",
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Item",
+                    blocks: [
+                        { type: "list", data: { ordered: false, items: [{ text: "Sub-item", blocks: [] }] } },
+                        { type: "image", data: { src: "/x.png", alt: "alt" } },
+                    ],
+                }],
+            },
+        }];
+        const imageFirst: Block[] = [{
+            id: "1", order: 0, type: "list",
+            data: {
+                ordered: false,
+                items: [{
+                    text: "Item",
+                    blocks: [
+                        { type: "image", data: { src: "/x.png", alt: "alt" } },
+                        { type: "list", data: { ordered: false, items: [{ text: "Sub-item", blocks: [] }] } },
+                    ],
+                }],
+            },
+        }];
+
+        for (const [label, blocks] of [["sub-list first", subListFirst], ["image first", imageFirst]] as const) {
+            const initialContent = blocksToPartialBlocks(blocks);
+            const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+            const result = editorBlocksToBlockInputs(editor, editor.document);
+            const attached = result[0].type === "list" ? result[0].data.items[0].blocks : [];
+            const order = attached.map((b) => b.type);
+            expect(order, label).toEqual(label === "sub-list first" ? ["list", "image"] : ["image", "list"]);
+        }
+    });
+
+    /**
+     * A type-change boundary, not just an interrupting block — a bullet run
+     * directly followed by a numbered run (no other block in between) must
+     * still become two "list" blocks, since one block can only store a
+     * single `ordered` value.
+     */
+    it("splits into separate list blocks when the item type changes from bullet to numbered with no gap", () => {
+        const blocks: Block[] = [
+            { id: "1", order: 0, type: "list", data: { ordered: false, items: [{ text: "Bullet item", blocks: [] }] } },
+            { id: "2", order: 1, type: "list", data: { ordered: true, items: [{ text: "Numbered item", blocks: [] }] } },
+        ];
+        const initialContent = blocksToPartialBlocks(blocks);
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+
+        expect(result).toHaveLength(2);
+        expect(result[0]).toMatchObject({ type: "list", data: { ordered: false } });
+        expect(result[1]).toMatchObject({ type: "list", data: { ordered: true } });
+    });
+
+    /**
+     * Regression test for a real bug found live (see `stripDanglingTrailingHardBreak`'s
+     * comment in convert.ts): a hard break (Shift+Enter) followed by the
+     * trailing whitespace artifact some browsers leave in an emptied
+     * contenteditable line left a bare, meaningless "\" as the saved text's
+     * last character. Uses `tryParseHTMLToBlocks` to feed the editor the
+     * EXACT HTML shape verified live to trigger it, not a hand-built
+     * assumption of what a hard break "should" parse to.
+     */
+    it("strips a dangling trailing backslash left by a hard break with a trailing whitespace artifact", () => {
+        for (const html of ["<p>Line1<br> </p>", "<p>Line1<br>&nbsp;</p>"]) {
+            const parsingEditor = BlockNoteEditor.create({ schema: blockNoteSchema });
+            const initialContent = parsingEditor.tryParseHTMLToBlocks(html);
+            const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+            const result = editorBlocksToBlockInputs(editor, editor.document);
+            expect(result[0]).toMatchObject({ type: "paragraph", text: "Line1" });
+        }
+    });
+
+    it("a plain trailing hard break with no whitespace artifact already round-trips clean (no regression)", () => {
+        const parsingEditor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        const initialContent = parsingEditor.tryParseHTMLToBlocks("<p>Line1<br></p>");
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result[0]).toMatchObject({ type: "paragraph", text: "Line1" });
+    });
+
+    it("preserves a hard break in the MIDDLE of the text — only a dangling TRAILING one is stripped", () => {
+        const parsingEditor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        const initialContent = parsingEditor.tryParseHTMLToBlocks("<p>Line1<br>Line2</p>");
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent });
+        const result = editorBlocksToBlockInputs(editor, editor.document);
+        expect(result[0]).toMatchObject({ type: "paragraph", text: "Line1\\\nLine2" });
+    });
+
+    /**
+     * Regression test for `CodeBlock.tsx`/`DiagramBlock.tsx`'s
+     * `toExternalHTML` (see their own comments): without it, copying/
+     * dragging a WHOLE selected code/diagram block exported the edit-mode
+     * FORM markup itself as "the code", since `toExternalHTML` falls back
+     * to `render` when absent (see `@blocknote/react`'s
+     * `createReactBlockSpec`). Exercises the exact exporter method the real
+     * copy-to-clipboard path uses (`blocksToMarkdownLossy`, same as
+     * `copyExtension.ts`'s `cleanHTMLToMarkdown` call), not just a
+     * hand-inspection of the JSX.
+     */
+    it("exports a codeSnippet block as a real fenced code block, not its edit-mode form markup", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [{ type: "codeSnippet", props: { filename: "a.kt", language: "kotlin", code: "fun main() {}" } }],
+        });
+        const markdown = editor.blocksToMarkdownLossy(editor.document);
+        expect(markdown.trim()).toBe("```kotlin\nfun main() {}\n```");
+    });
+
+    it("exports a diagram block as a real fenced ```mermaid block, not its edit-mode form markup", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [{ type: "diagram", props: { engine: "mermaid", source: "graph TD;\nA-->B;", caption: "" } }],
+        });
+        const markdown = editor.blocksToMarkdownLossy(editor.document);
+        expect(markdown.trim()).toBe("```mermaid\ngraph TD;\nA-->B;\n```");
     });
 
     it("constructs a real editor with NO initial blocks (new post/case study), without throwing", () => {

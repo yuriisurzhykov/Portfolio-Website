@@ -93,6 +93,57 @@ const diagramCore = z.object({
     })
 });
 
+/**
+ * A whole nested bullet/numbered list is ONE block (like `approachList`),
+ * not one row per item — a flat `Document.blocks` array has no concept of
+ * "these five rows are one list," and the editor (BlockNote) already
+ * represents an item's sub-items as a `children` tree on that same item, so
+ * mirroring that shape here is what makes `convert.ts`'s round-trip a
+ * direct structural walk instead of inventing a second, DB-only nesting
+ * scheme.
+ *
+ * `blocks` holds EVERYTHING Tab-nested under this item — a continued
+ * sub-list AND anything else (image/code/diagram/approachList/etc.) — in
+ * their real, original order. A continued sub-list is just another
+ * ordinary nested `"list"` `BlockInput` in this array, not a separate
+ * `children` field — found by real code review (not by inspection) that an
+ * earlier version WITH a separate `children: ListItemInput[]` field had two
+ * bugs baked into the split itself: (1) a nested sub-list's own
+ * bullet-vs-numbered choice had nowhere to live (`children` items are bare
+ * `{text}`, no `ordered` flag), so a numbered sub-list under a bullet
+ * parent silently became bullets on save; (2) splitting one ordered
+ * BlockNote `children` array into two separately-typed DB arrays
+ * (`children` first, `blocks` after) lost the real relative order between
+ * a nested sub-list and any other attached block — an image positioned
+ * BEFORE a sub-list would reappear AFTER it once reloaded. Folding
+ * sub-lists into `blocks` (reusing the existing `"list"` `BlockInput`,
+ * which already carries its own `ordered` flag and already goes through
+ * the same recursive union) fixes both at once: no second field to lose
+ * order against, and every list level's `ordered` is self-contained.
+ *
+ * `z.lazy()` is required — `blocks` recursively reuses the ENTIRE
+ * `blockInputSchema` union (including `listCore` itself), and a plain
+ * object schema can't reference a union it's also a member of before
+ * that union has finished being defined.
+ */
+export interface ListItemInput {
+    text: string;
+    blocks: BlockInput[];
+}
+const listItemCore: z.ZodType<ListItemInput> = z.lazy(() =>
+    z.object({
+        text: z.string(),
+        blocks: z.array(blockInputSchema).default([]),
+    }),
+);
+const listCore = z.object({
+    type: z.literal("list"),
+    data: z.object({
+        ordered: z.boolean(),
+        items: z.array(listItemCore).min(1),
+    }),
+});
+
 // One `.extend()` call per type, written out individually rather than
 // mapped over an array — a `.map()` here would widen every branch's
 // precise literal-discriminant type down to `ZodObject<any>`, which would
@@ -107,6 +158,7 @@ const imageBlock = imageCore.extend(baseFields);
 const codeBlock = codeCore.extend(baseFields);
 const approachListBlock = approachListCore.extend(baseFields);
 const diagramBlock = diagramCore.extend(baseFields);
+const listBlock = listCore.extend(baseFields);
 
 export const blockSchema = z.discriminatedUnion("type", [
     leadBlock,
@@ -118,6 +170,7 @@ export const blockSchema = z.discriminatedUnion("type", [
     codeBlock,
     approachListBlock,
     diagramBlock,
+    listBlock,
 ]);
 
 /** Same block shapes, minus `id`/`order` — what the admin editor sends when saving a document's blocks (see content/document.ts's `replaceDocumentContent`). */
@@ -131,6 +184,7 @@ export const blockInputSchema = z.discriminatedUnion("type", [
     codeCore,
     approachListCore,
     diagramCore,
+    listCore,
 ]);
 
 export type Block = z.infer<typeof blockSchema>;
