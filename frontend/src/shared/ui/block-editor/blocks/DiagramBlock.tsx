@@ -142,5 +142,29 @@ export const DiagramBlock = createReactBlockSpec(
                 </div>
             );
         },
+        /**
+         * Same reasoning as `CodeBlock.tsx`'s `toExternalHTML` — without it,
+         * copying/dragging a whole diagram block would export its edit-mode
+         * form (engine/mode toggles, the source editor's own markup) instead
+         * of the diagram source. Deliberately the SAME `<pre><code
+         * data-language>` shape a fenced code block uses (`engine` as the
+         * "language") rather than inventing a diagram-specific export format
+         * — `htmlToMarkdown.ts` doesn't know "diagram" as a concept at all,
+         * only "code with a language", and this editor's own
+         * `paste-handler.ts` already treats a ` ```mermaid `/` ```plantuml `
+         * fence as a diagram on the way back in, so copy → paste (even into
+         * this same editor) reconstructs a real diagram block, not a
+         * codeSnippet with a suspicious language name.
+         */
+        toExternalHTML: (props) => {
+            const { engine, source } = props.block.props;
+            return (
+                <pre>
+                    <code data-language={engine} className={`language-${engine}`}>
+                        {source}
+                    </code>
+                </pre>
+            );
+        },
     },
 );

@@ -10,21 +10,26 @@ import { DiagramBlock } from "./blocks/DiagramBlock";
 /**
  * The editor's block schema — deliberately curated with `BlockNoteSchema.create({ blockSpecs: {...} })`
  * (a fixed list), NOT `BlockNoteSchema.create().extend({...})` (defaults +
- * additions). The site only ever renders the 9 block types
+ * additions). The site only ever renders the 10 block types
  * `backend/src/content/blocks.ts` knows about (see `<ContentBlocks>`) —
- * pulling in BlockNote's full default set (bullet/numbered/check lists,
- * tables, video, audio, file, its own `codeBlock`) would let an editor
- * create content the public site's renderer has no case for at all.
+ * pulling in BlockNote's full default set (check lists, tables, video,
+ * audio, file, its own `codeBlock`) would let an editor create content the
+ * public site's renderer has no case for at all.
  *
- * Only `paragraph` and `heading` are the actual BlockNote defaults
- * (`heading` reconfigured to the two levels the site supports, H2/H3 —
- * `Text` doesn't have a visual "H1" on a post/case-study body, that's the
- * page's own `<h1>`). Every other type — `quote` (needs an `attribution`
- * prop BlockNote's built-in quote doesn't have), `note`, `image` (needs a
- * required `alt`, not just a `caption`), `code` (needs a `filename`
- * BlockNote's own `codeBlock` doesn't have), `approachList` (has no
- * BlockNote equivalent at all) — is a custom block (`./blocks/*`), each
- * mapping 1:1 onto one `BlockType` from `backend/src/content/blocks.ts`.
+ * `paragraph`/`heading`/`bulletListItem`/`numberedListItem` are the actual
+ * BlockNote defaults (`heading` reconfigured to the two levels the site
+ * supports, H2/H3 — `Text` doesn't have a visual "H1" on a post/case-study
+ * body, that's the page's own `<h1>`). The two list types are registered
+ * as-is, unmodified — `convert.ts` groups/ungroups them into this site's
+ * single `"list"` `BlockType` (see its top comment), so the editor-side
+ * representation can stay BlockNote's own native item-per-block tree
+ * (nesting via each block's `children`) without a matching custom block
+ * here. Every other type — `quote` (needs an `attribution` prop BlockNote's
+ * built-in quote doesn't have), `note`, `image` (needs a required `alt`,
+ * not just a `caption`), `code` (needs a `filename` BlockNote's own
+ * `codeBlock` doesn't have), `approachList` (has no BlockNote equivalent at
+ * all) — is a custom block (`./blocks/*`), each mapping 1:1 onto one
+ * `BlockType` from `backend/src/content/blocks.ts`.
  *
  * `code` is registered here under the key `codeSnippet`, NOT `code` —
  * see `blocks/CodeBlock.tsx`'s top comment: `"code"` is already the name
@@ -38,6 +43,8 @@ export const blockNoteSchema = BlockNoteSchema.create({
     blockSpecs: {
         paragraph: defaultBlockSpecs.paragraph,
         heading: createHeadingBlockSpec({levels: [2, 3], defaultLevel: 2, allowToggleHeadings: false}),
+        bulletListItem: defaultBlockSpecs.bulletListItem,
+        numberedListItem: defaultBlockSpecs.numberedListItem,
         // `createReactBlockSpec` returns a FACTORY (`(options?) => BlockSpec`),
         // not the spec itself — every custom block here takes no options,
         // but still has to be called to produce the actual `BlockSpec`

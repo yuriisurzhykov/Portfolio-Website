@@ -210,6 +210,10 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
         if (!window.confirm(`Delete "${ currentSlug }"? This can't be undone.`)) return;
 
         setDeleting(true);
+        // See PostEditorPage.tsx's identical comment — avoids the background
+        // blur-flush's `update()` landing on the server after this delete
+        // already removed the row.
+        await autosave.flush().catch(() => {});
         try {
             await adminApi.deleteWork(currentSlug);
             router.push("/admin/work");
@@ -235,9 +239,14 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
 
     const autosaveLabel = autosaveStatusLabel(autosave.status);
 
+    /** See PostEditorPage.tsx's identical `flushOnBlur` comment — same reasoning, same fire-and-forget flush on any field (including the block editor) losing focus. */
+    function flushOnBlur() {
+        void autosave.flush().catch(() => {});
+    }
+
     return (
         // See PostEditorPage.tsx's identical `onSubmit` comment — swallows the browser's implicit submit-on-Enter, there's no real submit action anymore.
-        <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-lg pb-4xl">
+        <form onSubmit={(e) => e.preventDefault()} onBlur={flushOnBlur} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-start justify-between gap-md flex-wrap">
                 <div className="flex flex-col gap-sm">
                     <Text as="h1" variant="h3">{isEditing ? `Edit work: ${ currentSlug }` : "New work item"}</Text>

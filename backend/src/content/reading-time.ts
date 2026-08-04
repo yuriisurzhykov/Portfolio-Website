@@ -1,4 +1,19 @@
-import type { BlockInput } from "./blocks";
+import type { BlockInput, ListItemInput } from "./blocks";
+
+/**
+ * Flattens a list item's own text plus everything nested under it
+ * (`item.blocks` — a continued sub-list, or any other attached block, in
+ * their real order — see `blocks.ts`'s comment on `ListItemInput`) into one
+ * string, depth-first. Recurses through `extractProse` itself, not a
+ * parallel "prose of a block" implementation — a sub-list's items and an
+ * attached image's caption count the exact same way they would at the top
+ * level, since they're the exact same `BlockInput` shapes.
+ */
+function extractListItemProse(items: ListItemInput[]): string {
+    return items
+        .map((item) => [item.text, ...item.blocks.map(extractProse)].filter(Boolean).join(" "))
+        .join(" ");
+}
 
 /**
  * A commonly-cited average adult silent-reading speed for prose in
@@ -49,6 +64,8 @@ export function extractProse(block: BlockInput): string {
             return "";
         case "diagram":
             return block.text ?? "";
+        case "list":
+            return extractListItemProse(block.data.items);
     }
 }
 

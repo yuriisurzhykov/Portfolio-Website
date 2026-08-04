@@ -5,10 +5,12 @@ import type { PortfolioBlockNoteEditor } from "./schema";
 
 /**
  * `getDefaultReactSlashMenuItems(editor)` only ever produces items for
- * block types it recognizes by name — `paragraph`/`heading`/`quote` here
- * (the three block types in `../schema.ts` that reuse a BlockNote-known
- * type name), automatically respecting the restricted heading levels
- * (2/3) that schema configured. The other six block types
+ * block types it recognizes by name — `paragraph`/`heading`/`quote`/
+ * `bulletListItem`/`numberedListItem` here (the block types in
+ * `../schema.ts` that reuse a BlockNote-known type name, gated behind its
+ * own `editorHasBlockWithType` check per type — see
+ * `getDefaultSlashMenuItems.ts`), automatically respecting the restricted
+ * heading levels (2/3) that schema configured. The other six block types
  * (`lead`/`note`/`image`/`code`/`approachList`/`diagram`) have no BlockNote-native
  * equivalent, so they need an explicit slash item each, added here rather
  * than left undiscoverable.

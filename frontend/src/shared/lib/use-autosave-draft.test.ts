@@ -80,6 +80,39 @@ describe("useAutosaveDraft", () => {
         expect(create).toHaveBeenCalledTimes(1);
     });
 
+    /**
+     * Pins the actual PRODUCTION default (every other test above/below
+     * passes its own explicit `debounceMs`, so nothing else in this file
+     * would catch the default silently drifting back down to something
+     * that interrupts active typing — see `use-autosave-draft.ts`'s
+     * `DEFAULT_DEBOUNCE_MS` comment for why this needs to stay long).
+     */
+    it("defaults to a 3-minute debounce when debounceMs is not provided at all", async () => {
+        const create = vi.fn().mockResolvedValue({ slug: "s", title: "T" });
+        const input: TestInput = { title: "T" };
+        const { result } = renderHook(() =>
+            useAutosaveDraft<TestInput, TestResult>({
+                slug: null,
+                buildInput: () => input,
+                isEmpty: () => false,
+                create,
+                update: vi.fn(),
+                getSlug: (r) => r.slug,
+            }),
+        );
+
+        act(() => result.current.scheduleSave());
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3 * 60 * 1000 - 1);
+        });
+        expect(create).not.toHaveBeenCalled();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1);
+        });
+        expect(create).toHaveBeenCalledTimes(1);
+    });
+
     it("re-debounces on every scheduleSave() call — a second edit before the delay elapses resets the timer instead of stacking a second save", async () => {
         const create = vi.fn().mockResolvedValue({ slug: "s", title: "x" });
         const input: TestInput = { title: "Hello" };

@@ -11,7 +11,7 @@ export { getDistinctPostCategories, getJournalEntries, getLatestPublishedPost, g
 export type { PostDetail, PostStatus, PostSummary } from "./content/posts";
 export { getAllWork, getFeaturedWork, getWorkBySlug } from "./content/work";
 export type { CaseStudy, WorkDetail, WorkStatus, WorkSummary } from "./content/work";
-export type { Block, BlockInput, BlockType } from "./content/blocks";
+export type { Block, BlockInput, BlockType, ListItemInput } from "./content/blocks";
 export type { LocalizedText } from "./content/localized-text";
 export type { ContentLocale } from "./content/locale";
 export { isInvalidLifecycleTransitionError, nextState } from "./content/lifecycle";
