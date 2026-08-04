@@ -309,10 +309,11 @@ export function normalizeLineEndings(text: string): string {
 /**
  * `useCreateBlockNote`'s `pasteHandler` option (see `BlockNoteEditor.tsx`).
  * Only steps in when the pasted plain text actually contains a fence or a
- * blockquote, OR needed CRLF normalization (see `normalizeLineEndings`) —
- * anything else (rich HTML from another app, or already-`\n`-only plain
- * markdown) falls straight through to `defaultPasteHandler()`, unchanged
- * from BlockNote's own default behavior.
+ * blockquote, OR is a plain-text/markdown-only clipboard that needed CRLF
+ * normalization (see `normalizeLineEndings`) — anything else (rich HTML
+ * from another app, or already-`\n`-only plain markdown) falls straight
+ * through to `defaultPasteHandler()`, unchanged from BlockNote's own
+ * default behavior.
  *
  * The CRLF case can't simply normalize and still delegate:
  * `defaultPasteHandler()` re-reads `event.clipboardData` itself rather
@@ -321,6 +322,18 @@ export function normalizeLineEndings(text: string): string {
  * the exact bug this function exists to avoid. Handling it here instead
  * (one direct `editor.pasteMarkdown` call with the normalized text) is
  * the only way to guarantee the parser never sees a `\r`.
+ *
+ * Gated on the clipboard having NO `text/html` at all, found by real
+ * review (not by inspection): a rich copy from a browser/Word/Google Docs
+ * commonly carries BOTH `text/html` AND a `text/plain` mirror, and that
+ * mirror is just as likely to have `\r\n` as a plain-text-only copy is —
+ * unconditionally normalizing and forcing `pasteMarkdown` in that case
+ * would silently downgrade real formatting/links to plain markdown even
+ * when `text/html` was the far better source, taking a decision away from
+ * `defaultPasteHandler()`'s own real `isMarkdown()`/`prioritizeMarkdownOverHTML`
+ * heuristic instead of just fixing the CRLF bug within it. A clipboard
+ * with no `text/html` at all (a `.md` file, Notepad, a terminal, a chat
+ * app's "copy as text") has no such tradeoff — there's no HTML to lose.
  */
 export function smartPasteHandler({ event, editor, defaultPasteHandler }: PasteHandlerContext): boolean | undefined {
     const rawPlainText = event.clipboardData?.getData("text/plain");
@@ -332,7 +345,8 @@ export function smartPasteHandler({ event, editor, defaultPasteHandler }: PasteH
     const segments = splitPastedMarkdown(plainText);
     const hasFenceOrQuote = segments.some((segment) => segment.kind !== "text");
     if (!hasFenceOrQuote) {
-        if (plainText === rawPlainText) {
+        const hasHtml = event.clipboardData?.types.includes("text/html") ?? false;
+        if (hasHtml || plainText === rawPlainText) {
             return defaultPasteHandler();
         }
         editor.pasteMarkdown(plainText);

@@ -89,8 +89,10 @@ describe("normalizeLineEndings", () => {
 });
 
 describe("smartPasteHandler", () => {
-    function fakeClipboardEvent(text: string): ClipboardEvent {
-        return { clipboardData: { getData: () => text } } as unknown as ClipboardEvent;
+    /** `types` defaults to a plain-text-only clipboard (no `text/html`) — the common case for every existing test here; pass `{ hasHtml: true }` to simulate a rich copy that also carries an HTML mirror. */
+    function fakeClipboardEvent(text: string, options?: { hasHtml?: boolean }): ClipboardEvent {
+        const types = options?.hasHtml ? ["text/plain", "text/html"] : ["text/plain"];
+        return { clipboardData: { getData: () => text, types } } as unknown as ClipboardEvent;
     }
 
     it("delegates to defaultPasteHandler when the pasted text has no fence or blockquote", () => {
@@ -145,6 +147,37 @@ describe("smartPasteHandler", () => {
         expect(delegated).toBe(false);
         expect(result).toBe(true);
         expect(textPassedToPasteMarkdown).toBe("- a sequence number;\n- a timestamp;\n");
+    });
+
+    /**
+     * Regression test for a real review finding on the fix above: a rich
+     * copy from a browser/Word/Google Docs commonly carries BOTH
+     * `text/html` AND a `text/plain` mirror, and that mirror is just as
+     * likely to have `\r\n` as a plain-text-only copy — normalizing and
+     * forcing `pasteMarkdown` regardless of `text/html`'s presence would
+     * silently downgrade real formatting/links to plain markdown, taking
+     * the html-vs-markdown decision away from `defaultPasteHandler()`'s
+     * own heuristic instead of just fixing the CRLF bug within it. Only a
+     * clipboard with NO `text/html` at all should ever take the
+     * normalize-and-paste-ourselves path.
+     */
+    it("still delegates to defaultPasteHandler for a CRLF plain-text mirror when text/html is ALSO on the clipboard, instead of downgrading rich content to markdown", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        const pasteMarkdownSpy = vi.spyOn(editor, "pasteMarkdown");
+
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("- a sequence number;\r\n- a timestamp;\r\n", { hasHtml: true }),
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+
+        expect(delegated).toBe(true);
+        expect(result).toBe(true);
+        expect(pasteMarkdownSpy).not.toHaveBeenCalled();
     });
 
     it("still delegates to defaultPasteHandler for plain text with no fence/quote when there's no CRLF to normalize (no behavior change)", () => {
