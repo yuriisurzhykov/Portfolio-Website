@@ -46,6 +46,7 @@ function colorVars(c: Colors): string {
     --color-accent-text: ${ c.accent.text };
     --color-accent-glow: ${ c.accent.glow };
     --color-accent-glow-opacity: ${ c.accent.glowOpacity };
+    --color-accent-mesh-gradient: ${ c.accent.meshGradient };
     --color-accent-tint-bg: ${ c.accent.tintBg };
     /* Legacy aliases kept so existing dev-only components keep resolving */
     --color-accent-magenta: ${ c.accent.solid };
@@ -130,7 +131,8 @@ export const themeVars = `
     --radius-pill: ${ radii.pill };
 
     /* SHADOWS */
-    --shadow-primary-btn: ${ shadows.primaryBtn };
+    --shadow-primary-button: ${ shadows.primaryButton };
+    --shadow-primary-button-hover: ${ shadows.primaryButtonHover };
     --shadow-soft-glow: ${ shadows.softGlow };
     --shadow-surface-deep: ${ shadows.surfaceDeep };
     --shadow-focus-ring: ${ shadows.focusRing };

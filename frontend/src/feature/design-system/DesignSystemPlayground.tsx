@@ -520,7 +520,7 @@ export function DesignSystemPlayground() {
                     PlaceholderCover
                 </Text>
                 <Text variant="body" tone="secondary">
-                    Диагональная штриховка вместо обложки, когда у work-item ещё нет изображения.
+                    Акцентный mesh-градиент вместо обложки, когда у work-item ещё нет изображения.
                 </Text>
 
                 <PlaceholderCover

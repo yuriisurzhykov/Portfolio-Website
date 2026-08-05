@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./globals.css";
 @import "./code-theme.css";
+@import "./gradients.css";
 
 /*noinspection ALL*/
 @theme {
@@ -36,6 +37,13 @@
     --color-accent-text: var(--color-accent-text);
     --color-accent-glow: var(--color-accent-glow);
     --color-accent-glow-opacity: var(--color-accent-glow-opacity);
+    /* --color-accent-mesh-gradient is deliberately NOT registered here: doing so made
+     * Tailwind auto-generate its own `background-color: var(--color-accent-mesh-gradient)`
+     * under the same .bg-accent-mesh-gradient class our @utility (gradients.css) defines,
+     * which then overrode our background-color with an invalid value (computes to
+     * transparent) since a gradient can't be a background-color. The raw CSS variable
+     * is still emitted globally by theme.css.ts regardless of @theme registration, so
+     * gradients.css's `var(--color-accent-mesh-gradient)` still resolves fine without this. */
     --color-accent-tint-bg: var(--color-accent-tint-bg);
     --color-accent-magenta: var(--color-accent-magenta);
     --color-accent-purple: var(--color-accent-purple);
@@ -136,7 +144,8 @@
     /* ------------------------------------------------------------------------
      * SHADOWS
      * ------------------------------------------------------------------------ */
-    --shadow-primary-btn: var(--shadow-primary-btn);
+    --shadow-primary-button: var(--shadow-primary-button);
+    --shadow-primary-button-hover: var(--shadow-primary-button-hover);
     --shadow-soft-glow: var(--shadow-soft-glow);
     --shadow-surface-deep: var(--shadow-surface-deep);
     --shadow-focus-ring: var(--shadow-focus-ring);

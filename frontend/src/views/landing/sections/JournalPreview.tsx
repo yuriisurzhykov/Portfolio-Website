@@ -7,6 +7,7 @@ import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
+import { cn } from "@/shared/lib/utils";
 
 export interface JournalPreviewProps {
     post: PostSummary | null;
@@ -25,8 +26,16 @@ export function JournalPreview({ post }: JournalPreviewProps) {
             <Eyebrow className="mb-[20px]">{ln("eyebrow.fromJournal")}</Eyebrow>
             <Link
                 href={`/journal/${post.slug}`}
-                className="block p-[32px] bg-surface-base border border-border-subtle rounded-xl hover:border-border-default transition-colors duration-normal"
+                className="group relative block p-[32px] pl-[44px] bg-surface-base border border-border-subtle rounded-xl hover:border-border-default transition-colors duration-normal"
             >
+                <span
+                    aria-hidden
+                    className={cn(
+                        "absolute left-[16px] top-[14px] bottom-[14px] w-[3px] rounded-pill bg-accent-solid origin-top",
+                        "scale-y-0 transition-transform duration-slow ease-entrance motion-reduce:transition-none",
+                        "group-hover:scale-y-100 group-focus-visible:scale-y-100",
+                    )}
+                />
                 <div className="flex gap-sm items-center mb-[14px] flex-wrap">
                     <StatusBadge tone="accent">{pick(post.category)}</StatusBadge>
                     <Text variant="caption" tone="faint" className="font-mono normal-case">
