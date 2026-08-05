@@ -229,11 +229,22 @@ function insertSegments(editor: PortfolioBlockNoteEditor, segments: PasteSegment
 
     let anchor = splitAnchorAtCursor(editor, editor.getTextCursorPosition().block);
     let firstNonTextSegment = true;
+    // True right after inserting a fence/quote block — see this function's
+    // doc comment for why that specific anchor is never safe to paste into
+    // directly.
+    let anchorIsFenceOrQuote = false;
 
     for (const segment of segments) {
         if (segment.kind === "text") {
             if (!segment.text.trim()) {
                 continue;
+            }
+            if (anchorIsFenceOrQuote) {
+                [anchor] = editor.insertBlocks(
+                    [{ type: "paragraph", content: [] } as PortfolioPartialBlock],
+                    anchor,
+                    "after",
+                ) as PortfolioBlock[];
             }
             editor.setTextCursorPosition(anchor, "end");
             // Not exercised by any automated test — jsdom has no
@@ -246,6 +257,7 @@ function insertSegments(editor: PortfolioBlockNoteEditor, segments: PasteSegment
             // documented jsdom limitation on mounted-editor behavior.
             editor.pasteMarkdown(segment.text);
             anchor = editor.getTextCursorPosition().block;
+            anchorIsFenceOrQuote = false;
             continue;
         }
 
@@ -257,6 +269,7 @@ function insertSegments(editor: PortfolioBlockNoteEditor, segments: PasteSegment
             [anchor] = editor.insertBlocks([block], anchor, "after") as PortfolioBlock[];
         }
         firstNonTextSegment = false;
+        anchorIsFenceOrQuote = true;
     }
 }
 
@@ -270,23 +283,74 @@ interface PasteHandlerContext {
 }
 
 /**
+ * Real clipboards hand back `\r\n` line endings — confirmed live, not
+ * assumed: a real Chromium paste (Playwright + a genuine OS clipboard
+ * round-trip, `navigator.clipboard.writeText()` then a real `Control+V`)
+ * returns `\r\n` in `clipboardData.getData("text/plain")` even when the
+ * text that was written used bare `\n` throughout. `@blocknote/core`'s own
+ * markdown-to-HTML tokenizer (`markdownToHtml.ts`, used internally by
+ * `editor.pasteMarkdown`) tokenizes line-by-line with several regexes
+ * shaped `(.*)$` and NO `/m` flag — JavaScript's `.` never matches `\r`
+ * (along with `\n`), and without `/m`, `$` only matches the literal end of
+ * the string, so a `\r`-terminated line can satisfy neither and the whole
+ * regex fails to match. The list-item regex is exactly this shape, so
+ * EVERY line of a pasted bullet/numbered list silently misses list
+ * detection and falls through to a plain paragraph, keeping the literal
+ * `-`/`*`/`1.` marker as visible text — verified directly: the exact same
+ * text produces a real `<ul><li>` for `\n` endings and a run of
+ * `<p>-   item</p>` for `\r\n`. (Headings/quotes happen to survive because
+ * their own regexes end in a `\s*` right before `$`, and `\s` — unlike
+ * `.` — does include `\r`.)
+ */
+export function normalizeLineEndings(text: string): string {
+    return text.replace(/\r\n/g, "\n");
+}
+
+/**
  * `useCreateBlockNote`'s `pasteHandler` option (see `BlockNoteEditor.tsx`).
  * Only steps in when the pasted plain text actually contains a fence or a
- * blockquote — anything else (including a paste BlockNote already handles
- * well: rich HTML from another app, a plain markdown heading/list) falls
- * straight through to `defaultPasteHandler()`, unchanged from BlockNote's
- * own default behavior.
+ * blockquote, OR is a plain-text/markdown-only clipboard that needed CRLF
+ * normalization (see `normalizeLineEndings`) — anything else (rich HTML
+ * from another app, or already-`\n`-only plain markdown) falls straight
+ * through to `defaultPasteHandler()`, unchanged from BlockNote's own
+ * default behavior.
+ *
+ * The CRLF case can't simply normalize and still delegate:
+ * `defaultPasteHandler()` re-reads `event.clipboardData` itself rather
+ * than accepting the normalized string, so delegating would hand
+ * BlockNote's own `pasteMarkdown` the ORIGINAL, still-`\r\n` text and hit
+ * the exact bug this function exists to avoid. Handling it here instead
+ * (one direct `editor.pasteMarkdown` call with the normalized text) is
+ * the only way to guarantee the parser never sees a `\r`.
+ *
+ * Gated on the clipboard having NO `text/html` at all, found by real
+ * review (not by inspection): a rich copy from a browser/Word/Google Docs
+ * commonly carries BOTH `text/html` AND a `text/plain` mirror, and that
+ * mirror is just as likely to have `\r\n` as a plain-text-only copy is —
+ * unconditionally normalizing and forcing `pasteMarkdown` in that case
+ * would silently downgrade real formatting/links to plain markdown even
+ * when `text/html` was the far better source, taking a decision away from
+ * `defaultPasteHandler()`'s own real `isMarkdown()`/`prioritizeMarkdownOverHTML`
+ * heuristic instead of just fixing the CRLF bug within it. A clipboard
+ * with no `text/html` at all (a `.md` file, Notepad, a terminal, a chat
+ * app's "copy as text") has no such tradeoff — there's no HTML to lose.
  */
 export function smartPasteHandler({ event, editor, defaultPasteHandler }: PasteHandlerContext): boolean | undefined {
-    const plainText = event.clipboardData?.getData("text/plain");
-    if (!plainText) {
+    const rawPlainText = event.clipboardData?.getData("text/plain");
+    if (!rawPlainText) {
         return defaultPasteHandler();
     }
+    const plainText = normalizeLineEndings(rawPlainText);
 
     const segments = splitPastedMarkdown(plainText);
-    const needsCustomHandling = segments.some((segment) => segment.kind !== "text");
-    if (!needsCustomHandling) {
-        return defaultPasteHandler();
+    const hasFenceOrQuote = segments.some((segment) => segment.kind !== "text");
+    if (!hasFenceOrQuote) {
+        const hasHtml = event.clipboardData?.types.includes("text/html") ?? false;
+        if (hasHtml || plainText === rawPlainText) {
+            return defaultPasteHandler();
+        }
+        editor.pasteMarkdown(plainText);
+        return true;
     }
 
     insertSegments(editor, segments);

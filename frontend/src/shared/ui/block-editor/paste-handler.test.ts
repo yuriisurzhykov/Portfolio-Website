@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BlockNoteEditor, getBlockInfoFromTransaction } from "@blocknote/core";
 import { TextSelection, type Transaction } from "prosemirror-state";
 import { blockNoteSchema } from "./schema";
-import { splitPastedMarkdown, smartPasteHandler } from "./paste-handler";
+import { splitPastedMarkdown, smartPasteHandler, normalizeLineEndings } from "./paste-handler";
 
 /** Places the cursor at a character offset within `block`'s own inline content — same `getBlockInfoFromTransaction` technique `paste-handler.ts`'s own split logic uses, so these tests exercise the exact position math it relies on. */
 function placeCursorAt(editor: ReturnType<typeof BlockNoteEditor.create>, block: { id: string }, offset: number) {
@@ -78,9 +78,21 @@ describe("splitPastedMarkdown", () => {
     });
 });
 
+describe("normalizeLineEndings", () => {
+    it("converts every CRLF to a bare LF", () => {
+        expect(normalizeLineEndings("a\r\nb\r\nc")).toBe("a\nb\nc");
+    });
+
+    it("leaves text with no CRLF completely unchanged", () => {
+        expect(normalizeLineEndings("a\nb\nc")).toBe("a\nb\nc");
+    });
+});
+
 describe("smartPasteHandler", () => {
-    function fakeClipboardEvent(text: string): ClipboardEvent {
-        return { clipboardData: { getData: () => text } } as unknown as ClipboardEvent;
+    /** `types` defaults to a plain-text-only clipboard (no `text/html`) — the common case for every existing test here; pass `{ hasHtml: true }` to simulate a rich copy that also carries an HTML mirror. */
+    function fakeClipboardEvent(text: string, options?: { hasHtml?: boolean }): ClipboardEvent {
+        const types = options?.hasHtml ? ["text/plain", "text/html"] : ["text/plain"];
+        return { clipboardData: { getData: () => text, types } } as unknown as ClipboardEvent;
     }
 
     it("delegates to defaultPasteHandler when the pasted text has no fence or blockquote", () => {
@@ -96,6 +108,100 @@ describe("smartPasteHandler", () => {
         });
         expect(delegated).toBe(true);
         expect(result).toBe(true);
+    });
+
+    /**
+     * Regression test for a real bug found pasting in an ACTUAL browser
+     * (jsdom alone never would have caught this — see this file's other
+     * comments on `ClipboardEvent` not existing there): a real clipboard's
+     * `text/plain` uses `\r\n`, even when the copied source used bare
+     * `\n`. A plain markdown list with no fence/quote used to delegate
+     * straight to `defaultPasteHandler()`, which would re-read the
+     * clipboard itself and hand `@blocknote/core`'s own markdown-to-HTML
+     * tokenizer the UNNORMALIZED `\r\n` text — its list-item regex
+     * (`(.*)$`, no `/m` flag) never matches a `\r`-terminated line, so
+     * every list item silently became a plain paragraph with the literal
+     * `-`/`*` marker left in the text (verified directly against
+     * `markdownToHtml` — see paste-handler.ts's `normalizeLineEndings`
+     * comment). `pasteMarkdown` is stubbed to a no-op, same technique as
+     * the anchor-position regression tests below — this isn't testing
+     * BlockNote's own parser, only that OUR code hands it `\n`, never `\r`.
+     */
+    it("handles a CRLF plain-text list itself (not defaultPasteHandler), with line endings normalized to LF first", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        let textPassedToPasteMarkdown: string | undefined;
+        vi.spyOn(editor, "pasteMarkdown").mockImplementation((text: string) => {
+            textPassedToPasteMarkdown = text;
+        });
+
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("- a sequence number;\r\n- a timestamp;\r\n"),
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+
+        expect(delegated).toBe(false);
+        expect(result).toBe(true);
+        expect(textPassedToPasteMarkdown).toBe("- a sequence number;\n- a timestamp;\n");
+    });
+
+    /**
+     * Regression test for a real review finding on the fix above: a rich
+     * copy from a browser/Word/Google Docs commonly carries BOTH
+     * `text/html` AND a `text/plain` mirror, and that mirror is just as
+     * likely to have `\r\n` as a plain-text-only copy — normalizing and
+     * forcing `pasteMarkdown` regardless of `text/html`'s presence would
+     * silently downgrade real formatting/links to plain markdown, taking
+     * the html-vs-markdown decision away from `defaultPasteHandler()`'s
+     * own heuristic instead of just fixing the CRLF bug within it. Only a
+     * clipboard with NO `text/html` at all should ever take the
+     * normalize-and-paste-ourselves path.
+     */
+    it("still delegates to defaultPasteHandler for a CRLF plain-text mirror when text/html is ALSO on the clipboard, instead of downgrading rich content to markdown", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        const pasteMarkdownSpy = vi.spyOn(editor, "pasteMarkdown");
+
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("- a sequence number;\r\n- a timestamp;\r\n", { hasHtml: true }),
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+
+        expect(delegated).toBe(true);
+        expect(result).toBe(true);
+        expect(pasteMarkdownSpy).not.toHaveBeenCalled();
+    });
+
+    it("still delegates to defaultPasteHandler for plain text with no fence/quote when there's no CRLF to normalize (no behavior change)", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let delegated = false;
+        const result = smartPasteHandler({
+            event: fakeClipboardEvent("- a sequence number;\n- a timestamp;\n"),
+            editor: editor as any,
+            defaultPasteHandler: () => {
+                delegated = true;
+                return true;
+            },
+        });
+        expect(delegated).toBe(true);
+        expect(result).toBe(true);
+    });
+
+    it("normalizes CRLF before segmenting too, so a fence/quote segment's text is already clean LF", () => {
+        const source = "> A quote\r\n\r\n```js\r\nconst x = 1;\r\n```";
+        expect(splitPastedMarkdown(normalizeLineEndings(source))).toEqual([
+            { kind: "quote", text: "A quote" },
+            { kind: "text", text: "" },
+            { kind: "fence", language: "js", code: "const x = 1;" },
+        ]);
     });
 
     it("delegates to defaultPasteHandler when clipboardData has no text/plain data at all", () => {
@@ -183,6 +289,63 @@ describe("smartPasteHandler", () => {
         expect(editor.document.map((b) => b.type)).toEqual(["codeSnippet", "quote"]);
         expect(editor.document[0]).toMatchObject({ props: { language: "js", code: "const x = 1;" } });
         expect(editor.document[1]).toMatchObject({ content: [{ type: "text", text: "Outro quote" }] });
+    });
+
+    /**
+     * Regression test for a real bug found pasting a long mixed document: a
+     * `"text"` segment right after a `"quote"` segment was pasted with the
+     * cursor left INSIDE the quote's own inline content (`setTextCursorPosition(quoteBlock, "end")`
+     * still sits inside that quote, not after it as a sibling), merging the
+     * next heading/paragraph into the quote's text instead of creating a
+     * real separate block. `pasteMarkdown` is stubbed to a no-op — this
+     * isn't testing what `pasteMarkdown` itself does with the text (that
+     * needs a real `ClipboardEvent`, see the comment on `insertSegments`'
+     * "text" branch), only that `insertSegments` hands it a cursor sitting
+     * on a fresh, ordinary paragraph — never inside the quote — which is the
+     * actual invariant this bug violated.
+     */
+    it("inserts a fresh empty paragraph before pasting text that follows a quote, instead of pasting inside the quote itself", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let cursorBlockTypeAtPasteTime: string | undefined;
+        const pasteMarkdownSpy = vi.spyOn(editor, "pasteMarkdown").mockImplementation(() => {
+            cursorBlockTypeAtPasteTime = editor.getTextCursorPosition().block.type;
+        });
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("> A quote\n## A heading"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["quote", "paragraph"]);
+        expect(editor.document[1]).toMatchObject({ content: [] });
+        expect(cursorBlockTypeAtPasteTime).toBe("paragraph");
+        expect(pasteMarkdownSpy).toHaveBeenCalledExactlyOnceWith("## A heading");
+    });
+
+    /**
+     * Same bug, but for the `"fence"` -> `"text"` transition: a `codeSnippet`/
+     * `diagram` anchor has `content: "none"` (no inline content at all), so
+     * pasting straight into it is even more clearly invalid than the quote
+     * case above.
+     */
+    it("inserts a fresh empty paragraph before pasting text that follows a fenced code block, instead of pasting into the content-less code block", () => {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+        let cursorBlockTypeAtPasteTime: string | undefined;
+        const pasteMarkdownSpy = vi.spyOn(editor, "pasteMarkdown").mockImplementation(() => {
+            cursorBlockTypeAtPasteTime = editor.getTextCursorPosition().block.type;
+        });
+
+        smartPasteHandler({
+            event: fakeClipboardEvent("```js\nconst x = 1;\n```\nSome explanatory text"),
+            editor: editor as any,
+            defaultPasteHandler: () => undefined,
+        });
+
+        expect(editor.document.map((b) => b.type)).toEqual(["codeSnippet", "paragraph"]);
+        expect(editor.document[1]).toMatchObject({ content: [] });
+        expect(cursorBlockTypeAtPasteTime).toBe("paragraph");
+        expect(pasteMarkdownSpy).toHaveBeenCalledExactlyOnceWith("Some explanatory text");
     });
 
     /**
