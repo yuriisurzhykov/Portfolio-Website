@@ -20,7 +20,9 @@ export const buttonVariantClasses: Record<ButtonVariant, string> = {
     primary: [
         "bg-accent-solid",
         "text-accent-on-solid",
+        "shadow-primary-button",
         "hover:bg-accent-solid-hover",
+        "hover:shadow-primary-button-hover",
         "active:scale-press",
     ].join(" "),
     secondary: [

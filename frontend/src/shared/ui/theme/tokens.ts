@@ -87,6 +87,10 @@ export const darkPalette = {
     glowA: "oklch(0.65 0.19 45)",
     glowB: "oklch(0.65 0.19 300)",
     glowOpacity: "0.32",
+    // Two extra hue stops (blue, magenta), so the mesh-gradient cover reads as
+    // several distinct color zones, not just the 2-stop glowA/glowB blend.
+    meshBlue: "oklch(0.62 0.15 230)",
+    meshMagenta: "oklch(0.6 0.2 340)",
 };
 
 /**
@@ -136,6 +140,8 @@ export const lightPalette = {
     glowA: "oklch(0.8 0.13 45)",
     glowB: "oklch(0.8 0.09 300)",
     glowOpacity: "0.22",
+    meshBlue: "oklch(0.78 0.1 230)",
+    meshMagenta: "oklch(0.78 0.12 340)",
 };
 
 /**
@@ -187,6 +193,16 @@ function buildColors(neutral: typeof darkPalette) {
             text: neutral.accentText,
             glow: `radial-gradient(circle at 30% 30%, ${ neutral.glowA } 0%, ${ neutral.glowB } 55%, transparent 75%)`,
             glowOpacity: neutral.glowOpacity,
+            // Multi-blob mesh gradient (case-study cover art, see PlaceholderCover)
+            // — 4 independently-positioned radial gradients stacked as separate
+            // background layers, which is what makes it read as an organic mesh
+            // rather than a single blurred "aurora" circle like `glow` above.
+            meshGradient: [
+                `radial-gradient(at 15% 20%, ${ neutral.glowA } 0%, transparent 50%)`,
+                `radial-gradient(at 82% 15%, ${ neutral.meshMagenta } 0%, transparent 55%)`,
+                `radial-gradient(at 75% 70%, ${ neutral.meshBlue } 0%, transparent 55%)`,
+                `radial-gradient(at 15% 85%, ${ neutral.glowB } 0%, transparent 50%)`,
+            ].join(", "),
             tintBg: `rgba(${ palette.accentTintRgb },.12)`,
         },
 
@@ -313,7 +329,8 @@ export const typography = {
  * -----------------------------------------------------------------------------
  */
 export const shadows = {
-    primaryBtn: "none",
+    primaryButton: `0 0 2px 0 rgba(${palette.accentTintRgb}, 0.45), 0 4px 12px rgba(${palette.accentTintRgb}, 0.3)`,
+    primaryButtonHover: `0 0 15px 6px rgba(${palette.accentTintRgb}, 0.6), 0 6px 16px rgba(${palette.accentTintRgb}, 0.4)`,
     softGlow: "none",
     surfaceDeep: "0 20px 40px rgba(0,0,0,0.6)",
     // NOTE: not theme-aware (this object is built once, not per-theme like `colors`/

@@ -38,13 +38,10 @@ export const PlaceholderCover = React.forwardRef<HTMLDivElement, PlaceholderCove
                 className={cn(
                     "flex items-center justify-center",
                     "font-mono text-micro text-text-faint",
+                    "bg-accent-mesh-gradient",
                     className,
                 )}
-                style={{
-                    backgroundImage:
-                        "repeating-linear-gradient(135deg, var(--color-surface-placeholder-a), var(--color-surface-placeholder-a) 10px, var(--color-surface-placeholder-b) 10px, var(--color-surface-placeholder-b) 20px)",
-                    ...style,
-                }}
+                style={style}
                 {...rest}
             >
                 {label}

@@ -1,0 +1,12 @@
+/**
+ * GRADIENT UTILITIES
+ * ------------------
+ * Tailwind's bg-* utility only ever sets background-color, which can't hold
+ * a multi-stop gradient() value — so any gradient-valued token in tokens.ts
+ * gets one @utility here instead. Consuming components just add the class
+ * name; no inline `style` needed, and no copy-pasted gradient CSS per call site.
+ */
+@utility bg-accent-mesh-gradient {
+    background-color: var(--color-surface-placeholder-a);
+    background-image: var(--color-accent-mesh-gradient);
+}
