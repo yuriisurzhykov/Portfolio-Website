@@ -1,0 +1,63 @@
+name: Render Architecture Diagrams
+
+# The root README's diagrams are never hand-exported pictures: docs/diagrams/*.puml is the
+# single source of truth, and docs/images/*.svg is a build artifact derived from it. This
+# workflow is that build step. It runs only when a PR actually touches a .puml file, renders
+# every diagram with the OFFICIAL, PUBLIC `plantuml/plantuml` CLI image (a self-contained
+# renderer bundled in the container — NOT this project's own self-hosted PlantUML server, which
+# is deliberately private, VPS-internal, and reachable only by the running Next.js app itself;
+# see docs/diagrams/01-building-blocks.puml's note), and pushes the regenerated SVGs straight
+# back to the PR's own branch — direct pushes to master are blocked by a ruleset, exactly like
+# accept-visual-baselines.yml's own comment explains, so a PR branch is the only place a bot
+# commit can legally land anyway.
+#
+# Path-filtered on docs/diagrams/**, not docs/images/** — the commit this workflow makes only
+# touches docs/images/**, so it can never re-trigger itself, independent of whether a
+# GITHUB_TOKEN-authored push would even fire a new `synchronize` event in the first place.
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths:
+      - "docs/diagrams/**/*.puml"
+
+concurrency:
+  group: render-diagrams-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    # Same reasoning as accept-visual-baselines.yml's fork guard: this job ends with a push
+    # authenticated by a write-scoped GITHUB_TOKEN, so it must never run against a fork's PR —
+    # that would mean granting a stranger's branch a write-scoped credential by proxy.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Render every .puml to SVG
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/docs/diagrams:/src" \
+            -v "${{ github.workspace }}/docs/images:/out" \
+            plantuml/plantuml:latest -tsvg -o /out /src/*.puml
+
+      - name: Commit and push regenerated diagrams
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/images
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "docs: regenerate architecture diagrams from docs/diagrams/*.puml"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
