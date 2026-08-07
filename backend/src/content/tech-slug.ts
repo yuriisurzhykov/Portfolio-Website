@@ -1,11 +1,57 @@
 import { slugify } from "./slugify";
 
 /**
- * A tech name's stable, URL-safe identifier — reuses `slugify.ts`'s exact
- * normalization (lowercase, strip accents, non-alphanumeric runs → `-`)
- * instead of duplicating it, because the transformation itself is
- * identical to a post/work title's own slug, just applied to a shorter,
- * always-present string (`techStack[].name`, `Work.stack[]` entries).
+ * Symbols that ARE the name, not punctuation around it — spelled out as
+ * words before slugifying.
+ *
+ * Fixes a real collision, reported in review against the first version of
+ * this file (which called `slugify` directly): `slugify` deletes every
+ * non-alphanumeric run, so `"C++"` and `"C#"` BOTH became `"c"`. That was
+ * not a cosmetic slug problem — it propagated to every consumer below at
+ * once. `uniqueTechSlugs` reported one tech where the stack had two, so
+ * both landing-page logos linked to the same `/work?tech=c`;
+ * `filterWorkByTechSlug` then returned the C++ projects AND the C#
+ * projects for that one filter; and `findTechDisplayName` labelled the
+ * merged result with whichever of the two spellings happened to appear
+ * first in the list. Same class of "punctuation carries the meaning" case
+ * `SIMPLE_ICON_SLUG_ALIASES` below already handles for Simple Icons — and
+ * the same fix Simple Icons itself picked (`cplusplus`, `csharp`),
+ * arrived at independently here rather than reused, because that table
+ * maps to an EXTERNAL vendor's slugs and this one has to stay readable in
+ * our own URLs (`/work?tech=c-plus-plus`).
+ *
+ * Deliberately tiny, and deliberately not a general punctuation
+ * transliteration: `&`, `/` and `.` are separators in practice
+ * ("Coroutines & Flow", "CI/CD", "Node.js"), and spelling THOSE out would
+ * make every slug worse to read while fixing nothing — none of them is
+ * ever the only thing distinguishing two real technologies. Add an entry
+ * here only for a symbol that genuinely carries a name apart, and add a
+ * test pinning the two names it separates.
+ *
+ * Note that the reverse direction now merges: a name typed as
+ * `"C plus plus"` slugs the same as `"C++"`. That's the intended
+ * behaviour, not a leak — it's the same "typed slightly differently"
+ * equivalence `toTechSlug` exists to provide.
+ */
+const SLUG_SYMBOL_WORDS: Readonly<Record<string, string>> = {
+    "+": "plus",
+    "#": "sharp",
+};
+
+/** `split`/`join` rather than a `RegExp` built from the table's keys — the keys are punctuation, so a regex would need escaping logic that has to stay correct as the table grows. */
+function spellOutSymbols(name: string): string {
+    let expanded = name;
+    for (const [symbol, word] of Object.entries(SLUG_SYMBOL_WORDS)) {
+        expanded = expanded.split(symbol).join(` ${ word } `);
+    }
+    return expanded;
+}
+
+/**
+ * A tech name's stable, URL-safe identifier — `slugify.ts`'s exact
+ * normalization (lowercase, strip accents, non-alphanumeric runs → `-`),
+ * applied after {@link SLUG_SYMBOL_WORDS} spells out the handful of
+ * symbols that would otherwise be deleted along with their meaning.
  *
  * This is the ONE identifier that ties three independent, free-text
  * sources together without requiring any of them to agree on exact
@@ -18,9 +64,18 @@ import { slugify } from "./slugify";
  * *conceptually* the same technology ("Python" vs. "Python & Jinja2" still
  * produce different slugs, on purpose: silently treating those as equal
  * would be guessing at admin intent, not normalizing formatting).
+ *
+ * Known limit, accepted rather than engineered around: a name with no
+ * latin alphanumerics at all (say, an all-Cyrillic one) still slugs to
+ * `""`, and two such names would collide with each other the way `"C++"`
+ * and `"C#"` used to. Every value this runs on is a technology's proper
+ * name, which is latin in practice, so an encoding scheme for that case
+ * would be machinery for a situation that hasn't occurred — but it IS the
+ * same failure mode, so it's named here rather than left to be
+ * rediscovered.
  */
 export function toTechSlug(name: string): string {
-    return slugify(name);
+    return slugify(spellOutSymbols(name));
 }
 
 /**

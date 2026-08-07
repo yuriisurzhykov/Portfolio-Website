@@ -12,13 +12,23 @@ const NAME_SEPARATORS = /[,;\n\r\t]+/;
  * The comparison key for "is this the same technology as one already in
  * the list" — case-insensitive, whitespace-collapsed, nothing more.
  *
- * Deliberately NOT `toTechSlug`/`slugify`, even though that IS the
- * identity the public site matches on: slugify strips punctuation
- * entirely, so "C++" and "C#" both collapse to `"c"`, and refusing to add
- * the second one as a "duplicate" would be plainly wrong. A false
- * positive here silently blocks a legitimate entry, a false negative just
- * leaves two similar rows next to each other in a list the admin is
- * looking at — so this errs toward the cheap failure.
+ * Deliberately NOT `shared/lib/slugify`, the only slug function reachable
+ * from a Client Component: it strips punctuation entirely, so "C++" and
+ * "C#" both collapse to `"c"`, and refusing to add the second one as a
+ * "duplicate" would be plainly wrong. A false positive here silently
+ * blocks a legitimate entry; a false negative just leaves two similar
+ * rows next to each other in a list the admin is already looking at — so
+ * this errs toward the cheap failure.
+ *
+ * The public site's own identity, `toTechSlug`
+ * (`backend/src/content/tech-slug.ts`), does NOT have that flaw any more
+ * — it spells `+`/`#` out as words for exactly this reason. It would be
+ * the more accurate key here (it would also catch "jetpack-compose" vs.
+ * "Jetpack Compose", which this one lets through), but it's exported from
+ * `@portfolio/backend`'s main entry point, which pulls in Prisma and
+ * can't cross into a client bundle. Making it importable from here is a
+ * real follow-up, not a reason to hand-copy its symbol table into the
+ * frontend.
  */
 export function techNameKey(name: string): string {
     return name.trim().replace(/\s+/g, " ").toLowerCase();

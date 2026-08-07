@@ -11,7 +11,9 @@ describe("techNameKey", () => {
     });
 
     it("keeps punctuation, so 'C++' and 'C#' are NOT the same technology", () => {
-        // The whole reason this isn't `slugify` — both would collapse to "c".
+        // The whole reason this isn't the frontend's `slugify` — that one
+        // collapses both to "c". (The backend's `toTechSlug` no longer does;
+        // see this function's comment for why it still isn't used here.)
         expect(techNameKey("C++")).not.toBe(techNameKey("C#"));
         expect(techNameKey("C++")).toBe("c++");
     });
