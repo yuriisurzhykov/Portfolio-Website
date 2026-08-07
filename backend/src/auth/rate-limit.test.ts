@@ -17,6 +17,14 @@ function uniqueKey(): string {
     return `test-${ Math.random().toString(36).slice(2) }`;
 }
 
+/** Shared by every describe block below that needs a configured limiter guaranteed to fail, to reach `checkAndRecordResilient`'s fallback path. */
+function makeThrowingLimiter(error: Error): RateLimiter {
+    return {
+        checkAndRecord: () => Promise.reject(error),
+        reset: () => Promise.reject(error),
+    };
+}
+
 describe("InMemoryRateLimiter", () => {
     afterEach(() => {
         vi.useRealTimers();
@@ -340,13 +348,6 @@ describe("checkRateLimit / checkLoginRateLimit resilience against a failing conf
         setFallbackLimiterForTesting(undefined);
     });
 
-    function makeThrowingLimiter(error: Error): RateLimiter {
-        return {
-            checkAndRecord: () => Promise.reject(error),
-            reset: () => Promise.reject(error),
-        };
-    }
-
     it("falls back to an in-memory limiter (does not reject/500) when the configured backend's checkAndRecord throws, and logs a diagnostic mentioning the fallback", async () => {
         setRateLimiterForTesting(makeThrowingLimiter(new Error("ECONNREFUSED")));
         const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -437,5 +438,74 @@ describe("resetLoginRateLimit swallowing a failing configured backend", () => {
         } finally {
             errorSpy.mockRestore();
         }
+    });
+});
+
+describe("resetLoginRateLimit — also clears the fallback limiter, not just the (possibly unreachable) configured one", () => {
+    afterEach(() => {
+        setRateLimiterForTesting(undefined);
+        setFallbackLimiterForTesting(undefined);
+    });
+
+    /**
+     * The actual bug this guards against, found by review rather than by
+     * running it: during an Upstash outage, `checkLoginRateLimit` records
+     * every attempt against the shared `fallbackLimiter` (see
+     * `checkAndRecordResilient`), but a plain `resetLoginRateLimit` that
+     * only ever calls `.reset()` on the still-unreachable CONFIGURED
+     * limiter does nothing to that fallback's own count for the same key
+     * — it silently keeps climbing across every successful login for the
+     * whole outage. With exactly one admin account in this app, a few
+     * genuine logins during a real outage (plausibly BECAUSE the admin is
+     * troubleshooting it) would eventually 429 the one real admin, which
+     * defeats the entire point of falling back to keep the site usable.
+     * Reproduces the full real sequence: outage the whole time, several
+     * successful login-reset cycles, then one more attempt that must
+     * still be allowed.
+     */
+    it("resetting after a successful login clears the fallback's count too, so repeated successful logins during an outage never trip the fallback limit", async () => {
+        setRateLimiterForTesting(makeThrowingLimiter(new Error("ECONNREFUSED")));
+        const key = uniqueKey();
+
+        // The login limit is 5, checked as `count > limit` (see
+        // InMemoryRateLimiter.checkAndRecord) — so exactly 5 UNRESET
+        // increments still read as allowed (5 > 5 is false), and it takes
+        // a 6th to actually trip. This loop runs 5 full check+reset
+        // cycles specifically so the assertion below is a genuine
+        // pass/fail distinction, not one that happens to hold either way:
+        // verified by hand against the buggy version of this function
+        // (resetLoginRateLimit with the `if (fallbackLimiter) { ... }`
+        // block removed) — that version fails this exact test, blocking
+        // the 6th call, because none of the 5 prior resets ever touched
+        // the fallback's count.
+        for (let i = 0; i < 5; i++) {
+            const check = await checkLoginRateLimit(key);
+            expect(check.allowed).toBe(true);
+            await resetLoginRateLimit(key);
+        }
+
+        // A 6th cycle, still mid-outage — if the fallback's count had been
+        // silently accumulating this whole time (the bug), this call would
+        // be the one that 429s a real, correctly-authenticating admin.
+        const finalCheck = await checkLoginRateLimit(key);
+        expect(finalCheck.allowed).toBe(true);
+    });
+
+    it("does not throw when no fallback limiter has ever been created (the common, no-outage-ever-happened case)", async () => {
+        setRateLimiterForTesting(new InMemoryRateLimiter());
+
+        await expect(resetLoginRateLimit(uniqueKey())).resolves.toBeUndefined();
+    });
+
+    it("resetting one key's fallback count does not clear a DIFFERENT key's fallback count", async () => {
+        setRateLimiterForTesting(makeThrowingLimiter(new Error("ECONNREFUSED")));
+        const keyA = uniqueKey();
+        const keyB = uniqueKey();
+
+        for (let i = 0; i < 5; i++) await checkLoginRateLimit(keyB); // exhausts keyB's budget, unrelated to keyA
+        await checkLoginRateLimit(keyA);
+        await resetLoginRateLimit(keyA);
+
+        expect((await checkLoginRateLimit(keyB)).allowed).toBe(false);
     });
 });

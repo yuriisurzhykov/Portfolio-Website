@@ -227,6 +227,17 @@ time you need it (disaster recovery, new server). See the repo's
   way `05-app-dirs.sh`/`06-app-env.sh` are (`APP_BASE_DIR`/`SERVICE_LABEL`)
   so dev and prod each get their own cron file.
 
+  **Fixed by review, not by running it:** the first version logged to
+  `/var/log/session-cleanup-*.log`. A cron.d line's `user` field controls
+  who runs the WHOLE command string, including any `>> file` redirection
+  written into it — so that log file would have been opened by `nextapp`,
+  which has no write access to root-owned `/var/log`, and nothing in the
+  script ever pre-created/chowned it either. The nightly job would have
+  failed with "Permission denied" on its very first real run, silently
+  cleaning up nothing, forever. Fixed by logging into
+  `${APP_BASE_DIR}/shared/` instead — `nextapp` already owns that whole
+  directory (`05-app-dirs.sh`), so no pre-creation step is needed at all.
+
 ## Real CI/CD (post-bring-up)
 
 Once the whole pipeline had been proven manually end to end (dev, then
