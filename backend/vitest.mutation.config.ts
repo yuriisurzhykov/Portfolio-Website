@@ -37,6 +37,7 @@ export default defineConfig({
             "src/content/lifecycle.test.ts",
             "src/content/slug.test.ts",
             "src/content/slugify.test.ts",
+            "src/content/tech-slug.test.ts",
             "src/errors.test.ts",
         ],
     },

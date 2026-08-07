@@ -4,6 +4,7 @@ import { getDocumentBlocks } from "./document";
 import type { LifecycleState } from "./lifecycle";
 import { type LocalizedText, localizedTextSchema } from "./localized-text";
 import type { ContentLocale } from "./locale";
+import { uniqueTechSlugs } from "./tech-slug";
 
 export type WorkStatus = "shipped" | "in-progress";
 
@@ -88,6 +89,23 @@ export async function getFeaturedWork(): Promise<WorkSummary[]> {
         orderBy: {year: "desc"},
     });
     return rows.map(toWorkSummary);
+}
+
+/**
+ * Every distinct tech slug (`toTechSlug`) appearing in ANY published
+ * item's `stack` — reads only the `stack` column, not full rows, same
+ * reasoning as `posts.ts`'s `getDistinctPostCategories`. Lets the landing
+ * page's tech-logo row decide whether a logo is a real link to
+ * `/work?tech=...` or inert (no point linking to a filter that would show
+ * zero results) without loading every `Work` row's full contents just to
+ * check.
+ */
+export async function getPublishedTechSlugs(): Promise<string[]> {
+    const rows = await prisma.work.findMany({
+        where: { lifecycleState: "PUBLISHED" },
+        select: { stack: true },
+    });
+    return uniqueTechSlugs(rows.map((row) => row.stack));
 }
 
 /**
