@@ -6,12 +6,21 @@ import type { WorkPageContent, WorkSummary } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
+import { Tag } from "@/shared/ui/tag";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
+
+export interface ActiveTechFilter {
+    slug: string;
+    /** As-typed spelling from a matching item's `stack` (e.g. "Jetpack Compose"), not the URL slug — see `findTechDisplayName` (backend). */
+    label: string;
+}
 
 export interface WorkListPageProps {
     items: WorkSummary[];
     workPage: WorkPageContent;
+    /** Non-null when the page was reached via `/work?tech=...` — drives the active-filter chip and the empty state below. */
+    activeTech: ActiveTechFilter | null;
 }
 
 const desktopRowGridCols = "sm:grid-cols-[100px_1fr_auto_auto]";
@@ -84,7 +93,7 @@ function WorkRow({ item }: { item: WorkSummary }) {
     return <div className={ wrapperClass }>{ body }</div>;
 }
 
-export function WorkListPage({ items, workPage }: WorkListPageProps) {
+export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps) {
     const { ln, pick } = useTranslation();
 
     return (
@@ -108,26 +117,49 @@ export function WorkListPage({ items, workPage }: WorkListPageProps) {
                 <Text variant="body" tone="muted" className="max-w-[64ch]">
                     { pick(workPage.description) }
                 </Text>
+
+                { activeTech && (
+                    <div className="flex items-center gap-sm mt-5" role="status">
+                        <Text variant="caption" tone="faint" className="font-mono">
+                            { ln("work.filter.activeLabel") }
+                        </Text>
+                        <Tag variant="accent">{ activeTech.label }</Tag>
+                        <Link
+                            href="/work"
+                            className="font-mono text-caption text-text-muted hover:text-text-primary transition-colors duration-fast"
+                        >
+                            { ln("work.filter.clear") }
+                        </Link>
+                    </div>
+                ) }
             </div>
 
             <div className="max-w-(--layout-content-narrow) mx-auto px-[clamp(20px,4vw,56px)] pt-6 pb-[100px]">
-                <div
-                    className={ cn(
-                        "hidden sm:grid gap-4 px-5 pb-3",
-                        desktopRowGridCols,
-                        "font-mono font-semibold text-micro tracking-[0.08em] text-text-faint",
-                        "border-b border-border-subtle",
-                    ) }
-                >
-                    <span>{ ln("work.ledger.year") }</span>
-                    <span>{ ln("work.ledger.system") }</span>
-                    <span>{ ln("work.ledger.stack") }</span>
-                    <span className="text-right">{ ln("work.ledger.status") }</span>
-                </div>
+                { items.length === 0 && activeTech ? (
+                    <Text variant="body" tone="muted" className="py-16 text-center">
+                        { ln("work.filter.empty", { tech: activeTech.label }) }
+                    </Text>
+                ) : (
+                    <>
+                        <div
+                            className={ cn(
+                                "hidden sm:grid gap-4 px-5 pb-3",
+                                desktopRowGridCols,
+                                "font-mono font-semibold text-micro tracking-[0.08em] text-text-faint",
+                                "border-b border-border-subtle",
+                            ) }
+                        >
+                            <span>{ ln("work.ledger.year") }</span>
+                            <span>{ ln("work.ledger.system") }</span>
+                            <span>{ ln("work.ledger.stack") }</span>
+                            <span className="text-right">{ ln("work.ledger.status") }</span>
+                        </div>
 
-                { items.map((item) => (
-                    <WorkRow key={ item.slug } item={ item }/>
-                )) }
+                        { items.map((item) => (
+                            <WorkRow key={ item.slug } item={ item }/>
+                        )) }
+                    </>
+                ) }
             </div>
         </main>
     );

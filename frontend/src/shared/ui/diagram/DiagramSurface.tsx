@@ -3,7 +3,7 @@
 import { DiagramLightbox } from "./DiagramLightbox";
 import { Maximize2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { sanitizeDiagramSvg } from "./sanitize-svg";
+import { sanitizeSvg } from "@/shared/lib/sanitize-svg";
 
 
 export interface DiagramSurfaceProps {
@@ -24,13 +24,13 @@ export interface DiagramSurfaceProps {
  *
  * Sanitizes `svg` exactly once here, then passes the SANITIZED string down
  * to both the thumbnail below and DiagramLightbox — the only two places
- * this markup ever reaches `dangerouslySetInnerHTML` (see sanitize-svg.ts
- * for why this is needed even though both rendering engines are already
- * trusted, admin-triggered code paths).
+ * this markup ever reaches `dangerouslySetInnerHTML` (see
+ * `shared/lib/sanitize-svg.ts` for why this is needed even though both
+ * rendering engines are already trusted, admin-triggered code paths).
  */
 export function DiagramSurface({svg}: DiagramSurfaceProps) {
     const [open, setOpen] = useState(false);
-    const safeSvg = useMemo(() => sanitizeDiagramSvg(svg), [svg]);
+    const safeSvg = useMemo(() => sanitizeSvg(svg), [svg]);
 
     return (
         <>

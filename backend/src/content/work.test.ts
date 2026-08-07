@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
-import { getAllWork, getFeaturedWork, getWorkBySlug } from "./work";
+import { getAllWork, getFeaturedWork, getPublishedTechSlugs, getWorkBySlug } from "./work";
 
 const baseWorkData = {
     title: "Test Project",
@@ -117,6 +117,26 @@ describe("getWorkBySlug", () => {
 
         const untranslated = await getWorkBySlug("untranslated", "ru");
         expect(untranslated?.caseStudy?.blocks[0]).toMatchObject({ text: "English B" });
+    });
+});
+
+describe("getPublishedTechSlugs", () => {
+    it("returns the distinct, slugified set of stack entries across published items", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "a", stack: ["Kotlin", "Jetpack Compose"] } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "b", stack: ["Kotlin"] } });
+
+        const slugs = await getPublishedTechSlugs();
+        expect(slugs.sort()).toEqual(["jetpack-compose", "kotlin"]);
+    });
+
+    it("excludes DRAFT items' stacks", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "draft", stack: ["Rust"], lifecycleState: "DRAFT" } });
+
+        expect(await getPublishedTechSlugs()).toEqual([]);
+    });
+
+    it("returns an empty array when there is no published work at all", async () => {
+        expect(await getPublishedTechSlugs()).toEqual([]);
     });
 });
 

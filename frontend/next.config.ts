@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
   // normally treated as pre-built JS. transpilePackages tells Next.js to run
   // its own compiler over this package's source too.
   transpilePackages: ["@portfolio/backend"],
+  // `simple-icons` (frontend/src/shared/lib/tech-icons) is ~3450 brand SVG
+  // icons — a few MB of path data nobody's browser needs to download. This
+  // keeps it OUT of the Server Components/Route Handlers bundle Next.js
+  // would otherwise produce (it's `require()`d from real `node_modules` at
+  // runtime instead); it was never going to be in the CLIENT bundle in the
+  // first place, since every import of it lives behind the server-only
+  // boundary documented in `tech-icons/registry.ts`'s top comment.
+  serverExternalPackages: ["simple-icons"],
   // Next.js sends "X-Powered-By: Next.js" on every response by default —
   // a free hint to an attacker about which framework-specific CVEs to try.
   poweredByHeader: false,

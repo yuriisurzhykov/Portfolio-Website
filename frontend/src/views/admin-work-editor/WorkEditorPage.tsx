@@ -10,6 +10,7 @@ import { Checkbox, Field, Input, Textarea } from "@/shared/ui/form";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
+import { TokenCombobox } from "@/shared/ui/token-combobox";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { slugify } from "@/shared/lib/slugify";
 import { type AutosaveStatus, useAutosaveDraft } from "@/shared/lib/use-autosave-draft";
@@ -17,6 +18,8 @@ import { type AutosaveStatus, useAutosaveDraft } from "@/shared/lib/use-autosave
 export interface WorkEditorPageProps {
     /** Absent for "create new"; present (already-saved) for "edit". */
     initialWork?: WorkDetail;
+    /** `techStack[].name` from `SiteContent` — fuzzy-search suggestions for the Stack field's `TokenCombobox`, not a hard-enforced list (see `token-combobox/README.md` for why free text is still allowed). Defaults to `[]` so callers that don't have this yet (there are none today, but the type stays honest) don't crash. */
+    techStackSuggestions?: string[];
 }
 
 const STATUS_OPTIONS: StatusToggleOption<WorkStatus>[] = [
@@ -30,7 +33,7 @@ interface FormState {
     year: string;
     status: WorkStatus;
     summary: string;
-    stack: string;
+    stack: string[];
     coverImage: string;
     featured: boolean;
     relatedPostSlug: string;
@@ -71,7 +74,7 @@ function toFormState(work?: WorkDetail): FormState {
         year: work ? String(work.year) : String(new Date().getFullYear()),
         status: work?.status ?? "in-progress",
         summary: work?.summary.en ?? "",
-        stack: work?.stack.join(", ") ?? "",
+        stack: work?.stack ?? [],
         coverImage: work?.coverImage ?? "",
         featured: work?.featured ?? false,
         relatedPostSlug: work?.relatedPostSlug ?? "",
@@ -83,7 +86,7 @@ function toFormState(work?: WorkDetail): FormState {
     };
 }
 
-export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
+export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkEditorPageProps) {
     const router = useRouter();
     const isEditing = Boolean(initialWork);
 
@@ -113,7 +116,11 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
             year: Number(form.year) || 0,
             status: form.status,
             summary: form.summary.trim(),
-            stack: form.stack.split(",").map((s) => s.trim()).filter(Boolean),
+            // Already an array of trimmed, deduped-by-TokenCombobox tokens —
+            // still `.filter(Boolean)` defensively at this boundary, same as
+            // every other field here, rather than trusting the UI layer
+            // never to hand back something empty.
+            stack: form.stack.map((tech) => tech.trim()).filter(Boolean),
             coverImage: form.coverImage.trim() || null,
             featured: form.featured,
             relatedPostSlug: form.relatedPostSlug.trim() || null,
@@ -328,9 +335,15 @@ export function WorkEditorPage({ initialWork }: WorkEditorPageProps) {
                     <Field label="Year" htmlFor="year" hint="Used to sort the /work ledger, newest first.">
                         <Input id="year" type="number" required value={form.year} onChange={(e) => update("year", e.target.value)} />
                     </Field>
-                    <Field label="Stack" htmlFor="stack" hint="Comma-separated, e.g. Kotlin, Jetpack Compose.">
-                        <Input id="stack" value={form.stack} onChange={(e) => update("stack", e.target.value)} />
-                    </Field>
+                    <TokenCombobox
+                        id="work-stack"
+                        label="Stack"
+                        hint="Press Enter to add. Pick a suggestion, or type your own — it doesn't have to already exist in Tech Stack."
+                        values={form.stack}
+                        onChange={(stack) => update("stack", stack)}
+                        suggestions={techStackSuggestions}
+                        placeholder="e.g. Kotlin"
+                    />
                     <Field
                         label="Cover image"
                         htmlFor="coverImage"

@@ -10,7 +10,7 @@
   "status.inProgress": "IN PROGRESS",
   "status.upcoming": "{date} · upcoming",
 
-  "eyebrow.stack": "STACK",
+  "eyebrow.stack": "Tech Stack",
   "eyebrow.howIWork": "HOW I WORK",
   "eyebrow.selectedWork": "SELECTED WORK",
   "eyebrow.fromJournal": "FROM THE JOURNAL",
@@ -32,6 +32,10 @@
   "button.backToJournal": "back to journal",
   "button.signIn": "Sign in",
   "button.tryAgain": "Try again",
+
+  "work.filter.activeLabel": "Filtered by:",
+  "work.filter.clear": "clear filter",
+  "work.filter.empty": "No published projects use {tech} yet.",
 
   "work.ledger.year": "YEAR",
   "work.ledger.system": "SYSTEM",

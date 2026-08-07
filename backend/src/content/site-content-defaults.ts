@@ -101,33 +101,37 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
     ],
 
     techStack: [
-        { name: "Kotlin", note: { en: "Primary language for over 6 years", ru: "Основной язык последние 6+ лет" } },
+        { name: "Kotlin", note: { en: "Primary language for over 6 years", ru: "Основной язык последние 6+ лет" }, icon: { type: "auto" } },
         {
             name: "Coroutines & Flow",
             note: {
                 en: "Structured concurrency across the whole app",
                 ru: "Структурированная конкурентность во всём приложении",
             },
+            icon: { type: "auto" },
         },
-        { name: "Jetpack Compose", note: { en: "Declarative UI layer", ru: "Декларативный UI-слой" } },
+        { name: "Jetpack Compose", note: { en: "Declarative UI layer", ru: "Декларативный UI-слой" }, icon: { type: "auto" } },
         {
             name: "Navigation",
             note: {
                 en: "Custom routing & rendering, in place of the standard Navigation Component",
                 ru: "Кастомный роутинг и рендеринг вместо стандартного Navigation Component",
             },
+            icon: { type: "none" },
         },
         {
             name: "Android Open Source",
             note: { en: "AOSP customization for an OEM device", ru: "Кастомизация AOSP для OEM-устройства" },
+            icon: { type: "brand", value: "android" },
         },
-        { name: "Dagger2", note: { en: "Dependency injection", ru: "Внедрение зависимостей" } },
-        { name: "Camera2", note: { en: "Camera pipeline & capture", ru: "Камера-пайплайн и захват кадров" } },
-        { name: "JUnit", note: { en: "Unit & integration testing", ru: "Unit- и интеграционное тестирование" } },
-        { name: "Java", note: { en: "Legacy screens & JNI interop", ru: "Legacy-экраны и интеграция с JNI" } },
+        { name: "Dagger2", note: { en: "Dependency injection", ru: "Внедрение зависимостей" }, icon: { type: "auto" } },
+        { name: "Camera2", note: { en: "Camera pipeline & capture", ru: "Камера-пайплайн и захват кадров" }, icon: { type: "none" } },
+        { name: "JUnit", note: { en: "Unit & integration testing", ru: "Unit- и интеграционное тестирование" }, icon: { type: "auto" } },
+        { name: "Java", note: { en: "Legacy screens & JNI interop", ru: "Legacy-экраны и интеграция с JNI" }, icon: { type: "auto" } },
         {
             name: "JNI & C++",
             note: { en: "Native interop for platform-level code", ru: "Native-прослойка для платформенного кода" },
+            icon: { type: "brand", value: "cplusplus" },
         },
         {
             name: "Gradle Plugin Development",
@@ -135,14 +139,16 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
                 en: "3+ custom plugins automating the build & release routine",
                 ru: "3+ кастомных плагина, автоматизирующих сборку и релиз",
             },
+            icon: { type: "brand", value: "gradle" },
         },
-        { name: "KSP", note: { en: "Annotation-driven code generation", ru: "Кодогенерация на основе аннотаций" } },
+        { name: "KSP", note: { en: "Annotation-driven code generation", ru: "Кодогенерация на основе аннотаций" }, icon: { type: "none" } },
         {
             name: "Python & Jinja2",
             note: {
                 en: "Built a compiler that turns AsyncAPI specs into Kotlin",
                 ru: "Написал компилятор, превращающий AsyncAPI-спеки в Kotlin-код",
             },
+            icon: { type: "brand", value: "python" },
         },
         {
             name: "MQTT & HiveMQ",
@@ -150,6 +156,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
                 en: "Generated broker client for embedded messaging",
                 ru: "Генерируемый broker-клиент для embedded-мессенджинга",
             },
+            icon: { type: "brand", value: "mqtt" },
         },
     ],
 

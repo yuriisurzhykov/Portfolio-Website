@@ -15,8 +15,12 @@
  *
  * Deliberately excluded (see frontend/tests/README.md, section 4, for the full reasoning):
  * - Admin-only/interactive components (`admin-list-item`, `icon-picker`, `block-editor`, `drawer`,
- *   `back-to-top`, `status-toggle`, `status-page`, `form/*`) — need auth context or real
- *   interaction to show anything, or are better covered by page-level tests.
+ *   `back-to-top`, `status-toggle`, `status-page`, `form/*`, `token-combobox`) — need auth context
+ *   or real interaction to show anything, or are better covered by page-level tests.
+ *   `token-combobox`'s only real caller (`WorkEditorPage`'s Stack field) is behind admin auth, and
+ *   its actual value (fuzzy dropdown, keyboard nav, "did you mean" hints) only shows up through
+ *   interaction a static screenshot can't exercise — its own `TokenCombobox.test.tsx` covers that
+ *   behavior directly instead.
  * - `Diagram`'s PlantUML engine — depends on a self-hosted `plantuml-server` that Playwright's
  *   `webServer` never starts; only the fully client-side Mermaid engine is demoed.
  * - `Section` — already exercised as the outer wrapper of this very page and of every page-level
@@ -33,6 +37,8 @@ export const componentGalleryManifest: ComponentGalleryEntry[] = [
     { id: "card", label: "Card" },
     { id: "icon-badge", label: "IconBadge" },
     { id: "tag", label: "Tag" },
+    { id: "tech-icon", label: "TechIcon" },
+    { id: "tooltip", label: "Tooltip" },
     { id: "button", label: "Button" },
     { id: "progress", label: "ProgressBar" },
     { id: "code-block", label: "CodeBlock" },
