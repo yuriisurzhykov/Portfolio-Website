@@ -255,17 +255,28 @@ export function checkLoginRateLimit(key: string): Promise<RateLimitCheck> {
 /**
  * Called after a successful login so a few earlier typos don't linger
  * against the count for either dimension. Deliberately swallows (logs,
- * doesn't rethrow) any failure from the configured limiter's `reset()` —
+ * doesn't rethrow) any failure from the CONFIGURED limiter's `reset()` —
  * found during the OWASP audit remediation: `login/route.ts` calls this
  * AFTER `login()` already succeeded, inside the same try/catch that turns
  * any thrown error into an error response, so an Upstash hiccup here used
- * to turn an otherwise-correct login into a 500 for the admin. There's no
- * meaningful fallback to reach for the way `checkAndRecordResilient` has
- * one (nothing to "clear" in a brand-new in-memory limiter that never saw
- * the original failed attempts), so this just accepts the miss: worst
- * case, a few earlier typos linger against the window a little longer
- * than intended — a strictly smaller problem than failing the login
- * response itself.
+ * to turn an otherwise-correct login into a 500 for the admin.
+ *
+ * ALSO resets the shared `fallbackLimiter`'s own matching key, if one
+ * exists — found by review, not by running it: if Upstash is down for
+ * long enough that `checkAndRecordResilient` starts recording login
+ * attempts against `fallbackLimiter` instead, resetting only the
+ * (unreachable) configured limiter here does NOTHING to that fallback's
+ * count — it keeps climbing across every successful login for the whole
+ * outage, since nothing else ever clears it. This app has exactly one
+ * admin account (`prisma/schema.prisma`'s own comment on `User`), so a
+ * handful of legitimate logins during a real outage — plausibly BECAUSE
+ * the admin is troubleshooting that very outage — would eventually trip
+ * the fallback's own limit and 429 the one real admin, defeating the
+ * entire point of falling back to keep the site usable. Safe to call
+ * unconditionally whenever a fallback exists: `InMemoryRateLimiter.reset()`
+ * on a key it never saw is a harmless no-op (`Map.delete` of a missing
+ * key), so this doesn't need to know whether the fallback was actually
+ * used for this specific key before clearing it.
  */
 export async function resetLoginRateLimit(key: string): Promise<void> {
     const limiter = getRateLimiter();
@@ -273,6 +284,9 @@ export async function resetLoginRateLimit(key: string): Promise<void> {
         await limiter.reset(`login:${ key }`);
     } catch (error) {
         console.error("Rate limiter backend failed while resetting a login counter after a successful login; ignoring.", error);
+    }
+    if (fallbackLimiter) {
+        await fallbackLimiter.reset(`login:${ key }`);
     }
 }
 
