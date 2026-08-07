@@ -1,8 +1,42 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { SignJWT } from "jose";
-import { signAccessToken, verifyAccessToken } from "./jwt";
+import { signAccessToken, TOKEN_AUDIENCE, TOKEN_ISSUER, verifyAccessToken } from "./jwt";
 
 const samplePayload = {sub: "user-123", email: "person@example.com", role: "admin"};
+
+/**
+ * Signs a raw JWT bypassing `signAccessToken`'s own claim-setting, so a
+ * test can control exactly one claim at a time. Defaults issuer/audience
+ * to the REAL constants — a test that wants to isolate one specific wrong
+ * claim (e.g. a bad `sub` type) must keep every OTHER claim valid,
+ * including `iss`/`aud`, or a passing assertion could be hiding the wrong
+ * mechanism (see the "wrong claim type" test below, which used to sign
+ * with no issuer/audience at all — once verification started requiring
+ * them, that test would have kept passing for the WRONG reason: any of
+ * these three tokens would already fail on iss/aud alone, independent of
+ * whether the claim-type check the test exists to pin was even present).
+ */
+async function signRawToken(options: {
+    payload?: Record<string, unknown>;
+    issuer?: string | null;
+    audience?: string | null;
+    secret?: string;
+} = {}): Promise<string> {
+    const secret = new TextEncoder().encode(options.secret ?? process.env.JWT_ACCESS_SECRET);
+    const issuer = options.issuer === undefined ? TOKEN_ISSUER : options.issuer;
+    const audience = options.audience === undefined ? TOKEN_AUDIENCE : options.audience;
+    let builder = new SignJWT(options.payload ?? samplePayload)
+        .setProtectedHeader({alg: "HS256"})
+        .setIssuedAt()
+        .setExpirationTime("15m");
+    if (issuer !== null) {
+        builder = builder.setIssuer(issuer);
+    }
+    if (audience !== null) {
+        builder = builder.setAudience(audience);
+    }
+    return builder.sign(secret);
+}
 
 describe("jwt", () => {
     it("round-trips a signed token back to its original payload", async () => {
@@ -62,21 +96,72 @@ describe("jwt", () => {
      * three are joined with OR, not some AND/OR mix.
      */
     it("returns null when the payload's sub/email/role claims individually have the wrong type", async () => {
-        const secret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
-        const signRaw = (payload: Record<string, unknown>) =>
-            new SignJWT(payload)
-                .setProtectedHeader({alg: "HS256"})
-                .setIssuedAt()
-                .setExpirationTime("15m")
-                .sign(secret);
-
-        const badSub = await signRaw({sub: 42, email: samplePayload.email, role: samplePayload.role});
-        const badEmail = await signRaw({sub: samplePayload.sub, email: 42, role: samplePayload.role});
-        const badRole = await signRaw({sub: samplePayload.sub, email: samplePayload.email, role: 42});
+        const badSub = await signRawToken({payload: {sub: 42, email: samplePayload.email, role: samplePayload.role}});
+        const badEmail = await signRawToken({payload: {sub: samplePayload.sub, email: 42, role: samplePayload.role}});
+        const badRole = await signRawToken({payload: {sub: samplePayload.sub, email: samplePayload.email, role: 42}});
 
         expect(await verifyAccessToken(badSub)).toBeNull();
         expect(await verifyAccessToken(badEmail)).toBeNull();
         expect(await verifyAccessToken(badRole)).toBeNull();
+    });
+
+    describe("issuer/audience enforcement", () => {
+        it("rejects a token with no issuer claim at all", async () => {
+            const token = await signRawToken({issuer: null});
+            expect(await verifyAccessToken(token)).toBeNull();
+        });
+
+        it("rejects a token with the wrong issuer", async () => {
+            const token = await signRawToken({issuer: "some-other-app"});
+            expect(await verifyAccessToken(token)).toBeNull();
+        });
+
+        it("rejects a token with no audience claim at all", async () => {
+            const token = await signRawToken({audience: null});
+            expect(await verifyAccessToken(token)).toBeNull();
+        });
+
+        it("rejects a token with the wrong audience", async () => {
+            const token = await signRawToken({audience: "some-other-audience"});
+            expect(await verifyAccessToken(token)).toBeNull();
+        });
+
+        it("accepts a token when issuer and audience both correctly match (sanity check the helper itself isn't broken)", async () => {
+            const token = await signRawToken();
+            expect(await verifyAccessToken(token)).toEqual(samplePayload);
+        });
+    });
+
+    describe("JWT_ACCESS_SECRET minimum length", () => {
+        const original = process.env.JWT_ACCESS_SECRET;
+
+        afterEach(() => {
+            process.env.JWT_ACCESS_SECRET = original;
+        });
+
+        it("rejects a secret shorter than 32 characters when signing", async () => {
+            process.env.JWT_ACCESS_SECRET = "short-secret";
+            await expect(signAccessToken(samplePayload)).rejects.toThrow(/at least 32 characters/);
+        });
+
+        it("rejects a secret shorter than 32 characters when verifying", async () => {
+            // Sign with a valid secret first, then shrink it before verifying —
+            // the check must run on EVERY call, not just once at import time.
+            const token = await signAccessToken(samplePayload);
+            process.env.JWT_ACCESS_SECRET = "short-secret";
+            await expect(verifyAccessToken(token)).rejects.toThrow(/at least 32 characters/);
+        });
+
+        it("accepts a secret exactly 32 characters long (the boundary itself, not just comfortably above/below it)", async () => {
+            process.env.JWT_ACCESS_SECRET = "a".repeat(32);
+            const token = await signAccessToken(samplePayload);
+            expect(await verifyAccessToken(token)).toEqual(samplePayload);
+        });
+
+        it("rejects a secret exactly 31 characters long (one under the boundary)", async () => {
+            process.env.JWT_ACCESS_SECRET = "a".repeat(31);
+            await expect(signAccessToken(samplePayload)).rejects.toThrow(/at least 32 characters/);
+        });
     });
 
     /**

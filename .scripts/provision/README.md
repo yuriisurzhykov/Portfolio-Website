@@ -71,9 +71,12 @@ time you need it (disaster recovery, new server). See the repo's
   (`APP_BASE_DIR=/srv/apps/yuriisoft-web-dev`) — see "Dev/staging rehearsal
   environment" below.
 - `06-app-env.sh` — writes `${APP_BASE_DIR}/shared/.env` (`DATABASE_URL`,
-  `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`) from env vars passed at run
-  time, owned by `nextapp`, mode 600 (unreadable to the deploy account
-  itself). Refuses to overwrite an existing file — resetting these values
+  `JWT_ACCESS_SECRET`) from env vars passed at run time, owned by
+  `nextapp`, mode 600 (unreadable to the deploy account itself). No longer
+  asks for a `JWT_REFRESH_SECRET` (removed during the OWASP audit
+  remediation — nothing in the app ever read it; refresh tokens are opaque
+  CSPRNG strings, never JWTs) and refuses a `JWT_ACCESS_SECRET` under 32
+  characters. Refuses to overwrite an existing file — resetting these values
   by accident invalidates every live session or breaks the DB connection
   silently. Also parameterized via `DB_NAME` (default `portfolio`) for the
   same dev/staging reason.
@@ -102,10 +105,26 @@ time you need it (disaster recovery, new server). See the repo's
 - `08-systemd-service.sh` — installs/enables a systemd unit for one Next.js
   target (`SERVICE_NAME`/`APP_BASE_DIR`/`PORT` params). Hardening
   directives (`NoNewPrivileges`, `PrivateTmp`, `ProtectHome`,
-  `ProtectSystem=strict`) were verified incrementally against the real
-  `yuriisoft-web-dev` service — one group at a time — before being
-  combined here; see the commit history for each step's live
+  `ProtectSystem=strict`, and — added during the OWASP audit remediation —
+  `RestrictAddressFamilies`, `ProtectKernelTunables`,
+  `ProtectControlGroups`, `RestrictSUIDSGID`) were verified incrementally
+  against the real `yuriisoft-web-dev` service — one group at a time —
+  before being combined here; see the commit history for each step's live
   confirmation. Does not itself start/restart the service.
+
+  **Binding Next.js to localhost only:** `next start` defaults to
+  `0.0.0.0`, meaning the app is reachable directly on the VPS's public
+  interface if the firewall doesn't stop it — bypassing nginx's TLS,
+  security headers, and login rate-limit zone entirely. The first fix
+  attempted here was `Environment=HOSTNAME=127.0.0.1` in this unit file —
+  **wrong**, found by reading Next.js 16's actual CLI source
+  (`packages/next/src/bin/next.ts`): the `start` command's `-H,
+  --hostname` option has no `.env()` binding (unlike `-p, --port`, which
+  does), so `process.env.HOSTNAME` is silently ignored outside an
+  `output: "standalone"` build, which this app doesn't use. The real fix
+  is in `frontend/package.json`'s `start` script
+  (`next start -H 127.0.0.1`) instead — see that file and `14-ufw.sh`
+  below for the firewall half of the same fix.
 
 - `09-nginx-rate-limit-zone.sh` — installs the shared `login_limit`
   `limit_req_zone` (10r/m per IP) in `/etc/nginx/conf.d/`, protecting
@@ -121,6 +140,24 @@ time you need it (disaster recovery, new server). See the repo's
   `/api/auth/login` location from the zone above. Assumes an existing
   Certbot cert for `DOMAIN`. Never runs `nginx -t`/reload itself —
   verifying and reloading stays an explicit, separate step every time.
+
+  **Security headers (added during the OWASP audit remediation):**
+  `Strict-Transport-Security` and `Permissions-Policy` are sent
+  enforcing from the start (both are additive-only — no existing page
+  relies on being framed, geolocated, or served over plain HTTP).
+  `Content-Security-Policy` ships as `-Report-Only` deliberately: its
+  directive set (`script-src 'self'`, `style-src 'self' 'unsafe-inline'`
+  for Mantine/BlockNote's runtime `<style>` injection and the root
+  layout's own design-token `<style>` tag, `img-src ... https:` for
+  admin-authored image/icon URLs) was derived by reading
+  `frontend/src/**` for every inline-script/external-CDN dependency, not
+  by trial and error against a live site — reading the dependencies is
+  necessary but not sufficient. Before promoting it to a real
+  `Content-Security-Policy` header (drop `-Report-Only` from the
+  directive name in this script), load `/admin`'s block editor against
+  the deployed report-only policy and confirm the browser console shows
+  zero violation reports first — the same live-verification bar every
+  other rule in this file already cleared.
 
 - `12-set-app-env-helper.sh` — installs `/usr/local/bin/
   set-app-env-finish.sh` (root-owned, from `../set-app-env-finish.sh`) and a
@@ -138,15 +175,57 @@ time you need it (disaster recovery, new server). See the repo's
   own way of fixing it.
 
 - `11-pg-backup.sh` — nightly `pg_dump` (via `/root/.pgpass`, no password
-  on the command line) → gzip → 14-day local rotation →
-  `rclone sync` to Google Drive, wired into `/etc/cron.d/pg-backup` (3am
-  daily). Requires `rclone config` to have been run once already (see the
-  script's own header) — that step is interactive/one-time and
-  deliberately not automated. **Known follow-up**: currently uses
-  rclone's shared Google Drive `client_id`, which rclone's own CLI warns
-  is being retired during 2026 — deferred to get production live first;
-  replace with a self-created OAuth client_id
+  on the command line) → gzip → 14-day local rotation → `rclone sync`,
+  ENCRYPTED, to Google Drive, wired into `/etc/cron.d/pg-backup` (3am
+  daily). Requires `rclone config` to have been run TWICE already (see the
+  script's own header): once for the plain "gdrive" remote, once more for
+  a "gdrive-crypt" remote layered on top of it — that step is
+  interactive/one-time and deliberately not automated. **Known follow-up**:
+  currently uses rclone's shared Google Drive `client_id`, which rclone's
+  own CLI warns is being retired during 2026 — deferred to get production
+  live first; replace with a self-created OAuth client_id
   (https://rclone.org/drive/#making-your-own-client-id) before then.
+
+  **Encryption + permissions (added during the OWASP audit remediation,
+  F6):** before this, a dump sat on disk mode 644 (root's default umask —
+  any other local user on the box could read the whole database) and left
+  the box in PLAINTEXT over `rclone sync`, readable by anyone with access
+  to the Google Drive folder or a compromised shared `client_id`. The
+  generated inner script now sets `umask 077` before creating anything and
+  `chmod 600` on the dump explicitly (belt-and-braces — the umask alone
+  would already cover it, but doesn't rely on no future refactor moving
+  file creation earlier than the umask line), and syncs through the new
+  crypt remote instead of the plain one. Verified live end-to-end
+  (2026-08-06): a real `pg_dump | gzip` from the local dev database was
+  pushed through a real rclone crypt remote (wrapping a local directory
+  standing in for Google Drive — the crypt mechanism itself is identical
+  regardless of the underlying storage backend) and confirmed genuinely
+  encrypted at rest (raw bytes start with rclone's own "RCLONE" header, not
+  the gzip magic number; filenames are unrecognizable base32, not
+  `portfolio_<timestamp>.sql.gz`), then copied back through the same crypt
+  remote and decompressed — byte-for-byte identical to the original
+  (SHA-256 match), with valid, readable SQL inside. `umask 077`/`chmod 600`
+  were separately verified against a real Linux container (`stat -c '%a'`
+  showing `700`/`600` exactly as intended).
+
+- `14-ufw.sh` — enables `ufw` with a default-deny-incoming policy, allowing
+  only SSH (`SSH_PORT`, default 22), HTTP, and HTTPS from outside. Added
+  during the OWASP audit remediation: none of the scripts above actually
+  closed the VPS's public interface to Next.js's own port (3000/3001),
+  Postgres (5432), or PlantUML (8081) — those were only ever protected by
+  the app/service itself binding to `127.0.0.1`, which is one layer, not
+  two. Ordering inside the script is deliberate (SSH allowed before the
+  default-deny policy is set, which is set before `ufw enable`) so a
+  mistake can't lock out the very SSH session running it.
+
+- `15-session-cleanup-cron.sh` — installs a nightly cron job (2am, one
+  hour offset from `11-pg-backup.sh`'s 3am) that runs `backend/scripts/
+  cleanup-expired-sessions.ts` as `nextapp`, deleting `Session` rows that
+  expired more than a week ago. Added during the OWASP audit remediation:
+  the `Session` table otherwise grows forever, since refresh-token
+  rotation revokes an old row but never deletes it. Parameterized the same
+  way `05-app-dirs.sh`/`06-app-env.sh` are (`APP_BASE_DIR`/`SERVICE_LABEL`)
+  so dev and prod each get their own cron file.
 
 ## Real CI/CD (post-bring-up)
 

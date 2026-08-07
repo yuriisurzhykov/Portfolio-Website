@@ -117,20 +117,66 @@ export class UpstashRateLimiter implements RateLimiter {
 let cachedLimiter: RateLimiter | undefined;
 
 /**
+ * Thrown by `getRateLimiter()` — see its own comment for when and why.
+ * Named by `.name`, not by `instanceof`, for callers to check: this class
+ * crosses the exact Server-Component-vs-Route-Handler/Edge-proxy bundle
+ * boundary `backend/src/errors.ts`'s `isDatabaseUnavailableError` already
+ * documents (Turbopack compiles `@portfolio/backend`/`@portfolio/backend/edge`
+ * separately per execution context), so `instanceof` across that boundary
+ * would silently evaluate to `false` even for the "same" class.
+ */
+export class RateLimiterMisconfiguredError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "RateLimiterMisconfiguredError";
+    }
+}
+
+/**
+ * Checked by name, not `instanceof RateLimiterMisconfiguredError` — see
+ * that class's own comment for why. This is what lets
+ * `checkAndRecordResilient` below tell "Upstash was never configured, this
+ * is a deploy bug" (must keep failing loudly, NOT be silently absorbed
+ * into the same graceful fallback a transient network error gets) apart
+ * from every other kind of failure a rate-limiter backend can throw.
+ */
+function isRateLimiterMisconfiguredError(error: unknown): boolean {
+    return error instanceof Error && error.name === "RateLimiterMisconfiguredError";
+}
+
+/**
  * Picks the backend once per process based on whether Upstash credentials
  * are configured, then reuses that same instance — not re-decided per
  * call, so a misconfigured environment fails the same way for the whole
  * process lifetime instead of flapping between backends. Exported (not
  * just used internally) so a route/test can inject a specific limiter
  * instead of going through env-var detection.
+ *
+ * Throws `RateLimiterMisconfiguredError` instead of silently falling back
+ * to `InMemoryRateLimiter` when `NODE_ENV === "production"` and Upstash
+ * credentials are absent — found during the OWASP audit remediation: a
+ * forgotten env var on a real deploy would otherwise quietly downgrade
+ * brute-force protection to per-process, per-restart counters with zero
+ * signal that anything was wrong. `DISABLE_RATE_LIMIT` is exempted (same
+ * flag `frontend/src/proxy.ts`'s own comment documents as
+ * "E2E-suite-only, never set in dev or prod") so the Playwright suite's
+ * `next build && next start` — which sets `NODE_ENV=production` itself,
+ * same as a real deploy, with no real Upstash instance to point at — isn't
+ * mistaken for one.
  */
 export function getRateLimiter(): RateLimiter {
     if (!cachedLimiter) {
         const url = process.env.UPSTASH_REDIS_REST_URL;
         const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-        cachedLimiter = url && token
-            ? new UpstashRateLimiter(new Redis({ url, token }))
-            : new InMemoryRateLimiter();
+        if (url && token) {
+            cachedLimiter = new UpstashRateLimiter(new Redis({ url, token }));
+        } else if (process.env.NODE_ENV === "production" && process.env.DISABLE_RATE_LIMIT !== "true") {
+            throw new RateLimiterMisconfiguredError(
+                "UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN must be set in production — refusing to silently fall back to a per-process in-memory rate limiter with far weaker brute-force protection once horizontally scaled.",
+            );
+        } else {
+            cachedLimiter = new InMemoryRateLimiter();
+        }
     }
     return cachedLimiter;
 }
@@ -138,6 +184,49 @@ export function getRateLimiter(): RateLimiter {
 /** Test-only escape hatch — lets tests inject a fresh limiter instead of sharing the process-wide singleton (or fighting env vars neither set nor unset it reliably mid-suite). */
 export function setRateLimiterForTesting(limiter: RateLimiter | undefined): void {
     cachedLimiter = limiter;
+}
+
+let fallbackLimiter: InMemoryRateLimiter | undefined;
+
+/**
+ * The actual runtime resilience layer, shared by both `checkRateLimit`
+ * (proxy.ts's general tiers) and `checkLoginRateLimit` below — NOT
+ * duplicated as a try/catch at each call site, so both benefit from one
+ * definition of "what counts as recoverable" instead of two that could
+ * drift. A transient failure from the configured limiter itself (Upstash
+ * unreachable, a network blip, a bad response) falls back to one shared
+ * `InMemoryRateLimiter` instance for the rest of THIS process's lifetime
+ * (not a fresh one per call, which would never accumulate a real count) —
+ * this favors availability (every request still gets served, just with
+ * weaker, per-instance-only rate limiting until Upstash recovers) over
+ * strictly enforcing the limit, matching this repo's existing "prefer a
+ * graceful fallback over a crash" default for a dependency being
+ * temporarily down (see `DatabaseUnavailableError`'s own reasoning).
+ *
+ * `RateLimiterMisconfiguredError` is deliberately let through UNCAUGHT —
+ * see `getRateLimiter()`'s own comment for why that one specific failure
+ * must keep failing loudly instead of being absorbed into the same
+ * fallback.
+ */
+async function checkAndRecordResilient(key: string, limit: number, windowSeconds: number): Promise<RateLimitCheck> {
+    const limiter = getRateLimiter();
+    try {
+        return await limiter.checkAndRecord(key, limit, windowSeconds);
+    } catch (error) {
+        if (isRateLimiterMisconfiguredError(error)) {
+            throw error;
+        }
+        console.error("Rate limiter backend failed; falling back to a per-instance in-memory limiter for this call.", error);
+        if (!fallbackLimiter) {
+            fallbackLimiter = new InMemoryRateLimiter();
+        }
+        return fallbackLimiter.checkAndRecord(key, limit, windowSeconds);
+    }
+}
+
+/** Test-only escape hatch, same reasoning as `setRateLimiterForTesting` — lets a test force a fresh fallback bucket set instead of sharing state left over from a previous test. */
+export function setFallbackLimiterForTesting(limiter: InMemoryRateLimiter | undefined): void {
+    fallbackLimiter = limiter;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,15 +249,34 @@ const LOGIN_WINDOW_SECONDS = 15 * 60;
  * guess among many wrong ones to keep the counter from ever tripping).
  */
 export function checkLoginRateLimit(key: string): Promise<RateLimitCheck> {
-    return getRateLimiter().checkAndRecord(`login:${ key }`, LOGIN_ATTEMPT_LIMIT, LOGIN_WINDOW_SECONDS);
+    return checkAndRecordResilient(`login:${ key }`, LOGIN_ATTEMPT_LIMIT, LOGIN_WINDOW_SECONDS);
 }
 
-/** Called after a successful login so a few earlier typos don't linger against the count for either dimension. */
-export function resetLoginRateLimit(key: string): Promise<void> {
-    return getRateLimiter().reset(`login:${ key }`);
+/**
+ * Called after a successful login so a few earlier typos don't linger
+ * against the count for either dimension. Deliberately swallows (logs,
+ * doesn't rethrow) any failure from the configured limiter's `reset()` —
+ * found during the OWASP audit remediation: `login/route.ts` calls this
+ * AFTER `login()` already succeeded, inside the same try/catch that turns
+ * any thrown error into an error response, so an Upstash hiccup here used
+ * to turn an otherwise-correct login into a 500 for the admin. There's no
+ * meaningful fallback to reach for the way `checkAndRecordResilient` has
+ * one (nothing to "clear" in a brand-new in-memory limiter that never saw
+ * the original failed attempts), so this just accepts the miss: worst
+ * case, a few earlier typos linger against the window a little longer
+ * than intended — a strictly smaller problem than failing the login
+ * response itself.
+ */
+export async function resetLoginRateLimit(key: string): Promise<void> {
+    const limiter = getRateLimiter();
+    try {
+        await limiter.reset(`login:${ key }`);
+    } catch (error) {
+        console.error("Rate limiter backend failed while resetting a login counter after a successful login; ignoring.", error);
+    }
 }
 
 /** General-purpose entry point for `proxy.ts`'s per-IP tiers (global/refresh/admin-mutation budgets) — a thin, explicitly-named wrapper so call sites read as intent ("check this rate limit") rather than reaching into `getRateLimiter()` directly. */
 export function checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitCheck> {
-    return getRateLimiter().checkAndRecord(key, limit, windowSeconds);
+    return checkAndRecordResilient(key, limit, windowSeconds);
 }

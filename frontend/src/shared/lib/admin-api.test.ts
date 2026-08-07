@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApiError, SessionExpiredError, adminApi } from "./admin-api";
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "./auth/constants";
 
 function jsonResponse(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -34,6 +35,24 @@ describe("admin-api request()", () => {
 
         const result = await adminApi.logout();
         expect(result).toEqual({ ok: true });
+    });
+
+    /**
+     * `guard.ts`'s `defineAdminRoute` rejects any mutating admin request
+     * missing this exact header (see its own comment) — this is the ONE
+     * client the real admin UI uses to reach those routes, so if it ever
+     * stopped sending the header, every real save/publish/delete in the
+     * actual app would start 403ing, not just a test.
+     */
+    it("sends the required CSRF header on every mutating request", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ok: true }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await adminApi.deletePost("some-slug");
+
+        const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+        const headers = new Headers(options.headers);
+        expect(headers.get(CSRF_HEADER_NAME)).toBe(CSRF_HEADER_VALUE);
     });
 
     it("on a 401, silently refreshes once and retries the original request — the caller never sees the 401", async () => {

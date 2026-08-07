@@ -58,6 +58,23 @@ model Session {
   createdAt        DateTime  @default(now())
   expiresAt        DateTime
   revokedAt        DateTime?
+  /// Set ONLY when this row was revoked because `rotateSession` replaced it
+  /// with a new one (holds that new session's id) — deliberately NOT set
+  /// by `revokeSession` (explicit single-device logout) or
+  /// `revokeAllSessionsForUser` ("sign out everywhere"). This is what lets
+  /// refresh-token REUSE detection (session.ts's `detectReuseAndRevokeFamily`)
+  /// tell "someone replayed a token that was already rotated away — likely
+  /// theft" apart from "someone replayed a token from a device that was
+  /// deliberately logged out" — both leave `revokedAt` set, but only the
+  /// first is evidence of anything, and conflating them would make an
+  /// ordinary logout collateral-damage every OTHER active session for that
+  /// user (found by a failing pre-existing test:
+  /// `revokeSession`'s "revokes only the targeted session" — see
+  /// session.test.ts). Plain string, no `@relation`: this is a bookkeeping
+  /// marker read back by primary key on an already-fetched row, not a join
+  /// target, so a real foreign-key relation would add self-relation
+  /// complexity for no actual query need.
+  replacedBySessionId String?
 
   @@index([userId])
 }

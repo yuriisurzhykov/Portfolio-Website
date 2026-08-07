@@ -61,6 +61,23 @@ jobs:
           # only — it's the one that runs the suites Stryker reruns.
           node-version: "22"
 
+      # Repo-root, not per-workspace: one lockfile (package-lock.json) covers
+      # frontend/ + backend/ together, and npm audit reads the whole
+      # resolved tree from there regardless of which workspace a dependency
+      # belongs to. Added during the OWASP audit remediation, after running
+      # `npm audit fix` for real against a real baseline (7 findings: 4
+      # high — brace-expansion, postcss/sharp via next — and 3 moderate —
+      # mermaid, qs via Stryker's own typed-rest-client) — all 4 high ones
+      # had a non-breaking fix available and were resolved (confirmed:
+      # backend + frontend test suites and `next build` all still pass
+      # unchanged); only the 2 remaining moderate `qs` findings (a
+      # dev-only mutation-testing tool's own transitive dependency, never
+      # reachable from this app's own runtime) had no fix yet.
+      # --audit-level=high is set to match that real baseline, not guessed
+      # — moderate/low findings don't block a PR, high/critical ones do.
+      - name: Audit dependencies for high/critical vulnerabilities
+        run: npm audit --audit-level=high
+
       - name: Typecheck backend
         working-directory: backend
         run: npm run typecheck

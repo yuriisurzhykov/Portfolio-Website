@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeHrefSchema } from "./safe-href";
 
 /**
  * Single source of truth for "what a block looks like", shared by every
@@ -64,7 +65,10 @@ const imageCore = z.object({
     type: z.literal("image"),
     text: z.string().nullish(), // optional caption
     data: z.object({
-        src: z.string(),
+        // safeHrefSchema, not a bare z.string(): this renders straight into
+        // a public <img src> in ContentBlocks.tsx with no further checking —
+        // see backend/src/content/safe-href.ts for exactly what it rejects.
+        src: safeHrefSchema,
         alt: z.string(),
         width: z.number().int().positive().optional(),
         height: z.number().int().positive().optional(),

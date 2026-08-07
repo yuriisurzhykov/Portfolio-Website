@@ -1,5 +1,6 @@
 "use client";
 
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/shared/lib/auth/constants";
 import type {
     PostInput,
     PostSummary,
@@ -89,9 +90,19 @@ async function parseErrorMessage(response: Response): Promise<string> {
 }
 
 async function doFetch(method: string, url: string, body: unknown | undefined): Promise<Response> {
+    // CSRF_HEADER_NAME/_VALUE — see guard.ts's defineAdminRoute /
+    // constants.ts's own comment for the full reasoning. Sent
+    // unconditionally (not just for mutating methods) rather than
+    // duplicating guard.ts's method-matching logic here too — the server
+    // only actually enforces it on POST/PUT/PATCH/DELETE, so sending it on
+    // a hypothetical future GET call through this same wrapper would just
+    // be a harmless no-op header.
     return fetch(url, {
         method,
-        headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+        headers: {
+            [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+            ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
         body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 }

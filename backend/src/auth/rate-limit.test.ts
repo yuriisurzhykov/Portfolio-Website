@@ -2,10 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     checkLoginRateLimit,
     checkRateLimit,
+    getRateLimiter,
     InMemoryRateLimiter,
+    RateLimiterMisconfiguredError,
     resetLoginRateLimit,
+    setFallbackLimiterForTesting,
     setRateLimiterForTesting,
     UpstashRateLimiter,
+    type RateLimiter,
     type RedisCommands,
 } from "./rate-limit";
 
@@ -233,5 +237,205 @@ describe("checkRateLimit (general-purpose entry point)", () => {
         let last;
         for (let i = 0; i < 4; i++) last = await checkRateLimit(key, 3, 60);
         expect(last!.allowed).toBe(false);
+    });
+});
+
+describe("getRateLimiter (env-based backend selection)", () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+        setRateLimiterForTesting(undefined);
+    });
+
+    afterEach(() => {
+        process.env = { ...originalEnv };
+        setRateLimiterForTesting(undefined);
+    });
+
+    /**
+     * Also verifies the credentials genuinely reached the underlying
+     * `@upstash/redis` client (`.client.baseUrl`/`.client.headers` are that
+     * library's own, real, inspectable config — not this codebase's
+     * abstraction) — not just that SOME `UpstashRateLimiter` got
+     * constructed. `instanceof` alone would still pass even if the actual
+     * `url`/`token` were dropped on the way into `new Redis(...)`, which
+     * would silently break every real rate-limit check at runtime (found
+     * by mutation testing, not review).
+     */
+    it("selects UpstashRateLimiter when both credentials are configured, and wires the real url/token into it", () => {
+        process.env.UPSTASH_REDIS_REST_URL = "https://example.upstash.io";
+        process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+
+        const limiter = getRateLimiter();
+        expect(limiter).toBeInstanceOf(UpstashRateLimiter);
+
+        const redisClient = (limiter as unknown as { redis: { client: { baseUrl: string; headers: Record<string, string> } } }).redis.client;
+        expect(redisClient.baseUrl).toBe("https://example.upstash.io");
+        expect(redisClient.headers.authorization).toBe("Bearer test-token");
+    });
+
+    it("does NOT select UpstashRateLimiter when only the URL is configured (token missing)", () => {
+        process.env.UPSTASH_REDIS_REST_URL = "https://example.upstash.io";
+        delete process.env.UPSTASH_REDIS_REST_TOKEN;
+        process.env.NODE_ENV = "test";
+
+        expect(getRateLimiter()).not.toBeInstanceOf(UpstashRateLimiter);
+    });
+
+    it("does NOT select UpstashRateLimiter when only the token is configured (URL missing)", () => {
+        delete process.env.UPSTASH_REDIS_REST_URL;
+        process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+        process.env.NODE_ENV = "test";
+
+        expect(getRateLimiter()).not.toBeInstanceOf(UpstashRateLimiter);
+    });
+
+    it("falls back to InMemoryRateLimiter outside production when credentials are absent", () => {
+        delete process.env.UPSTASH_REDIS_REST_URL;
+        delete process.env.UPSTASH_REDIS_REST_TOKEN;
+        // Explicitly cleared, not left as whatever backend/.env.test set it
+        // to — otherwise this test would keep passing even if the
+        // NODE_ENV !== "production" check were mutated away entirely,
+        // since the DISABLE_RATE_LIMIT escape hatch would independently
+        // mask the difference. Found by mutation testing, not review.
+        delete process.env.DISABLE_RATE_LIMIT;
+        process.env.NODE_ENV = "test";
+
+        expect(getRateLimiter()).toBeInstanceOf(InMemoryRateLimiter);
+    });
+
+    /**
+     * The actual security property this exists to guarantee: a real
+     * production deploy that forgot to set Upstash credentials must fail
+     * loudly on its very first rate-limited request, not silently run
+     * with per-process-only brute-force protection forever. A test that
+     * only checked "some limiter got returned" would pass even if this
+     * whole guard were deleted. Also pins the actual message content
+     * (mentions both env var names), not just the error class — an ops
+     * person reading this in a log needs to know WHICH vars to set.
+     */
+    it("throws RateLimiterMisconfiguredError in production when credentials are absent", () => {
+        delete process.env.UPSTASH_REDIS_REST_URL;
+        delete process.env.UPSTASH_REDIS_REST_TOKEN;
+        delete process.env.DISABLE_RATE_LIMIT;
+        process.env.NODE_ENV = "production";
+
+        expect(() => getRateLimiter()).toThrow(RateLimiterMisconfiguredError);
+        expect(() => getRateLimiter()).toThrow(/UPSTASH_REDIS_REST_URL.*UPSTASH_REDIS_REST_TOKEN/);
+    });
+
+    it("does NOT throw in production when DISABLE_RATE_LIMIT is set (the E2E-suite escape hatch)", () => {
+        delete process.env.UPSTASH_REDIS_REST_URL;
+        delete process.env.UPSTASH_REDIS_REST_TOKEN;
+        process.env.NODE_ENV = "production";
+        process.env.DISABLE_RATE_LIMIT = "true";
+
+        expect(getRateLimiter()).toBeInstanceOf(InMemoryRateLimiter);
+    });
+});
+
+describe("checkRateLimit / checkLoginRateLimit resilience against a failing configured backend", () => {
+    afterEach(() => {
+        setRateLimiterForTesting(undefined);
+        setFallbackLimiterForTesting(undefined);
+    });
+
+    function makeThrowingLimiter(error: Error): RateLimiter {
+        return {
+            checkAndRecord: () => Promise.reject(error),
+            reset: () => Promise.reject(error),
+        };
+    }
+
+    it("falls back to an in-memory limiter (does not reject/500) when the configured backend's checkAndRecord throws, and logs a diagnostic mentioning the fallback", async () => {
+        setRateLimiterForTesting(makeThrowingLimiter(new Error("ECONNREFUSED")));
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        try {
+            const result = await checkRateLimit(uniqueKey(), 5, 60);
+            expect(result.allowed).toBe(true);
+            expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("falling back"), expect.any(Error));
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
+    /**
+     * Not just "one call recovers" — the fallback must be a real, shared
+     * counter across calls (this process's fallback singleton), or the
+     * degraded protection during an outage would be no protection at all
+     * (every call getting a fresh, empty bucket that never blocks
+     * anything).
+     */
+    it("the fallback limiter genuinely accumulates state across calls, not a fresh instance every time", async () => {
+        setRateLimiterForTesting(makeThrowingLimiter(new Error("ECONNREFUSED")));
+        const key = uniqueKey();
+
+        let last;
+        for (let i = 0; i < 6; i++) last = await checkRateLimit(key, 5, 60);
+        expect(last!.allowed).toBe(false);
+    });
+
+    it("re-throws a RateLimiterMisconfiguredError instead of silently absorbing it into the fallback", async () => {
+        setRateLimiterForTesting(makeThrowingLimiter(new RateLimiterMisconfiguredError("no creds configured")));
+
+        await expect(checkRateLimit(uniqueKey(), 5, 60)).rejects.toThrow(RateLimiterMisconfiguredError);
+    });
+
+    it("checkLoginRateLimit gets the same fallback resilience as checkRateLimit", async () => {
+        setRateLimiterForTesting(makeThrowingLimiter(new Error("ECONNREFUSED")));
+
+        const result = await checkLoginRateLimit(uniqueKey());
+        expect(result.allowed).toBe(true);
+    });
+
+    /**
+     * Proves `setFallbackLimiterForTesting` actually wires its argument
+     * INTO the fallback path, rather than being a no-op that happens not
+     * to matter because every other test here uses a fresh key anyway
+     * (found by mutation testing — emptying this setter's body survived
+     * every other test in this file). Pre-loads an injected limiter past
+     * its own limit BEFORE the configured backend ever fails, then asserts
+     * the very first fallback hit is already blocked — only possible if
+     * `checkAndRecordResilient` is really reaching into THIS SAME
+     * instance, not a fresh internal one.
+     */
+    it("setFallbackLimiterForTesting's injected instance is the one actually used on fallback", async () => {
+        const injectedFallback = new InMemoryRateLimiter();
+        const key = uniqueKey();
+        await injectedFallback.checkAndRecord(key, 1, 60); // pre-exhausts the limit of 1
+        setFallbackLimiterForTesting(injectedFallback);
+        setRateLimiterForTesting(makeThrowingLimiter(new Error("ECONNREFUSED")));
+
+        const result = await checkRateLimit(key, 1, 60);
+        expect(result.allowed).toBe(false);
+    });
+});
+
+describe("resetLoginRateLimit swallowing a failing configured backend", () => {
+    afterEach(() => {
+        setRateLimiterForTesting(undefined);
+    });
+
+    /**
+     * The real bug this guards against: login/route.ts calls this AFTER
+     * a successful login, inside a try/catch that turns any thrown error
+     * into an error RESPONSE — an unhandled rejection here used to turn a
+     * genuinely correct login into a 500 for the admin purely because the
+     * rate-limit backend was unreachable.
+     */
+    it("resolves normally even when the configured backend's reset() rejects, and logs a diagnostic instead of losing the failure silently", async () => {
+        setRateLimiterForTesting({
+            checkAndRecord: async () => ({ allowed: true }),
+            reset: () => Promise.reject(new Error("ECONNREFUSED")),
+        });
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        try {
+            await expect(resetLoginRateLimit(uniqueKey())).resolves.toBeUndefined();
+            expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("resetting a login counter"), expect.any(Error));
+        } finally {
+            errorSpy.mockRestore();
+        }
     });
 });

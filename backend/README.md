@@ -38,7 +38,7 @@ docker compose up -d
 npm install
 
 # 3. Скопировать backend/.env.example -> backend/.env, при необходимости
-#    сгенерировать свои JWT_ACCESS_SECRET/JWT_REFRESH_SECRET
+#    сгенерировать свой JWT_ACCESS_SECRET (минимум 32 символа)
 cp backend/.env.example backend/.env
 
 # 4. Прогнать миграции
