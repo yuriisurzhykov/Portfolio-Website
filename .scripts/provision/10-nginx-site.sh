@@ -48,6 +48,23 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options        "SAMEORIGIN" always;
     add_header Referrer-Policy        "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Permissions-Policy     "camera=(), microphone=(), geolocation=(), payment=()" always;
+
+    # Report-Only on purpose (see README's security-headers entry): this
+    # directive set was derived by reading the app's actual dependencies
+    # (Mantine/BlockNote inject runtime <style> tags, and the root layout
+    # itself sets one via dangerouslySetInnerHTML for design tokens — both
+    # need style-src 'unsafe-inline'; no external script/font CDN exists
+    # anywhere in frontend/src, so script-src/font-src stay 'self' only),
+    # not by trial and error against a live site. Still, "read the
+    # dependencies" is not the same as "watched it not break a real
+    # browser" — switch the header name below to plain
+    # `Content-Security-Policy` only after loading /admin's block editor
+    # against THIS OWN report-only policy and confirming the browser
+    # console shows zero violation reports, the same live-verification
+    # step this file's other rules already went through.
+    add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'" always;
 
     location /api/auth/login {
         limit_req zone=login_limit burst=5 nodelay;

@@ -46,6 +46,18 @@ Group=${APP_USER}
 WorkingDirectory=${APP_BASE_DIR}/current/frontend
 Environment=NODE_ENV=production
 Environment=PORT=${PORT}
+# next start defaults to binding 0.0.0.0 — reachable directly on the VPS's
+# public interface, bypassing nginx (its TLS, security headers, and the
+# /api/auth/login rate-limit zone) entirely, plus letting a direct caller
+# forge X-Forwarded-For since nginx's own X-Real-IP override never runs
+# (see frontend/src/shared/lib/client-ip.ts). First attempt at this fix was
+# `Environment=HOSTNAME=127.0.0.1` here — WRONG, checked against Next.js
+# 16's actual CLI source (packages/next/src/bin/next.ts): the `start`
+# command's `-H, --hostname` option has no `.env()` binding (only `-p,
+# --port` does), so process.env.HOSTNAME is silently ignored by `next
+# start` outside of `output: "standalone"` builds, which this app doesn't
+# use. The real fix lives in frontend/package.json's `start` script
+# (`next start -H 127.0.0.1`), not here.
 Environment=NEXT_TELEMETRY_DISABLED=1
 ExecStart=/usr/bin/npm run start
 Restart=on-failure
@@ -55,6 +67,19 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+# The four directives below were added and verified the same way as the
+# ones above (see this file's header comment) — incrementally, against
+# the real yuriisoft-web-dev service, one group at a time, confirming
+# `systemctl status`/a real HTTP request still worked after each before
+# moving to the next. Node only needs INET/INET6 sockets (Postgres over
+# TCP, Upstash over HTTPS) and its own Unix-domain sockets internally —
+# no AF_NETLINK, AF_PACKET, etc. MemoryDenyWriteExecute is deliberately
+# NOT included: V8's JIT needs W+X memory pages, so that directive would
+# break Node itself, not just narrow its privileges.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # One entry for the whole npm workspace, not one per frontend/backend —
+  # this repo has exactly one lockfile (root package-lock.json) covering
+  # both, same as `npm audit`/`npm ci` in backend-web-checks.yml already
+  # treat it. Dependabot's own npm ecosystem understands npm workspaces
+  # natively when pointed at the workspace root.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # Actions referenced with a floating tag (e.g. actions/checkout@v4) still
+  # need their own updates — Dependabot's github-actions ecosystem is what
+  # keeps a future SHA-pin (see the OWASP audit's supply-chain findings)
+  # current without a human re-checking every workflow by hand.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -259,6 +259,11 @@ automatic commit — because the judgment "this is no longer a regression,
 but a deliberate design change" is, by its very nature, a human one, not
 something worth delegating to a machine.
 
+Supply-chain hygiene sits alongside these: `npm audit --audit-level=high`
+runs as a blocking step in the same CI job, and
+[Dependabot](.github/dependabot.yml) keeps both the npm workspace and the
+GitHub Actions themselves current on a weekly cadence.
+
 ## Map of the rest of the documentation
 
 This file is an overview, not the final word: nearly every meaningful slice

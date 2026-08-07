@@ -44,6 +44,13 @@ export function setAuthCookies(response: NextResponse, accessToken: string, refr
 }
 
 export function clearAuthCookies(response: NextResponse): void {
-    response.cookies.delete(ACCESS_TOKEN_COOKIE);
-    response.cookies.delete(REFRESH_TOKEN_COOKIE);
+    // Explicit `path: "/"` on delete, not just the cookie name — a browser
+    // only deletes a cookie whose path/domain match exactly; since
+    // `setAuthCookies` above always sets `path: "/"` explicitly, deleting
+    // by name alone happened to work in practice (Next.js's own default),
+    // but relying on that default silently matching the one this app
+    // actually sets is exactly the kind of implicit coupling that breaks
+    // quietly if either side's default ever changes independently.
+    response.cookies.delete({ name: ACCESS_TOKEN_COOKIE, path: "/" });
+    response.cookies.delete({ name: REFRESH_TOKEN_COOKIE, path: "/" });
 }

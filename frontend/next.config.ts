@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
   // normally treated as pre-built JS. transpilePackages tells Next.js to run
   // its own compiler over this package's source too.
   transpilePackages: ["@portfolio/backend"],
+  // Next.js sends "X-Powered-By: Next.js" on every response by default —
+  // a free hint to an attacker about which framework-specific CVEs to try.
+  poweredByHeader: false,
 };
 
 export default nextConfig;

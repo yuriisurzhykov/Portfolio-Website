@@ -9,7 +9,10 @@ export interface DiagramLightboxProps {
     open: boolean,
     onClose: () => void,
     /**
-     * Already-rendered SVG markup — same string the thumbnail shows, just bigger and pannable.
+     * Already-rendered, already-SANITIZED SVG markup (DiagramSurface is the
+     * only caller, and sanitizes once via sanitize-svg.ts before passing it
+     * both here and to its own thumbnail) — same string the thumbnail shows,
+     * just bigger and pannable.
      * */
     svg: string,
 }

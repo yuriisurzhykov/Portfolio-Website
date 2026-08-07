@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { logAuditEvent } from "@portfolio/backend";
 import { hasScopes, resolvePrincipal, resolvePrincipalFromCookieStore, type Principal } from "./principal";
-import { REQUEST_PATHNAME_HEADER } from "./constants";
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE, REQUEST_PATHNAME_HEADER } from "./constants";
 
 /**
  * The one scope this app actually issues today (see `principal.ts`'s
@@ -10,6 +11,28 @@ import { REQUEST_PATHNAME_HEADER } from "./constants";
  * catch, since it only compares strings).
  */
 export const ADMIN_SCOPE = ["admin:*"];
+
+/**
+ * `GET`/`HEAD` never mutate anything, so there's nothing for CSRF to
+ * exploit there — restricting the header check to the methods that
+ * actually write data keeps every existing `GET` call (`admin-api.ts`
+ * doesn't even use this guard for reads today, but `defineAdminRoute`
+ * itself is also used directly by a couple of GET routes) working
+ * unchanged.
+ */
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * See `constants.ts`'s own comment on `CSRF_HEADER_NAME`/`_VALUE` for the
+ * full threat-model reasoning. Checks the exact VALUE, not just presence —
+ * presence-only would still block a plain `<form>` post (forms can't set
+ * ANY custom header, value or not), but pinning the value too costs
+ * nothing and rules out a hypothetical future where some other legitimate
+ * client sends the header name with a different value for its own reasons.
+ */
+function hasRequiredCsrfHeader(request: NextRequest): boolean {
+    return request.headers.get(CSRF_HEADER_NAME) === CSRF_HEADER_VALUE;
+}
 
 interface RouteContext<TParams> {
     params: Promise<TParams>;
@@ -55,7 +78,35 @@ function defineRoute<TParams>(
         if (!hasScopes(principal, requiredScopes)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-        return handler(request, context ?? { params: Promise.resolve({} as TParams) }, principal);
+        // Scoped to routes that actually require a non-empty scope (i.e.
+        // defineAdminRoute, never definePublicRoute) — login/logout/refresh
+        // are deliberately public and own their own security boundary (see
+        // definePublicRoute's own comment), not this one. 403, not 401: the
+        // principal check above already passed, so this is "authenticated
+        // but rejected for a different reason," the conventional meaning of
+        // 403 vs. 401's "not authenticated at all."
+        if (requiredScopes.length > 0 && MUTATING_METHODS.has(request.method) && !hasRequiredCsrfHeader(request)) {
+            return NextResponse.json({ error: "Missing or invalid CSRF header." }, { status: 403 });
+        }
+        const response = await handler(request, context ?? { params: Promise.resolve({} as TParams) }, principal);
+        // Every admin write, logged in exactly one place — the same reason
+        // the CSRF check above lives here rather than duplicated in each of
+        // the 12 `/api/admin/**` route files: a future admin route
+        // automatically gets audit coverage for free, with no chance of one
+        // handler forgetting to call it. `principal` is guaranteed non-null
+        // here (the earlier `hasScopes` check already returned 401 for a
+        // null principal against a non-empty requirement).
+        if (requiredScopes.length > 0 && MUTATING_METHODS.has(request.method)) {
+            const authenticated = principal as Principal;
+            logAuditEvent("admin_mutation", {
+                userId: authenticated.userId,
+                email: authenticated.email,
+                method: request.method,
+                path: request.nextUrl.pathname,
+                status: response.status,
+            });
+        }
+        return response;
     };
 }
 

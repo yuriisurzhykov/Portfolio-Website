@@ -56,7 +56,19 @@ export function MermaidDiagram({source}: MermaidDiagramProps) {
             try {
                 const {default: mermaid} = await import("mermaid");
                 const themeVariables = themeVariablesFor(theme === "dark" ? colors : colorsLight);
-                mermaid.initialize({startOnLoad: false, theme: "base", themeVariables: themeVariables});
+                // Pinned explicitly rather than relied on as a dependency
+                // default: Mermaid 11 already defaults to "strict" (verified
+                // live — a hand-crafted malicious node label produces no
+                // <script>/event-handler output), but a future major version
+                // changing that default would silently reopen this. The
+                // sanitize-svg.ts pass in DiagramSurface is the second,
+                // independent layer that holds even if this one regresses.
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: "base",
+                    themeVariables: themeVariables,
+                    securityLevel: "strict",
+                });
 
                 const {svg: rendered} = await mermaid.render(idRef.current, source);
                 if (!cancelled) {

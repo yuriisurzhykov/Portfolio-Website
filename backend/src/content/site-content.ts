@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "../db/client";
 import { localizedTextSchema } from "./localized-text";
 import { SITE_CONTENT_DEFAULTS } from "./site-content-defaults";
+import { safeHrefSchema } from "./safe-href";
 
 /**
  * Same reasoning as `localizedTextSchema` (`localized-text.ts`), just with
@@ -41,14 +42,21 @@ const contactContentSchema = z.object({
  * states instead of also having to handle "key is missing" as a fourth,
  * implicit case.
  *
- * `"url"` is a plain string, not `z.string().url()` — same convention
- * `configContentSchema`'s `email`/`social.github`/`social.linkedin` below
- * already use (stricter format validation isn't worth the false negatives
- * on the handful of real-world URL shapes `.url()` rejects, e.g. some
- * relative paths a self-hosted admin might legitimately want).
+ * `"url"` uses `safeHrefSchema` (`./safe-href.ts`), not `z.string().url()`
+ * — same convention `configContentSchema`'s `email`/`social.github`/
+ * `social.linkedin` below already use (`.url()`'s stricter format check
+ * isn't worth the false negatives on the handful of real-world URL shapes
+ * it rejects, e.g. some relative paths a self-hosted admin might
+ * legitimately want) — but a bare `z.string()` was too permissive: this
+ * value renders straight into an `<img src>` with no further checking
+ * (`IconRefPreview.tsx`), so `javascript:`/`data:` needed to be rejected
+ * regardless of `.url()`'s stricter-than-necessary formatting opinions.
+ * `safeHrefSchema` is the middle ground — same relative-path leniency,
+ * scheme-restricted instead of format-restricted.
  *
- * `"icon"`'s `value` is a kebab-case name meant to be validated against
- * `lucide-react/dynamic`'s real `iconNames` list on the frontend (see
+ * `"icon"`'s `value` is a kebab-case name (e.g. `"rocket"`), NOT a URL at
+ * all — meant to be validated against `lucide-react/dynamic`'s real
+ * `iconNames` list on the frontend (see
  * `web/src/shared/ui/icon-picker/README.md`) — this schema deliberately
  * does NOT re-validate it against that list here. Baking a snapshot of
  * lucide's icon names into backend validation would silently go stale
@@ -60,7 +68,7 @@ const contactContentSchema = z.object({
  */
 export const iconRefSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("none") }),
-    z.object({ type: z.literal("url"), value: z.string() }),
+    z.object({ type: z.literal("url"), value: safeHrefSchema }),
     z.object({ type: z.literal("icon"), value: z.string() }),
 ]);
 
@@ -94,9 +102,12 @@ const configContentSchema = z.object({
     role: localizedTextSchema,
     email: z.string(),
     availability: z.enum(["available", "engaged", "limited"]),
+    // safeHrefSchema, not a bare z.string(): both render straight into a
+    // public <a href> on every page's Footer with no further checking —
+    // see backend/src/content/safe-href.ts for exactly what it rejects.
     social: z.object({
-        github: z.string(),
-        linkedin: z.string(),
+        github: safeHrefSchema,
+        linkedin: safeHrefSchema,
     }),
 });
 

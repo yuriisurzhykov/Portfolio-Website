@@ -1,11 +1,12 @@
 export { login, logout, refreshSession } from "./auth/auth-service";
 export type { AuthResult, AuthenticatedUser } from "./auth/auth-service";
-export { revokeAllSessionsForUser } from "./auth/session";
+export { deleteExpiredSessions, revokeAllSessionsForUser } from "./auth/session";
 export type { SessionMetadata } from "./auth/session";
 export { signAccessToken, verifyAccessToken, ACCESS_TOKEN_TTL_SECONDS } from "./auth/jwt";
 export type { AccessTokenPayload } from "./auth/jwt";
 export { checkLoginRateLimit, checkRateLimit, resetLoginRateLimit } from "./auth/rate-limit";
 export type { RateLimitCheck } from "./auth/rate-limit";
+export { logAuditEvent } from "./audit-log";
 
 export { getDistinctPostCategories, getJournalEntries, getLatestPublishedPost, getPostBySlug } from "./content/posts";
 export type { PostDetail, PostStatus, PostSummary } from "./content/posts";

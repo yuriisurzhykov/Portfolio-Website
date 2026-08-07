@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 # Writes ${APP_BASE_DIR}/shared/.env — the one file holding real secrets
-# (DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET) for one deployment
-# target. Owned by nextapp, mode 600 — the deploy account itself
-# (yuriisoft) cannot read it back after writing it.
+# (DATABASE_URL, JWT_ACCESS_SECRET) for one deployment target. Owned by
+# nextapp, mode 600 — the deploy account itself (yuriisoft) cannot read it
+# back after writing it.
+#
+# No JWT_REFRESH_SECRET (removed during the OWASP audit remediation): this
+# script used to require and write one, but nothing in the app ever reads
+# it — refresh tokens are opaque, CSPRNG-generated strings
+# (backend/src/auth/tokens.ts), never JWTs, so there was never a second
+# signing secret for it to protect. An operator following this script's
+# old output would reasonably assume it did something.
 #
 # Parameterized (APP_BASE_DIR, DB_NAME) so the same script writes both the
 # production .env (portfolio DB, the defaults) and the dev/staging one
@@ -18,12 +25,13 @@
 #
 # Secrets are read from environment variables at run time — never
 # hardcoded, never committed. Generate them with:
-#   PORTFOLIO_DB_PASSWORD:  the role password from 02-postgres-db.sh
+#   PORTFOLIO_DB_PASSWORD: the role password from 02-postgres-db.sh
 #     (same role/password serves every database it owns, dev and prod
 #     alike — only DB_NAME differs)
-#   JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (two DIFFERENT values, and a
-#   DIFFERENT pair per target — dev and prod should never share a JWT
-#   secret): node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+#   JWT_ACCESS_SECRET (a DIFFERENT value per target — dev and prod should
+#     never share one), at least 32 characters (see jwt.ts's
+#     getAccessSecret()):
+#     node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 #
 # Verified manually against the real VPS before being written here — the
 # read/deny boundary was tested live (nextapp can read it, the deploy
@@ -42,13 +50,17 @@ if [ -f "${ENV_FILE}" ]; then
 fi
 
 : "${PORTFOLIO_DB_PASSWORD:?Set PORTFOLIO_DB_PASSWORD}"
-: "${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET}"
-: "${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET (must differ from JWT_ACCESS_SECRET)}"
+: "${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET (at least 32 characters — see jwt.ts's getAccessSecret())}"
+
+if [ "${#JWT_ACCESS_SECRET}" -lt 32 ]; then
+  echo "ERROR: JWT_ACCESS_SECRET is only ${#JWT_ACCESS_SECRET} characters — must be at least 32." >&2
+  echo "The app itself also refuses to start with a shorter secret (jwt.ts's getAccessSecret())." >&2
+  exit 1
+fi
 
 sudo tee "${ENV_FILE}" > /dev/null <<EOF
 DATABASE_URL="postgresql://portfolio:${PORTFOLIO_DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}"
 JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET}"
-JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET}"
 EOF
 
 sudo chown "${APP_USER}:${APP_USER}" "${ENV_FILE}"
