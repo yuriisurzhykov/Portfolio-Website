@@ -86,7 +86,7 @@ jobs:
           target: "/tmp/"
 
       - name: Deploy on Server (${{ inputs.environment-name }})
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
@@ -115,7 +115,7 @@ jobs:
       # good deploy — this step only ever ADDS/UPDATES named keys, never deletes.
       - name: Sync optional env vars (${{ inputs.environment-name }})
         continue-on-error: true
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
