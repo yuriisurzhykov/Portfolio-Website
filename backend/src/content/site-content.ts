@@ -89,10 +89,63 @@ const principlesContentSchema = z.array(
     }),
 );
 
+/**
+ * A tech-stack row's logo, separate from `iconRefSchema` above even though
+ * both are "how do we render a small icon for this list item" — the two
+ * have genuinely different semantics, not just a different name for the
+ * same three states. `iconRefSchema`'s `"icon"` variant is an exact,
+ * admin-typed Lucide icon name (no guessing); a tech-stack row instead
+ * wants "try to find this technology's real brand mark automatically,
+ * with an explicit override" — a fourth state (`"auto"`) that `IconRef`
+ * has no equivalent for, and would be a confusing thing to bolt onto it
+ * (an "auto" that only makes sense for ONE of `IconRef`'s two current
+ * call sites). See `frontend/src/shared/lib/tech-icons` for what actually
+ * resolves `"auto"`/`"brand"` into a real SVG at render time — this
+ * schema only stores the admin's choice, never a resolved icon.
+ *
+ * `"brand"`'s `value` is a Simple Icons (simpleicons.org) slug, e.g.
+ * `"docker"` — picked from a live search in the admin UI
+ * (`GET /api/admin/tech-icons`), not free-typed, so this schema doesn't
+ * validate it against the real icon list here for the same reason
+ * `iconRefSchema`'s `"icon"` variant doesn't validate against Lucide's:
+ * a bundled snapshot would silently go stale on every `simple-icons`
+ * upgrade. An unrecognized slug degrades to no logo at render time
+ * (`resolveTechIcon`), never a broken image or a crash.
+ *
+ * `"svg"`'s `value` is raw, admin-pasted SVG markup — the escape hatch for
+ * a technology with no real logo in Simple Icons at all (e.g. "Coroutines
+ * & Flow", "JNI & C++") and no hosted image URL to link to either. Stored
+ * RAW, not sanitized at write time — the exact same "raw source in
+ * storage, sanitize only at render" split `blockSchema`'s `diagram` type
+ * already established (`backend/src/content/blocks.ts`), for the same
+ * reason: sanitization needs a real DOM (`DOMPurify`), which this
+ * `backend/` package has no dependency on and shouldn't gain one just for
+ * this. `frontend/src/shared/lib/sanitize-svg.ts` is the one place this
+ * value is ever actually rendered, and it sanitizes on every render, not
+ * once at save time — so even a future stricter DOMPurify rule applies
+ * retroactively to already-saved values, not just newly-saved ones.
+ */
+export const techIconSchema = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("auto") }),
+    z.object({ type: z.literal("none") }),
+    z.object({ type: z.literal("brand"), value: z.string() }),
+    z.object({ type: z.literal("url"), value: safeHrefSchema }),
+    z.object({ type: z.literal("svg"), value: z.string() }),
+]);
+
+export type TechIcon = z.infer<typeof techIconSchema>;
+
 const techStackContentSchema = z.array(
     z.object({
         name: z.string(),
         note: localizedTextSchema,
+        // `.default({ type: "auto" })`, not `.optional()` — same reasoning
+        // as `principlesContentSchema`'s `icon` field above: a row already
+        // in the database from before this field existed has no `icon`
+        // key at all, and should start trying automatic logo resolution
+        // immediately rather than showing nothing until an admin visits
+        // the settings form once.
+        icon: techIconSchema.default({ type: "auto" }),
     }),
 );
 

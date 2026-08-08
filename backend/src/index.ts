@@ -10,15 +10,16 @@ export { logAuditEvent } from "./audit-log";
 
 export { getDistinctPostCategories, getJournalEntries, getLatestPublishedPost, getPostBySlug } from "./content/posts";
 export type { PostDetail, PostStatus, PostSummary } from "./content/posts";
-export { getAllWork, getFeaturedWork, getWorkBySlug } from "./content/work";
+export { getAllWork, getFeaturedWork, getPublishedTechSlugs, getWorkBySlug } from "./content/work";
 export type { CaseStudy, WorkDetail, WorkStatus, WorkSummary } from "./content/work";
+export { filterWorkByTechSlug, findTechDisplayName, toSimpleIconSlug, toTechSlug } from "./content/tech-slug";
 export type { Block, BlockInput, BlockType, ListItemInput } from "./content/blocks";
 export type { LocalizedText } from "./content/localized-text";
 export type { ContentLocale } from "./content/locale";
 export { isInvalidLifecycleTransitionError, nextState } from "./content/lifecycle";
 export type { LifecycleAction, LifecycleState } from "./content/lifecycle";
 
-export { getSiteContent, iconRefSchema, isSiteContentKey, SITE_CONTENT_KEYS, siteContentSchemas, updateSiteContent } from "./content/site-content";
+export { getSiteContent, iconRefSchema, isSiteContentKey, SITE_CONTENT_KEYS, siteContentSchemas, techIconSchema, updateSiteContent } from "./content/site-content";
 export type {
     ConfigContent,
     ContactContent,
@@ -28,6 +29,7 @@ export type {
     PrinciplesContent,
     SiteContentDataMap,
     SiteContentKey,
+    TechIcon,
     TechStackContent,
     WorkPageContent,
 } from "./content/site-content";

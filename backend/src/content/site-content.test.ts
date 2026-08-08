@@ -58,6 +58,38 @@ describe("updateSiteContent", () => {
         await expect(updateSiteContent("contact", { notAField: true })).rejects.toThrow();
     });
 
+    it("round-trips a tech-stack row's icon (auto, brand, url, svg, none variants) through updateSiteContent/getSiteContent", async () => {
+        const written = await updateSiteContent("techStack", [
+            { name: "Kotlin", note: { en: "n", ru: "n" }, icon: { type: "auto" } },
+            { name: "Docker", note: { en: "n", ru: "n" }, icon: { type: "brand", value: "docker" } },
+            { name: "Custom", note: { en: "n", ru: "n" }, icon: { type: "url", value: "https://example.com/icon.svg" } },
+            { name: "Coroutines & Flow", note: { en: "n", ru: "n" }, icon: { type: "svg", value: "<svg><path d=\"M0 0\"/></svg>" } },
+            { name: "Hidden", note: { en: "n", ru: "n" }, icon: { type: "none" } },
+        ]);
+        expect(written.map((item) => item.icon)).toEqual([
+            { type: "auto" },
+            { type: "brand", value: "docker" },
+            { type: "url", value: "https://example.com/icon.svg" },
+            { type: "svg", value: "<svg><path d=\"M0 0\"/></svg>" },
+            { type: "none" },
+        ]);
+
+        const read = await getSiteContent("techStack");
+        expect(read).toEqual(written);
+    });
+
+    it("stores 'svg' icon markup raw, without stripping a <script> tag at write time (sanitization happens only at render, in frontend/shared/lib/sanitize-svg.ts)", async () => {
+        // This is a deliberate assertion, not an oversight: proves the
+        // backend never silently mutates/sanitizes the stored value, so a
+        // future stricter sanitizer rule applies to every already-saved
+        // row at render time, not just newly-saved ones.
+        const malicious = "<svg><script>alert(1)</script></svg>";
+        const written = await updateSiteContent("techStack", [
+            { name: "Test", note: { en: "n", ru: "n" }, icon: { type: "svg", value: malicious } },
+        ]);
+        expect(written[0].icon).toEqual({ type: "svg", value: malicious });
+    });
+
     it("round-trips a principle's icon (url and icon variants) through updateSiteContent/getSiteContent", async () => {
         const written = await updateSiteContent("principles", [
             {
@@ -94,6 +126,20 @@ describe("principles icon default", () => {
 
         const principles = await getSiteContent("principles");
         expect(principles[0].icon).toEqual({ type: "none" });
+    });
+});
+
+describe("techStack icon default", () => {
+    it("falls back to `{ type: 'auto' }` for a row whose stored JSON predates the `icon` field entirely", async () => {
+        await prisma.siteContent.create({
+            data: {
+                key: "techStack",
+                data: [{ name: "Legacy Tech", note: { en: "d", ru: "d" } }],
+            },
+        });
+
+        const techStack = await getSiteContent("techStack");
+        expect(techStack[0].icon).toEqual({ type: "auto" });
     });
 });
 

@@ -6,11 +6,16 @@ import type {
     PostSummary,
     SiteContentDataMap,
     SiteContentKey,
+    TechIcon,
     TranslatePostInput,
     TranslateWorkInput,
     WorkInput,
     WorkSummary,
 } from "@portfolio/backend";
+// Type-only, and it must stay that way: `shared/lib/tech-icons`'s runtime
+// exports reach `simple-icons` (~3450 icons), which must never enter a
+// client bundle — see that slice's README.
+import type { BrandIconSearchResult, TechIconView } from "@/shared/lib/tech-icons";
 
 /**
  * Every mutation from the admin UI (Post/Work create/update/delete,
@@ -197,4 +202,15 @@ export const adminApi = {
     // GET. Only the write side needs a browser-callable endpoint.
     updateSiteContent: <K extends SiteContentKey>(key: K, data: SiteContentDataMap[K]) =>
         request<SiteContentDataMap[K]>("PUT", `/api/admin/settings/${ encodeURIComponent(key) }`, data),
+
+    // Backs the tech-stack editor's quick-add autocomplete and its per-row
+    // "Brand" picker (`views/admin-settings-editor/tech-stack`).
+    searchTechIcons: (query: string) =>
+        request<BrandIconSearchResult[]>("GET", `/api/admin/tech-icons?q=${ encodeURIComponent(query) }`),
+
+    // One request for the whole visible list, not one per row — see that
+    // route's own comment for why resolution has to happen server-side at
+    // all, and why this half of it is a POST despite being a read.
+    resolveTechIcons: (items: { name: string; icon: TechIcon }[]) =>
+        request<{ views: TechIconView[] }>("POST", "/api/admin/tech-icons", { items }),
 };

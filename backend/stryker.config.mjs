@@ -46,6 +46,7 @@ const config = {
         "src/content/lifecycle.ts",
         "src/content/slug.ts",
         "src/content/slugify.ts",
+        "src/content/tech-slug.ts",
         "src/errors.ts",
     ],
     reporters: ["html", "clear-text", "progress"],

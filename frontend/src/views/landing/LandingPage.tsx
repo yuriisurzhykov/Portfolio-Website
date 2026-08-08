@@ -1,11 +1,12 @@
 import * as React from "react";
-import type { ConfigContent, ContactContent, HeroContent, PostSummary, PrinciplesContent, TechStackContent, WorkSummary } from "@portfolio/backend";
+import type { ConfigContent, ContactContent, HeroContent, PostSummary, PrinciplesContent, WorkSummary } from "@portfolio/backend";
 import { Hero } from "./sections/Hero";
 import { TechStack } from "./sections/TechStack";
 import { Principles } from "./sections/Principles";
 import { SelectedWork } from "./sections/SelectedWork";
 import { JournalPreview } from "./sections/JournalPreview";
 import { ContactCta } from "./sections/ContactCta";
+import type { TechStackItemView } from "./tech-stack-view";
 
 export interface LandingPageProps {
     featuredWork: WorkSummary[];
@@ -13,7 +14,7 @@ export interface LandingPageProps {
     hero: HeroContent;
     contact: ContactContent;
     principles: PrinciplesContent;
-    techStack: TechStackContent;
+    techStack: TechStackItemView[];
     config: ConfigContent;
 }
 
