@@ -1,5 +1,6 @@
-import { getFeaturedWork, getLatestPublishedPost, getSiteContent } from "@portfolio/backend";
+import { getFeaturedWork, getLatestPublishedPost, getPublishedTechSlugs, getSiteContent } from "@portfolio/backend";
 import { LandingPage } from "@/views/landing";
+import { buildTechStackView } from "@/views/landing/tech-stack-view";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 
 // Without this, Next.js prerenders this page once at BUILD time (no
@@ -28,15 +29,16 @@ export default async function Page() {
                 getSiteContent("principles"),
                 getSiteContent("techStack"),
                 getSiteContent("config"),
+                getPublishedTechSlugs(),
             ]),
-        ([featuredWork, latestPost, hero, contact, principles, techStack, config]) => (
+        ([featuredWork, latestPost, hero, contact, principles, techStack, config, publishedTechSlugs]) => (
             <LandingPage
                 featuredWork={featuredWork}
                 latestPost={latestPost}
                 hero={hero}
                 contact={contact}
                 principles={principles}
-                techStack={techStack}
+                techStack={buildTechStackView(techStack, publishedTechSlugs)}
                 config={config}
             />
         ),

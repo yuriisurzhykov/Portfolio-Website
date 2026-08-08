@@ -30,12 +30,15 @@ export function useSiteContentForm<K extends SiteContentKey>(key: K) {
     const [error, setError] = React.useState<string | null>(null);
     const [savedAt, setSavedAt] = React.useState<number | null>(null);
 
-    async function submit(data: SiteContentDataMap[K]) {
+    /** Resolves `true` only when the save actually landed — a caller that tracks "unsaved changes" (see `TechStackSettingsForm`) must not clear that flag on a failed save, and `error` isn't readable synchronously here. */
+    async function submit(data: SiteContentDataMap[K]): Promise<boolean> {
         setError(null);
         setSubmitting(true);
+        let succeeded = false;
         try {
             await adminApi.updateSiteContent(key, data);
             setSavedAt(Date.now());
+            succeeded = true;
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Something went wrong. Please try again.");
         } finally {
@@ -47,6 +50,7 @@ export function useSiteContentForm<K extends SiteContentKey>(key: K) {
             // a full reload, same reasoning as `AdminNav`'s logout button.
             router.refresh();
         }
+        return succeeded;
     }
 
     return { submitting, error, savedAt, submit };

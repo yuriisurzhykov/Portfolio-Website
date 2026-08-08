@@ -21,9 +21,17 @@ export default defineConfig({
         include: [
             "src/shared/lib/date-format.test.ts",
             "src/shared/lib/slugify.test.ts",
+            "src/shared/lib/sanitize-svg.test.ts",
             "src/shared/i18n/engine/LocaleRegistry.test.ts",
             "src/shared/i18n/engine/index.test.ts",
             "src/shared/ui/block-editor/convert.test.ts",
+            "src/shared/lib/tech-icons/registry.test.ts",
+            "src/shared/lib/tech-icons/resolve-tech-icon.test.ts",
+            "src/shared/lib/tech-icons/search-brand-icons.test.ts",
+            "src/shared/ui/token-combobox/fuzzy-match.test.ts",
+            "src/views/admin-settings-editor/tech-stack/parse-tech-input.test.ts",
+            "src/views/admin-settings-editor/tech-stack/reorder.test.ts",
+            "src/views/admin-settings-editor/tech-stack/icon-status.test.ts",
         ],
     },
     resolve: {

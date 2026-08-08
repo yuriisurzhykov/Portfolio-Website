@@ -27,9 +27,17 @@ const config = {
     mutate: [
         "src/shared/lib/date-format.ts",
         "src/shared/lib/slugify.ts",
+        "src/shared/lib/sanitize-svg.ts",
         "src/shared/i18n/engine/LocaleRegistry.ts",
         "src/shared/i18n/engine/index.ts",
         "src/shared/ui/block-editor/convert.ts",
+        "src/shared/lib/tech-icons/registry.ts",
+        "src/shared/lib/tech-icons/resolve-tech-icon.ts",
+        "src/shared/lib/tech-icons/search-brand-icons.ts",
+        "src/shared/ui/token-combobox/fuzzy-match.ts",
+        "src/views/admin-settings-editor/tech-stack/parse-tech-input.ts",
+        "src/views/admin-settings-editor/tech-stack/reorder.ts",
+        "src/views/admin-settings-editor/tech-stack/icon-status.ts",
     ],
     reporters: ["html", "clear-text", "progress"],
     // Speeds up the run (Stryker's own warning: static mutants dominated

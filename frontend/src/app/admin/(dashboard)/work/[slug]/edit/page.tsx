@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getWorkDetailForAdmin } from "@portfolio/backend";
+import { getSiteContent, getWorkDetailForAdmin } from "@portfolio/backend";
 import { WorkEditorPage } from "@/views/admin-work-editor";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { requirePage } from "@/shared/lib/auth/guard";
@@ -31,8 +31,9 @@ export default async function Page({ params }: PageProps) {
             if (!item) {
                 notFound();
             }
-            return item;
+            const techStack = await getSiteContent("techStack");
+            return { item, techStack };
         },
-        (item) => <WorkEditorPage initialWork={item} />,
+        ({ item, techStack }) => <WorkEditorPage initialWork={item} techStackSuggestions={techStack.map((tech) => tech.name)} />,
     );
 }

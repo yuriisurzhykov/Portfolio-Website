@@ -40,7 +40,8 @@
     "react-dom": "19.2.7",
     "react-markdown": "^10.1.0",
     "react-simple-code-editor": "^0.14.1",
-    "react-zoom-pan-pinch": "^4.0.3",
+    "react-zoom-pan-pinch": "^4.0.4",
+    "simple-icons": "^16.28.0",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {

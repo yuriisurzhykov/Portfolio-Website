@@ -9,6 +9,14 @@ export interface BilingualFieldProps {
     hint?: string;
     /** Renders a `Textarea` instead of an `Input` for both languages — a heading/name stays single-line, a description/subhead gets room to wrap. */
     multiline?: boolean;
+    /**
+     * Whether the English side must be filled in. Defaults to `true`,
+     * which is right for every heading/description this started with — but
+     * a genuinely optional field (`techStack[].note`, which nothing on the
+     * public site renders) needs `false`, or the browser blocks the whole
+     * form's submit on a field the admin was never asked to fill.
+     */
+    required?: boolean;
     idPrefix: string;
     en: string;
     ru: string;
@@ -31,7 +39,7 @@ export interface BilingualFieldProps {
  * (not reinstated in `shared/ui/form`), since the reasoning is specific to
  * settings sections, not a general-purpose admin editing pattern.
  */
-export function BilingualField({ label, hint, multiline, idPrefix, en, ru, onEnChange, onRuChange }: BilingualFieldProps) {
+export function BilingualField({ label, hint, multiline, required = true, idPrefix, en, ru, onEnChange, onRuChange }: BilingualFieldProps) {
     return (
         <div className="flex flex-col gap-xs">
             <Text variant="caption" tone="secondary" className="font-medium">
@@ -45,9 +53,9 @@ export function BilingualField({ label, hint, multiline, idPrefix, en, ru, onEnC
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
                 <Field label="English" htmlFor={`${idPrefix}-en`}>
                     {multiline ? (
-                        <Textarea id={`${idPrefix}-en`} required value={en} onChange={(e) => onEnChange(e.target.value)} />
+                        <Textarea id={`${idPrefix}-en`} required={required} value={en} onChange={(e) => onEnChange(e.target.value)} />
                     ) : (
-                        <Input id={`${idPrefix}-en`} required value={en} onChange={(e) => onEnChange(e.target.value)} />
+                        <Input id={`${idPrefix}-en`} required={required} value={en} onChange={(e) => onEnChange(e.target.value)} />
                     )}
                 </Field>
                 <Field label="Russian" htmlFor={`${idPrefix}-ru`} hint="Leave blank if not translated yet.">

@@ -1,4 +1,6 @@
+import { getSiteContent } from "@portfolio/backend";
 import { WorkEditorPage } from "@/views/admin-work-editor";
+import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { requirePage } from "@/shared/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
@@ -12,5 +14,13 @@ export const dynamic = "force-dynamic";
  */
 export default async function Page() {
     await requirePage();
-    return <WorkEditorPage />;
+    // `techStack` names feed the Stack field's fuzzy-search suggestions
+    // (`TokenCombobox`) — not required for the page to function (an admin
+    // can still type free text with zero suggestions), so a DB outage here
+    // shows the normal service-unavailable fallback rather than silently
+    // rendering the editor with no suggestions at all.
+    return renderOrServiceUnavailable(
+        () => getSiteContent("techStack"),
+        (techStack) => <WorkEditorPage techStackSuggestions={techStack.map((item) => item.name)} />,
+    );
 }
