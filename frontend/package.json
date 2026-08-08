@@ -37,7 +37,7 @@
     "plantuml-encoder": "^1.4.0",
     "prismjs": "^1.30.0",
     "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
     "react-simple-code-editor": "^0.14.1",
     "react-zoom-pan-pinch": "^4.0.4",
