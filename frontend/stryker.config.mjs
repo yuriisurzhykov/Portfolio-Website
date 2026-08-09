@@ -42,6 +42,7 @@ const config = {
         "src/shared/lib/tech-icons/resolve-tech-icon.ts",
         "src/shared/lib/tech-icons/search-brand-icons.ts",
         "src/shared/ui/token-combobox/fuzzy-match.ts",
+        "src/views/admin-login/redirect-target.ts",
         "src/views/admin-settings-editor/tech-stack/parse-tech-input.ts",
         "src/views/admin-settings-editor/tech-stack/reorder.ts",
         "src/views/admin-settings-editor/tech-stack/icon-status.ts",

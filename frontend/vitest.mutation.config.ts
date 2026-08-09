@@ -36,6 +36,7 @@ export default defineConfig({
             "src/shared/lib/tech-icons/resolve-tech-icon.test.ts",
             "src/shared/lib/tech-icons/search-brand-icons.test.ts",
             "src/shared/ui/token-combobox/fuzzy-match.test.ts",
+            "src/views/admin-login/redirect-target.test.ts",
             "src/views/admin-settings-editor/tech-stack/parse-tech-input.test.ts",
             "src/views/admin-settings-editor/tech-stack/reorder.test.ts",
             "src/views/admin-settings-editor/tech-stack/icon-status.test.ts",
