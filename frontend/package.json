@@ -16,9 +16,11 @@
     "test:visual": "npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts",
     "test:visual:components": "npm run test:e2e:prepare && playwright test tests/e2e/component-gallery.spec.ts",
     "test:a11y": "npm run test:e2e:prepare && playwright test tests/e2e/a11y.spec.ts",
+    "test:seo": "npm run test:e2e:prepare && playwright test tests/e2e/seo.spec.ts",
     "test:e2e:update": "npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts --update-snapshots",
     "test:e2e:update:components": "npm run test:e2e:prepare && playwright test tests/e2e/component-gallery.spec.ts --update-snapshots",
-    "test:e2e:update:all": "npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts tests/e2e/component-gallery.spec.ts --update-snapshots",
+    "test:e2e:update:og": "npm run test:e2e:prepare && playwright test tests/e2e/og-image.spec.ts --update-snapshots",
+    "test:e2e:update:all": "npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts tests/e2e/component-gallery.spec.ts tests/e2e/og-image.spec.ts --update-snapshots",
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {

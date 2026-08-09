@@ -2,6 +2,10 @@ import { AdminNav } from "@/widgets/admin-nav";
 import { requirePage } from "@/shared/lib/auth/guard";
 import { SessionKeepAlive } from "@/shared/lib/session-keepalive";
 
+// No `metadata` here: `app/admin/layout.tsx` declares `NOINDEX` for the
+// whole /admin subtree, including `/admin/login`, which this route group
+// deliberately does not cover.
+
 /**
  * Chrome for every authenticated `/admin/*` page. Route-group name
  * `(dashboard)`, not part of the URL — `/admin/journal` resolves here the

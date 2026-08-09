@@ -1,6 +1,6 @@
 "use client";
 
-import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/shared/lib/auth/constants";
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE, LOGIN_PATH } from "@/shared/lib/auth/constants";
 import type {
     PostInput,
     PostSummary,
@@ -84,9 +84,23 @@ function refreshSessionOnce(): Promise<boolean> {
     return refreshInFlight;
 }
 
+/**
+ * Sends the visitor to the sign-in page, remembering where they were.
+ *
+ * Does NOTHING when they are already on `/admin/login`, and that guard is
+ * load-bearing rather than tidy: `from` is built from
+ * `pathname + search`, so redirecting to login FROM login nested the
+ * previous `from` inside the new one and re-encoded it every time —
+ * `?from=%2Fadmin%2Flogin%3Ffrom%3D%252Fadmin%252Flogin%253Ffrom%253D...`,
+ * growing without bound. It also meant a hard page load that wiped the
+ * error message the visitor needed to read.
+ */
 function redirectToLogin(): void {
+    if (window.location.pathname.startsWith(LOGIN_PATH)) {
+        return;
+    }
     const from = encodeURIComponent(window.location.pathname + window.location.search);
-    window.location.assign(`/admin/login?from=${ from }`);
+    window.location.assign(`${ LOGIN_PATH }?from=${ from }`);
 }
 
 async function parseErrorMessage(response: Response): Promise<string> {
@@ -143,6 +157,35 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
         throw new AdminApiError(response.status, message);
     }
 
+    return readBody<T>(response);
+}
+
+/**
+ * The same call without ANY of the session-recovery behavior above — no
+ * silent refresh, no redirect. A 401 here is just an error, reported to
+ * the caller with the server's own message.
+ *
+ * For endpoints that ESTABLISH a session rather than consume one. On
+ * `/api/auth/login` a 401 means "wrong email or password", not "your
+ * session expired", and `request()`'s reaction to it was actively
+ * harmful: it navigated to the sign-in page — from the sign-in page —
+ * which both wiped the error message before it could render and grew the
+ * `?from=` parameter on every attempt (see `redirectToLogin`). Every
+ * failed sign-in looked like an infinite redirect loop.
+ *
+ * Same reasoning `refresh` below already documents for itself: an
+ * operation that IS the recovery must not be routed through the thing
+ * that triggers the recovery.
+ */
+async function requestWithoutSessionRecovery<T>(method: string, url: string, body?: unknown): Promise<T> {
+    const response = await doFetch(method, url, body);
+    if (!response.ok) {
+        throw new AdminApiError(response.status, await parseErrorMessage(response));
+    }
+    return readBody<T>(response);
+}
+
+async function readBody<T>(response: Response): Promise<T> {
     if (response.status === 204) {
         return undefined as T;
     }
@@ -154,7 +197,15 @@ export interface AdminLoginResult {
 }
 
 export const adminApi = {
-    login: (email: string, password: string) => request<AdminLoginResult>("POST", "/api/auth/login", { email, password }),
+    // NOT `request()` — see `requestWithoutSessionRecovery`. A 401 here is
+    // "wrong credentials", the one 401 in this app that must surface to
+    // the caller as a message rather than trigger a trip to the sign-in
+    // page the visitor is already looking at.
+    login: (email: string, password: string) =>
+        requestWithoutSessionRecovery<AdminLoginResult>("POST", "/api/auth/login", { email, password }),
+    // Stays on `request()`: a 401 while ENDING a session genuinely means
+    // the session is already gone, and being sent to sign in is the right
+    // answer. `redirectToLogin`'s own guard makes that safe.
     logout: () => request<{ ok: true }>("POST", "/api/auth/logout"),
     // Used by `useSessionKeepAlive` for its proactive heartbeat —
     // deliberately NOT routed through `request()` above: refreshing IS the

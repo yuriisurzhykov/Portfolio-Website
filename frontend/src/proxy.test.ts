@@ -319,3 +319,76 @@ describe("proxy — DISABLE_RATE_LIMIT (Playwright suite escape hatch)", () => {
         expect(oneOverLimit.status).toBe(307);
     });
 });
+
+/**
+ * Nothing pinned this before, and it had already broken silently once:
+ * every `/ru/...` URL rendered in English under a production build because
+ * the proxy runs a SECOND time on its own rewrite target and re-resolved
+ * the locale from the (now unprefixed) path.
+ *
+ * `x-middleware-rewrite` and `x-middleware-request-*` are how Next.js
+ * transports a rewrite target and mutated request headers out of
+ * middleware. Asserting on them is reaching into a transport detail, and
+ * it is the only way to observe this function's actual output without a
+ * running server — the e2e suite covers the same behavior end-to-end
+ * (`seo.spec.ts`: `<html lang>`, canonical, `og:locale`).
+ */
+describe("proxy — locale resolution", () => {
+    beforeEach(() => {
+        vi.stubEnv("DISABLE_RATE_LIMIT", "true");
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    function resolvedLocale(response: Response): string | null {
+        return response.headers.get("x-middleware-request-x-locale");
+    }
+
+    function rewriteTarget(response: Response): URL | null {
+        const value = response.headers.get("x-middleware-rewrite");
+        return value ? new URL(value, "http://localhost:3000") : null;
+    }
+
+    it("rewrites /ru/... to the unprefixed route and carries the locale IN THE URL", async () => {
+        const target = rewriteTarget(await proxy(makeRequest("/ru/journal/my-post")));
+
+        expect(target?.pathname).toBe("/journal/my-post");
+        // In the URL, not only in a header: a cache keys on the URL, so
+        // this is what makes the response a pure function of its address.
+        expect(target?.searchParams.get("__locale")).toBe("ru");
+    });
+
+    it("keeps the site root as / when rewriting /ru", async () => {
+        expect(rewriteTarget(await proxy(makeRequest("/ru")))?.pathname).toBe("/");
+    });
+
+    it("preserves a page's own query string across the rewrite", async () => {
+        const target = rewriteTarget(await proxy(makeRequest("/ru/work?tech=kotlin")));
+
+        expect(target?.searchParams.get("tech")).toBe("kotlin");
+        expect(target?.searchParams.get("__locale")).toBe("ru");
+    });
+
+    it("resolves \"ru\" on the SECOND pass, which sees the rewritten URL with no /ru prefix", async () => {
+        // The exact scenario that regressed: this is what Next.js hands
+        // back to the proxy after its own rewrite.
+        expect(resolvedLocale(await proxy(makeRequest("/journal/my-post?__locale=ru")))).toBe("ru");
+    });
+
+    it("resolves \"en\" for an ordinary unprefixed URL", async () => {
+        expect(resolvedLocale(await proxy(makeRequest("/journal/my-post")))).toBe("en");
+    });
+
+    it("IGNORES a client-supplied x-locale header — it is an output of this function, never an input", async () => {
+        // Trusting it would be harmless while the app is served directly,
+        // and would become cache poisoning behind any shared cache: nginx
+        // and CDNs key on the URL alone, so one forged header could store
+        // a Russian response under the English URL for everyone.
+        const request = makeRequest("/journal/my-post");
+        request.headers.set("x-locale", "ru");
+
+        expect(resolvedLocale(await proxy(request))).toBe("en");
+    });
+});

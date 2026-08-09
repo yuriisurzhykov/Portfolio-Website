@@ -65,6 +65,15 @@ jobs:
       # networkidle-timeout hang) trips rate limiting meant for real visitors; that logic has its
       # own separate, fast unit suite (proxy.test.ts) and doesn't need re-exercising here.
       DISABLE_RATE_LIMIT: "true"
+      # Without these, `next build && next start` (spawned by playwright.config.ts's webServer)
+      # serves the NOINDEX variant of the site — that is, the one that never runs in production,
+      # which would leave the branch that DOES run in production covered by no test at all.
+      # seo.spec.ts asserts on robots.txt's contents and fails loudly if these go missing rather
+      # than silently checking the wrong build. Same two variables backend/.env.test.example
+      # documents for a local run; the host is fictional but has to look public, since
+      # frontend/src/instrumentation.ts refuses to start on `SEO_INDEXABLE=true` + localhost.
+      SEO_INDEXABLE: "true"
+      SITE_URL: https://e2e.example.com
 
     steps:
       - name: Checkout

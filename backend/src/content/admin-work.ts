@@ -9,6 +9,25 @@ import { nextState } from "./lifecycle";
 import { localizedTextSchema, type LocalizedText } from "./localized-text";
 import { generateUniqueSlug, slugSchema } from "./slug";
 import { toWorkSummary, type WorkDetail, type WorkStatus, type WorkSummary } from "./work";
+import { notifyContentChanged } from "./content-change-notifier";
+import { forgetSlugHistory, recordSlugChange } from "./slug-history";
+
+/** Work's half of the rule documented on admin-posts.ts's `announcePostChange` — same policy, different `kind`. */
+function announceWorkChange(
+    summary: WorkSummary,
+    options: { wasPublic: boolean; isPublic: boolean; previousSlug: string | null },
+): void {
+    if (!options.isPublic && !options.wasPublic) {
+        return;
+    }
+    notifyContentChanged({
+        kind: "work",
+        slug: summary.slug,
+        previousSlug: options.previousSlug,
+        isPublic: options.isPublic,
+        availableLocales: summary.availableLocales,
+    });
+}
 
 /**
  * Was true before the content lifecycle state machine (2026-07-31): the
@@ -289,10 +308,22 @@ export async function updateWork(slug: string, input: WorkInput): Promise<WorkSu
             caseStudyDocumentId,
             caseStudyDocumentIdRu,
             lifecycleState,
+            // See `Work.contentUpdatedAt` in schema.prisma — publish/unpublish
+            // deliberately don't touch it, this and `translateWork` do.
+            contentUpdatedAt: new Date(),
         },
     });
 
-    return toWorkSummary(row);
+    // Before announcing — see `updatePost`'s comment on the ordering.
+    await recordSlugChange("work", slug, newSlug);
+
+    const summary = toWorkSummary(row);
+    announceWorkChange(summary, {
+        wasPublic: existing.lifecycleState === "PUBLISHED",
+        isPublic: row.lifecycleState === "PUBLISHED",
+        previousSlug: newSlug === slug ? null : slug,
+    });
+    return summary;
 }
 
 /**
@@ -339,7 +370,10 @@ export async function publishWork(slug: string): Promise<WorkSummary | null> {
             publishedAt: wasAlreadyPublished ? existing.publishedAt : new Date(),
         },
     });
-    return toWorkSummary(row);
+
+    const published = toWorkSummary(row);
+    announceWorkChange(published, { wasPublic: wasAlreadyPublished, isPublic: true, previousSlug: null });
+    return published;
 }
 
 /** `PUBLISHED → DRAFT` — see admin-posts.ts's `unpublishPost` for the full reasoning. `null` when `slug` doesn't exist; throws `InvalidLifecycleTransitionError` if already DRAFT. */
@@ -353,7 +387,10 @@ export async function unpublishWork(slug: string): Promise<WorkSummary | null> {
         where: { slug },
         data: { lifecycleState: nextState(existing.lifecycleState, "UNPUBLISH") },
     });
-    return toWorkSummary(row);
+
+    const summary = toWorkSummary(row);
+    announceWorkChange(summary, { wasPublic: true, isPublic: false, previousSlug: null });
+    return summary;
 }
 
 /** `null` when `slug` doesn't exist — what `/admin/work/[slug]/translate` loads before rendering. */
@@ -403,6 +440,9 @@ export async function translateWork(slug: string, input: TranslateWorkInput): Pr
     // narrower `WorkUpdateInput` type alone would reject the raw scalar.
     const data: Prisma.WorkUncheckedUpdateInput = {
         summary: { ...existingSummary, ru: input.summary },
+        // Same reasoning as `translatePost` — one `lastmod` per sitemap
+        // entry, so the English URL's date moves with a translation.
+        contentUpdatedAt: new Date(),
     };
 
     if (existing.caseStudyDocumentId) {
@@ -417,7 +457,11 @@ export async function translateWork(slug: string, input: TranslateWorkInput): Pr
     }
 
     const row = await prisma.work.update({ where: { slug }, data });
-    return toWorkSummary(row);
+
+    const translated = toWorkSummary(row);
+    const isPublic = row.lifecycleState === "PUBLISHED";
+    announceWorkChange(translated, { wasPublic: isPublic, isPublic, previousSlug: null });
+    return translated;
 }
 
 /** `false` when `slug` doesn't exist — the API route turns that into a 404. */
@@ -437,5 +481,14 @@ export async function deleteWork(slug: string): Promise<boolean> {
         await prisma.document.delete({ where: { id: existing.caseStudyDocumentIdRu } });
     }
 
+    // See `deletePost`'s comment — a redirect to a deleted slug is worse
+    // than a plain 404.
+    await forgetSlugHistory("work", slug);
+
+    announceWorkChange(toWorkSummary(existing), {
+        wasPublic: existing.lifecycleState === "PUBLISHED",
+        isPublic: false,
+        previousSlug: null,
+    });
     return true;
 }

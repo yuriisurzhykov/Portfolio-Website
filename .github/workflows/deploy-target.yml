@@ -43,6 +43,14 @@ on:
         required: true
         type: string
         description: 'Release identifier passed to deploy-frontend.sh (commit SHA for dev, tag name for prod)'
+      seo-indexable:
+        required: true
+        type: string
+        description: '"true" ONLY for the environment search engines must index; any other value means noindex (frontend/src/shared/lib/seo/site-url.ts). Required on purpose — a new deploy target cannot be added without answering it.'
+      site-url:
+        required: true
+        type: string
+        description: "This target's own public origin, no trailing slash — canonical, hreflang, sitemap and OG image URLs are all built from it. Set even on a noindex target, or metadataBase falls back to localhost."
     secrets:
       VPS_HOST:
         required: true
@@ -84,6 +92,47 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           source: "release.tar.gz, .scripts/deploy-frontend.sh"
           target: "/tmp/"
+
+      # BEFORE the deploy, deliberately — unlike the optional-secrets step
+      # further down, which runs after. Two reasons, both about failure
+      # modes rather than tidiness:
+      #
+      # 1. `set-app-env-finish.sh` writes shared/.env, and
+      #    `deploy-frontend-finish.sh` wires shared/.env into the new
+      #    release before starting it. Running first therefore means the
+      #    new release comes up ALREADY indexable. After the deploy it
+      #    would start noindex and only get the variables on a second
+      #    restart — a real, if short, window in which production tells
+      #    every crawler not to index it.
+      # 2. No `continue-on-error` here (again unlike the step below): if
+      #    this fails, the deploy never happens and the previous, correctly
+      #    configured release keeps serving. Failing after the deploy would
+      #    instead leave the NEW release live with the wrong config.
+      #
+      # These two values are inputs rather than secrets on purpose: they
+      # aren't secret, and having them at the call site is what makes
+      # "which environment is the indexable one" readable in
+      # deploy-frontend.yaml instead of hidden in repository settings.
+      # See frontend/src/shared/lib/seo/README.md for why getting this
+      # wrong on prod is the most damaging mistake in the whole SEO area.
+      #
+      # Precondition, and a real behavior change: this needs
+      # /usr/local/bin/set-app-env-finish.sh (provision/12-set-app-env-helper.sh)
+      # and its sudoers rule. The step below already depended on it, but
+      # tolerated its absence; this one does not, so a target that skipped
+      # that provisioning step now fails the deploy instead of quietly
+      # deploying a misconfigured site. That is the intended trade.
+      - name: Publish SEO configuration (${{ inputs.environment-name }})
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            sudo /usr/local/bin/set-app-env-finish.sh ${{ inputs.base-dir }} \
+              "SEO_INDEXABLE=${{ inputs.seo-indexable }}" \
+              "SITE_URL=${{ inputs.site-url }}"
 
       - name: Deploy on Server (${{ inputs.environment-name }})
         uses: appleboy/ssh-action@v1.0.3

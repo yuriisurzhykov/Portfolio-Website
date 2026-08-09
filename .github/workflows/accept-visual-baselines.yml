@@ -130,6 +130,10 @@ jobs:
       # this run regenerates ALL page-level AND component-level baselines in one go, at least as
       # much traffic as the normal check, so it needs the same bypass.
       DISABLE_RATE_LIMIT: "true"
+      # Must match visual-tests.yml exactly — see its own comment. Baselines regenerated against
+      # the noindex variant of the site would then fail the real check.
+      SEO_INDEXABLE: "true"
+      SITE_URL: https://e2e.example.com
 
     steps:
       - name: Checkout PR head commit (immutable)

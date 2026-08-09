@@ -18,6 +18,7 @@ import {
     workDraftInputSchema,
 } from "./admin-work";
 import { getAllWork, getWorkBySlug } from "./work";
+import { findCurrentSlug } from "./slug-history";
 
 const baseWorkInput: WorkInput = {
     slug: "test-project",
@@ -294,6 +295,40 @@ describe("unpublishWork", () => {
     it("throws InvalidLifecycleTransitionError when the item is already DRAFT", async () => {
         await createWork(baseWorkInput);
         await expect(unpublishWork("test-project")).rejects.toSatisfy(isInvalidLifecycleTransitionError);
+    });
+});
+
+describe("renaming keeps the old address resolvable — see admin-posts.test.ts for the reasoning", () => {
+    it("updateWork records the former slug, and deleteWork forgets it", async () => {
+        await createWork(baseWorkInput);
+        await updateWork("test-project", { ...baseWorkInput, slug: "renamed-project" });
+        expect(await findCurrentSlug("work", "test-project")).toBe("renamed-project");
+
+        await deleteWork("renamed-project");
+        expect(await findCurrentSlug("work", "test-project")).toBeNull();
+    });
+});
+
+describe("contentUpdatedAt — see admin-posts.test.ts for the full reasoning", () => {
+    it("survives a publish/unpublish/publish cycle untouched, but moves on updateWork", async () => {
+        await createWork(baseWorkInput);
+        await updateWork("test-project", baseWorkInput);
+        const afterEdit = (await getWorkDetailForAdmin("test-project"))!.contentUpdatedAt;
+        expect(afterEdit).not.toBeNull();
+
+        await publishWork("test-project");
+        await unpublishWork("test-project");
+        await publishWork("test-project");
+
+        expect((await getWorkDetailForAdmin("test-project"))!.contentUpdatedAt).toBe(afterEdit);
+    });
+
+    it("moves on translateWork", async () => {
+        await createWork(baseWorkInput);
+        expect((await getWorkDetailForAdmin("test-project"))!.contentUpdatedAt).toBeNull();
+
+        await translateWork("test-project", baseTranslationInput);
+        expect((await getWorkDetailForAdmin("test-project"))!.contentUpdatedAt).not.toBeNull();
     });
 });
 

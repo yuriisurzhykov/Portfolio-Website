@@ -50,7 +50,16 @@ const globalForPrisma = globalThis as unknown as { prisma?: ReturnType<typeof cr
 
 function createPrismaClient() {
     const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-    return withConnectionErrorTranslation(new PrismaClient({ adapter }));
+    // `PRISMA_LOG_QUERIES=true` prints every statement this client issues.
+    // Off by default and never set in dev or production — it exists so the
+    // claim that React's `cache()` deduplicates a read across
+    // `generateMetadata` and a page render can be COUNTED rather than
+    // assumed (React's own docs scope the cache to a component render, and
+    // there is an open Next.js issue about it not applying in
+    // `generateMetadata`). See frontend/README.md's dated entry for the
+    // measurement this produced.
+    const log = process.env.PRISMA_LOG_QUERIES === "true" ? (["query"] as const) : [];
+    return withConnectionErrorTranslation(new PrismaClient({ adapter, log: [...log] }));
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
