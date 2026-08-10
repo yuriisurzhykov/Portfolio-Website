@@ -221,13 +221,14 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         }
     }
 
-    /** Same reasoning as `PostEditorPage.tsx`'s identical function. */
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical function — see its comment on why this flushes before discarding. */
     async function handleDiscard() {
         if (!currentSlug) return;
         if (!window.confirm("Discard every unpublished change and go back to what's currently live?")) return;
 
         setError(null);
         setDiscarding(true);
+        await autosave.flush().catch(() => {});
         try {
             const fresh = await adminApi.discardWorkDraft(currentSlug);
             setWork(fresh);

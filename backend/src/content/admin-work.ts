@@ -360,9 +360,6 @@ async function isSlugTaken(slug: string): Promise<boolean> {
 export async function createWork(input: WorkInput): Promise<WorkSummary> {
     const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
-    // See `createPost`'s comment on the same line — a free slug can still
-    // be another item's former address.
-    await claimSlug("work", slug);
 
     const caseStudyDocumentId = await replaceDocumentContent(null, input.caseStudy?.blocks ?? []);
     const row = await prisma.work.create({
@@ -383,6 +380,9 @@ export async function createWork(input: WorkInput): Promise<WorkSummary> {
             caseStudyDocumentId,
         },
     });
+    // See `createPost`'s comment on the same line — claimed only after
+    // creation actually succeeds, not upfront.
+    await claimSlug("work", slug);
 
     return toWorkSummary(row);
 }
@@ -468,6 +468,11 @@ async function applyWorkDraftToRow(
         publishedAt: lifecycle.publishedAt,
     };
     const row = await prisma.work.update({ where: { slug: existing.slug }, data: updateData });
+
+    if (newSlug !== existing.slug) {
+        // See `applyPostDraftToRow`'s identical comment — same reasoning.
+        await claimSlug("work", newSlug);
+    }
 
     // Before announcing — see `applyPostDraftToRow`'s comment on the ordering.
     await recordSlugChange("work", existing.slug, newSlug);

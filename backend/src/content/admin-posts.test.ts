@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { isSlugAlreadyExistsError } from "../errors";
@@ -606,6 +606,57 @@ describe("renaming keeps the old address resolvable", () => {
         await deletePost("renamed-post");
 
         expect(await findCurrentSlug("post", "test-post")).toBeNull();
+    });
+});
+
+describe("claiming a reused slug — only after the write that reuses it actually succeeds", () => {
+    it("createPost does not destroy an existing redirect if creation fails after the slug was found available", async () => {
+        // "old-post" becomes a free slug with a redirect pointing at "new-post".
+        await createPost({ ...basePostInput, slug: "old-post" });
+        await publishPost("old-post");
+        await savePostDraft("old-post", { ...basePostInput, slug: "new-post" });
+        await publishPost("old-post");
+        expect(await findCurrentSlug("post", "old-post")).toBe("new-post");
+
+        // Force the actual insert to fail AFTER `assertSlugAvailable` already
+        // said the slug was free — the exact window a naive "claim upfront"
+        // implementation would have already destroyed the redirect in.
+        const createSpy = vi.spyOn(prisma.post, "create").mockRejectedValueOnce(new Error("simulated failure"));
+        await expect(createPost({ ...basePostInput, slug: "old-post", title: "Reused Slug" })).rejects.toThrow("simulated failure");
+        createSpy.mockRestore();
+
+        expect(await findCurrentSlug("post", "old-post")).toBe("new-post");
+    });
+
+    it("createPost claims the slug (destroying the stale redirect) once creation actually succeeds", async () => {
+        await createPost({ ...basePostInput, slug: "old-post" });
+        await publishPost("old-post");
+        await savePostDraft("old-post", { ...basePostInput, slug: "new-post" });
+        await publishPost("old-post");
+        expect(await findCurrentSlug("post", "old-post")).toBe("new-post");
+
+        await createPost({ ...basePostInput, slug: "old-post", title: "Reused Slug" });
+
+        expect(await findCurrentSlug("post", "old-post")).toBeNull();
+    });
+
+    it("publishPost applying a rename claims the new slug, destroying any stale redirect it used to be", async () => {
+        // "old-post" becomes a free slug redirecting to "new-post".
+        await createPost({ ...basePostInput, slug: "old-post" });
+        await publishPost("old-post");
+        await savePostDraft("old-post", { ...basePostInput, slug: "new-post" });
+        await publishPost("old-post");
+        expect(await findCurrentSlug("post", "old-post")).toBe("new-post");
+
+        // A second, unrelated post renames INTO "old-post".
+        await createPost({ ...basePostInput, slug: "third-post" });
+        await publishPost("third-post");
+        await savePostDraft("third-post", { ...basePostInput, slug: "old-post" });
+        await publishPost("third-post");
+
+        expect(await findCurrentSlug("post", "old-post")).toBeNull();
+        const post = await getPostBySlug("old-post");
+        expect(post?.title.en).toBe("Test Post");
     });
 });
 

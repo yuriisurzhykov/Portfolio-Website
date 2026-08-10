@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { isSlugAlreadyExistsError } from "../errors";
@@ -420,6 +420,51 @@ describe("renaming keeps the old address resolvable — see admin-posts.test.ts 
 
         await deleteWork("renamed-project");
         expect(await findCurrentSlug("work", "test-project")).toBeNull();
+    });
+});
+
+describe("claiming a reused slug — see admin-posts.test.ts for the full reasoning", () => {
+    it("createWork does not destroy an existing redirect if creation fails after the slug was found available", async () => {
+        await createWork({ ...baseWorkInput, slug: "old-project" });
+        await publishWork("old-project");
+        await saveWorkDraft("old-project", { ...baseWorkInput, slug: "new-project" });
+        await publishWork("old-project");
+        expect(await findCurrentSlug("work", "old-project")).toBe("new-project");
+
+        const createSpy = vi.spyOn(prisma.work, "create").mockRejectedValueOnce(new Error("simulated failure"));
+        await expect(createWork({ ...baseWorkInput, slug: "old-project", title: "Reused Slug" })).rejects.toThrow("simulated failure");
+        createSpy.mockRestore();
+
+        expect(await findCurrentSlug("work", "old-project")).toBe("new-project");
+    });
+
+    it("createWork claims the slug (destroying the stale redirect) once creation actually succeeds", async () => {
+        await createWork({ ...baseWorkInput, slug: "old-project" });
+        await publishWork("old-project");
+        await saveWorkDraft("old-project", { ...baseWorkInput, slug: "new-project" });
+        await publishWork("old-project");
+        expect(await findCurrentSlug("work", "old-project")).toBe("new-project");
+
+        await createWork({ ...baseWorkInput, slug: "old-project", title: "Reused Slug" });
+
+        expect(await findCurrentSlug("work", "old-project")).toBeNull();
+    });
+
+    it("publishWork applying a rename claims the new slug, destroying any stale redirect it used to be", async () => {
+        await createWork({ ...baseWorkInput, slug: "old-project" });
+        await publishWork("old-project");
+        await saveWorkDraft("old-project", { ...baseWorkInput, slug: "new-project" });
+        await publishWork("old-project");
+        expect(await findCurrentSlug("work", "old-project")).toBe("new-project");
+
+        await createWork({ ...baseWorkInput, slug: "third-project" });
+        await publishWork("third-project");
+        await saveWorkDraft("third-project", { ...baseWorkInput, slug: "old-project" });
+        await publishWork("third-project");
+
+        expect(await findCurrentSlug("work", "old-project")).toBeNull();
+        const item = await getWorkBySlug("old-project");
+        expect(item?.title).toBe("Test Project");
     });
 });
 

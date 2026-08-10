@@ -230,10 +230,16 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
 
     /**
      * "Discard changes" — throws away the pending draft and reverts this
-     * page's whole form/body back to whatever's currently live. Does NOT
-     * flush first — flushing would just save the very content this button
-     * exists to discard, for no benefit (the discard removes the
-     * `ContentDraft` row outright, whatever it currently holds).
+     * page's whole form/body back to whatever's currently live.
+     *
+     * Flushes FIRST, despite that looking pointless (why save the very
+     * content this button exists to discard?) — found in review: clicking
+     * this button blurs whatever field had focus, which fires the form's
+     * own `onBlur` flush (`flushOnBlur`) in the BACKGROUND, unawaited. Without
+     * waiting for it here too, that flush's `savePostDraft` could land on
+     * the server AFTER `discardPostDraft` below already removed the row,
+     * silently recreating the very draft this click was meant to throw
+     * away. Same race, same fix as `handleDelete`'s identical comment.
      */
     async function handleDiscard() {
         if (!currentSlug) return;
@@ -241,6 +247,7 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
 
         setError(null);
         setDiscarding(true);
+        await autosave.flush().catch(() => {});
         try {
             const fresh = await adminApi.discardPostDraft(currentSlug);
             setPost(fresh);

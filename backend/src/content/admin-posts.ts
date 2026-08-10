@@ -396,9 +396,6 @@ async function assertSlugAvailable(slug: string, excludingCurrentSlug?: string):
 export async function createPost(input: PostInput): Promise<PostSummary> {
     const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
-    // `assertSlugAvailable` only looks at live posts, so this slug may
-    // still be some OTHER post's former address — see `claimSlug`.
-    await claimSlug("post", slug);
 
     const bodyDocumentId = await replaceDocumentContent(null, input.blocks);
     const row = await prisma.post.create({
@@ -414,6 +411,13 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
             bodyDocumentId,
         },
     });
+    // `assertSlugAvailable` only looked at live posts, so this slug may
+    // still be some OTHER post's former address — claimed only NOW, after
+    // creation has actually succeeded (found in review: claiming it
+    // upfront meant a failed `replaceDocumentContent`/`post.create` below
+    // would have already destroyed a redirect that no new post ended up
+    // owning, with no way to get it back).
+    await claimSlug("post", slug);
 
     return toPostSummary(row);
 }
@@ -512,6 +516,14 @@ async function applyPostDraftToRow(
             publishedAt: lifecycle.publishedAt,
         },
     });
+
+    if (newSlug !== existing.slug) {
+        // Same reasoning as `createPost`'s `claimSlug` call — `assertSlugAvailable`
+        // above only ruled out a collision with a LIVE post; `newSlug` can
+        // still be some OTHER post's former address. Claimed only now that
+        // the rename itself has actually committed.
+        await claimSlug("post", newSlug);
+    }
 
     // BEFORE announcing, so the old address already redirects by the time
     // a search engine acts on the notification. Announcing first would
