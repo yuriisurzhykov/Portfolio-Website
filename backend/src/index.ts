@@ -42,31 +42,40 @@ export { SITE_CONTENT_DEFAULTS } from "./content/site-content-defaults";
 export {
     createPost,
     deletePost,
+    discardPostDraft,
     getPostForAdmin,
+    getPostPreview,
     getPostsForAdmin,
     getPostTranslationForAdmin,
+    listPostRevisions,
     postDraftInputSchema,
     publishPost,
+    restorePostRevision,
+    savePostDraft,
     translatePost,
     translatePostInputSchema,
     unpublishPost,
-    updatePost,
 } from "./content/admin-posts";
-export type { AdminPostDetail, AdminPostTranslation, PostInput, TranslatePostInput } from "./content/admin-posts";
+export type { AdminPostDetail, AdminPostListItem, AdminPostTranslation, PostInput, TranslatePostInput } from "./content/admin-posts";
 export {
     createWork,
     deleteWork,
+    discardWorkDraft,
     getWorkDetailForAdmin,
     getWorkForAdmin,
+    getWorkPreview,
     getWorkTranslationForAdmin,
+    listWorkRevisions,
     publishWork,
+    restoreWorkRevision,
+    saveWorkDraft,
     translateWork,
     translateWorkInputSchema,
     unpublishWork,
-    updateWork,
     workDraftInputSchema,
 } from "./content/admin-work";
-export type { AdminWorkTranslation, TranslateWorkInput, WorkInput } from "./content/admin-work";
+export type { AdminWorkDetail, AdminWorkListItem, AdminWorkTranslation, TranslateWorkInput, WorkInput } from "./content/admin-work";
+export type { RevisionSummary } from "./content/content-draft";
 
 export {
     DatabaseUnavailableError,

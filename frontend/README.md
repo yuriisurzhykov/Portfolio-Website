@@ -1219,6 +1219,83 @@ JSON-LD парсится, `/robots.txt` и `/sitemap.xml` отвечают 200) 
 job в `visual-tests.yml` и `accept-visual-baselines.yml`) — без них тесты
 проверяли бы noindex-версию сайта, то есть ту, которой на проде не будет.
 
+### 2026-08-09 — Черновик/публикация: превью, история версий и новые кнопки редактора
+
+**Что нужно было сделать.** Полная переработка (по инициативе пользователя,
+поймавшего живой баг с autosave) описана в `backend/src/content/README.md`'s
+одноимённой записи — здесь только то, что специфично для `frontend/`: как
+редактор теперь показывает черновик отдельно от опубликованного, и два
+новых полностью админских маршрута (превью, история).
+
+**Превью — на настоящем публичном роуте, не отдельная копия страницы.**
+`shared/lib/preview.ts`'s `isAdminPreviewRequest(searchParams)` — двойная
+проверка (`?preview=1` В URL И настоящая admin-сессия через
+`resolvePrincipalFromCookieStore`/`hasScopes`) перед тем, как
+`(site)/journal/[slug]/page.tsx`/`(site)/work/[slug]/page.tsx` подменят
+`cachedPostBySlug`/`cachedWorkBySlug` на `getPostPreview`/`getWorkPreview`
+(backend, черновик-приоритетный контент). Один и тот же `<JournalDetailPage>`/
+`<WorkDetailPage>` рендерит оба случая — превью получает ровно то, что
+увидит настоящий читатель, не отдельный шаблон, который может разойтись с
+реальным. `isPreview` — новый необязательный проп на обоих, рисующий
+sticky-баннер "showing unpublished draft content" и форсирующий `NOINDEX`
+в `generateMetadata`, чтобы черновик не мог случайно попасть в индекс,
+даже если URL кто-то расшарил с параметром.
+
+**История версий — два новых admin-only view, а не расширение
+существующих.** `views/admin-post-history`/`views/admin-work-history`
+(маршруты `/admin/{journal,work}/[slug]/history`) — список
+`ContentRevision` (`adminApi.list{Post,Work}Revisions`) с кнопкой "Load
+into draft" (`restore{Post,Work}Revision`), которая явно НЕ публикует
+ничего сама — восстановленная версия проходит через ту же кнопку
+Publish/Update редактора, что и любая другая правка (см. её собственный
+комментарий в `admin-posts.ts`). Не объединено в один generic-компонент с
+параметром "kind" — тот же паттерн, что уже применён ко всей паре
+Post/Work-редакторов/списков в этом приложении: два маленьких, явных
+компонента вместо одного параметризованного, который взял бы на себя
+знание об обоих доменах сразу.
+
+**`PostEditorPage`/`WorkEditorPage` — подробный разбор в их собственных
+README** (`views/admin-post-editor/README.md`, `views/admin-work-editor/README.md`).
+Здесь только новая пара функций в `shared/lib/date-format.ts`:
+`formatAdminDateTime` (дата+время для карточки версии в истории — в
+отличие от `formatAdminDate`/`formatMonthYear`, СОЗНАТЕЛЬНО не пиннит
+`timeZone: "UTC"`, потому что это настоящий момент времени с реальным
+временем суток, не строка вида `YYYY-MM-DD` без времени — см. её
+собственный комментарий). Уже входящий в область мутационного
+тестирования `date-format.ts` подхватил новую функцию без изменения
+`stryker.config.mjs` — только новый тест в `date-format.test.ts` (и в
+`vitest.mutation.config.ts`'s `include`, файл там уже был).
+
+**Понятность для другого разработчика.** `AdminPostDetail.draftSlug`
+(backend) — отдельное поле именно потому, что "slug, который сейчас
+редактируется" и "slug, по которому этот же admin route физически
+адресуется" разошлись впервые: до этой правки `updatePost` мог сменить
+живой slug мгновенно, и страница редактора сама уезжала вслед за ним
+(`router.replace`) при каждом сохранении. Теперь `currentSlug`
+(состояние компонента) — это ВСЕГДА живой, маршрутизируемый slug, а
+`form.slug` — то, что реально видит и правит админ; расхождение между
+ними разрешается только по клику Publish/Update.
+
+**Нагрузка.** `isAdminPreviewRequest` — одна дополнительная проверка
+cookie на превью-запрос, не на каждый обычный запрос `/journal/[slug]`
+(`?preview=1` отсекается до похода за принципалом).
+
+**Расширяемость/заменяемость.** Третий тип контента (если появится) —
+тот же паттерн: своя пара `getXPreview`/`listXRevisions`/`restoreXRevision`
+на backend, свой `admin-x-history` view — ничего в `preview.ts` не
+меняется, он уже принимает произвольный `searchParams`.
+
+**Миграция/отказоустойчивость.** Не применимо — новые маршруты, ничего не
+меняет в уже существующих публичных страницах для НЕ-превью запросов
+(проверено: `renderOrServiceUnavailable` вокруг обеих страниц не тронут,
+`DatabaseUnavailableError`-фолбэк работает одинаково для превью и для
+обычного чтения).
+
+**SOLID.** Interface Segregation: `isAdminPreviewRequest` принимает
+именно ту форму `searchParams`, что Next.js реально передаёт Server
+Component (`Record<string, string | string[] | undefined>`), а не
+что-то Post/Work-специфичное — единая функция обслуживает оба маршрута.
+
 ## Структура (целевая, будет заполняться по мере миграции)
 
 ```

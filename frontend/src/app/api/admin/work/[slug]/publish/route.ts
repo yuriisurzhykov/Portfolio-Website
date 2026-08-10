@@ -7,7 +7,7 @@ interface RouteParams {
     slug: string;
 }
 
-/** `DRAFT → PUBLISHED` for a work item — see `posts/[slug]/publish/route.ts`'s comment; same reasoning, no body, same error handling. */
+/** `DRAFT → PUBLISHED`, or "apply the pending draft" for an already-published item — see `posts/[slug]/publish/route.ts`'s comment; same reasoning, no body, same error handling. */
 export const POST = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {
         const { slug } = await params;
