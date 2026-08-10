@@ -24,7 +24,7 @@ import type { ContentLocale } from "./locale";
 import { generateUniqueSlug, slugSchema } from "./slug";
 import { toWorkSummary, type WorkDetail, type WorkStatus, type WorkSummary } from "./work";
 import { notifyContentChanged } from "./content-change-notifier";
-import { forgetSlugHistory, recordSlugChange } from "./slug-history";
+import { claimSlug, forgetSlugHistory, recordSlugChange } from "./slug-history";
 
 /** Work's half of `admin-posts.ts`'s `KIND` — same reasoning, different `kind`. */
 const KIND = "work" as const;
@@ -360,6 +360,9 @@ async function isSlugTaken(slug: string): Promise<boolean> {
 export async function createWork(input: WorkInput): Promise<WorkSummary> {
     const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
+    // See `createPost`'s comment on the same line — a free slug can still
+    // be another item's former address.
+    await claimSlug("work", slug);
 
     const caseStudyDocumentId = await replaceDocumentContent(null, input.caseStudy?.blocks ?? []);
     const row = await prisma.work.create({

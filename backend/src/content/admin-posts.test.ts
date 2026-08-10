@@ -562,6 +562,41 @@ describe("renaming keeps the old address resolvable", () => {
         expect(await findCurrentSlug("post", "test-post")).toBeNull();
     });
 
+    it("a slug freed by a rename can be reused by a NEW post, and renamed away again without failing", async () => {
+        // The reported bug, at the level it was reported. `createPost`'s
+        // availability check only looks at live posts, so `test-post` is
+        // free once A moves off it — but the `test-post → renamed-post`
+        // history row was still there, and B's rename then hit the unique
+        // constraint AFTER B's own update had committed: the API reported
+        // failure for a rename that had actually happened, and retrying
+        // with the old slug returned 404.
+        await createPost(basePostInput);
+        await savePostDraft("test-post", { ...basePostInput, slug: "renamed-post" });
+        await publishPost("test-post");
+
+        await createPost({ ...basePostInput, slug: "test-post", title: "Second Post" });
+        await savePostDraft("test-post", { ...basePostInput, slug: "second-post" });
+        await expect(publishPost("test-post")).resolves.not.toBeNull();
+
+        // Last writer wins: whoever vacated the address most recently is
+        // who a visitor following that old link most likely meant.
+        expect(await findCurrentSlug("post", "test-post")).toBe("second-post");
+        expect(await prisma.post.findUnique({ where: { slug: "second-post" } })).not.toBeNull();
+    });
+
+    it("creating a post at a freed slug drops the stale redirect immediately", async () => {
+        // Otherwise the row lies dormant — the live post wins the lookup —
+        // and revives the moment THAT post is deleted, pointing its address
+        // at an unrelated post.
+        await createPost(basePostInput);
+        await savePostDraft("test-post", { ...basePostInput, slug: "renamed-post" });
+        await publishPost("test-post");
+
+        await createPost({ ...basePostInput, slug: "test-post", title: "Second Post" });
+
+        expect(await findCurrentSlug("post", "test-post")).toBeNull();
+    });
+
     it("deletePost forgets the entity's former addresses", async () => {
         await createPost(basePostInput);
         await publishPost("test-post");

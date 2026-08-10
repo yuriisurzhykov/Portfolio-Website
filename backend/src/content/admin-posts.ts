@@ -24,7 +24,7 @@ import { generateUniqueSlug, slugSchema } from "./slug";
 import type { ContentLocale } from "./locale";
 import { toPostSummary, type PostDetail, type PostStatus, type PostSummary } from "./posts";
 import { notifyContentChanged } from "./content-change-notifier";
-import { forgetSlugHistory, recordSlugChange } from "./slug-history";
+import { claimSlug, forgetSlugHistory, recordSlugChange } from "./slug-history";
 
 /** The `ContentDraft`/`ContentRevision` polymorphic `kind` this whole file writes under — named once so a typo can't silently create a second, orphaned draft namespace. */
 const KIND = "post" as const;
@@ -396,6 +396,9 @@ async function assertSlugAvailable(slug: string, excludingCurrentSlug?: string):
 export async function createPost(input: PostInput): Promise<PostSummary> {
     const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
+    // `assertSlugAvailable` only looks at live posts, so this slug may
+    // still be some OTHER post's former address — see `claimSlug`.
+    await claimSlug("post", slug);
 
     const bodyDocumentId = await replaceDocumentContent(null, input.blocks);
     const row = await prisma.post.create({
