@@ -19,7 +19,9 @@
     "test:e2e:update": "npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts --update-snapshots",
     "test:e2e:update:components": "npm run test:e2e:prepare && playwright test tests/e2e/component-gallery.spec.ts --update-snapshots",
     "test:e2e:update:all": "npm run test:e2e:prepare && playwright test tests/e2e/visual.spec.ts tests/e2e/component-gallery.spec.ts --update-snapshots",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "contrast:report": "tsx scripts/contrast-report.ts",
+    "contrast:screenshots": "tsx scripts/contrast-screenshots.ts"
   },
   "dependencies": {
     "@blocknote/core": "^0.51.4",
@@ -59,6 +61,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.3",
+    "apca-w3": "^0.1.9",
+    "culori": "^4.0.2",
     "eslint": "^10.8.0",
     "eslint-config-next": "^0.2.4",
     "jsdom": "^29.1.1",
