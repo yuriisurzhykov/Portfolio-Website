@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
-import { findCurrentSlug, forgetSlugHistory, recordSlugChange } from "./slug-history";
+import { claimSlug, findCurrentSlug, forgetSlugHistory, recordSlugChange } from "./slug-history";
 
 beforeEach(async () => {
     await resetTestDatabase();
@@ -62,6 +62,61 @@ describe("recordSlugChange / findCurrentSlug", () => {
         expect(await prisma.slugHistory.findMany({ where: { formerSlug: "a" } })).toHaveLength(1);
         expect(await findCurrentSlug("post", "a")).toBe("d");
         expect(await findCurrentSlug("post", "c")).toBe("d");
+    });
+});
+
+describe("a slug reused by a DIFFERENT entity", () => {
+    it("does not throw when the reused slug is later renamed away again", async () => {
+        // Post A lived at `x` and moved to `y`, leaving `x → y`. Slug `x`
+        // is now free as far as `assertSlugAvailable` is concerned (it only
+        // looks at live posts), so post B can be created there. Renaming B
+        // off `x` then tried to write a SECOND row for `(post, x)` and hit
+        // the unique constraint — after B's rename had already committed,
+        // so the API reported failure while the rename had happened.
+        await recordSlugChange("post", "x", "y");
+        await claimSlug("post", "x");
+
+        await expect(recordSlugChange("post", "x", "z")).resolves.toBeUndefined();
+    });
+
+    it("overwrites an existing row for the same former address instead of failing on the unique constraint", async () => {
+        // `claimSlug` should stop this state from arising, so this pins the
+        // second line of defence: rows written BEFORE that fix existed, or
+        // any path not yet thought of, must not turn into a P2002 raised
+        // after the entity's own rename has already committed.
+        await recordSlugChange("post", "x", "y");
+
+        await expect(recordSlugChange("post", "x", "z")).resolves.toBeUndefined();
+        expect(await findCurrentSlug("post", "x")).toBe("z");
+    });
+
+    it("sends the reused slug to whoever vacated it LAST", async () => {
+        await recordSlugChange("post", "x", "y");
+        await claimSlug("post", "x");
+        await recordSlugChange("post", "x", "z");
+
+        expect(await findCurrentSlug("post", "x")).toBe("z");
+    });
+});
+
+describe("claimSlug", () => {
+    it("drops a stale redirect when a new entity takes over that address", async () => {
+        // Without this the row survives dormant — the live entity wins the
+        // lookup — and comes back to life the moment THAT entity is
+        // deleted, silently redirecting its address to an unrelated post.
+        await recordSlugChange("post", "x", "y");
+
+        await claimSlug("post", "x");
+
+        expect(await findCurrentSlug("post", "x")).toBeNull();
+    });
+
+    it("leaves an unrelated address alone", async () => {
+        await recordSlugChange("post", "a", "b");
+
+        await claimSlug("post", "x");
+
+        expect(await findCurrentSlug("post", "a")).toBe("b");
     });
 });
 

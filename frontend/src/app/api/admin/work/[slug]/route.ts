@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deleteWork, getWorkDetailForAdmin, updateWork, workDraftInputSchema } from "@portfolio/backend";
+import { deleteWork, getWorkDetailForAdmin, saveWorkDraft, workDraftInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
@@ -28,12 +28,13 @@ export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) =>
     }
 });
 
+/** What autosave calls on every save after the very first one — see `posts/[slug]/route.ts`'s PUT comment; same reasoning, same fix, applied to Work. */
 export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => {
     try {
         const { slug } = await params;
         const body = await request.json();
         const input = workDraftInputSchema.parse(body);
-        const updated = await updateWork(slug, input);
+        const updated = await saveWorkDraft(slug, input);
         if (!updated) {
             return NextResponse.json({ error: "Work item not found." }, { status: 404 });
         }

@@ -3,10 +3,17 @@
 //
 // - Excludes everything that hits the real Postgres (auth/{auth-service,
 //   session,create-admin-user}.ts, content/{document,site-content,work,posts,
-//   admin-posts,admin-work}.ts) — those integration tests already run with
-//   `fileParallelism: false` because they share DB state (see
-//   vitest.config.ts), so rerunning them once per mutant would be extremely
-//   slow and would surface DB flakiness as mutation-testing flakiness.
+//   admin-posts,admin-work,content-draft,slug-history}.ts) — those
+//   integration tests already run with `fileParallelism: false` because
+//   they share DB state (see vitest.config.ts), so rerunning them once per
+//   mutant would be extremely slow and would surface DB flakiness as
+//   mutation-testing flakiness. `content-draft.ts` joined this list
+//   2026-08-09 (draft/publish split) for the same reason `slug-history.ts`
+//   already was here — its own logic (upsert/prune/restore) is thin
+//   enough that its real value is only proven by content-draft.test.ts's
+//   integration tests, same as slug-history.test.ts. `draft-blocks.ts`
+//   (pure — no Prisma import) is the one new file from that same change
+//   that DID get added below, since it has its own DB-free unit test.
 // - Also excludes content/{locale,localized-text,site-content-defaults}.ts:
 //   verified (by grep) to have zero `prisma`/`db/client` imports themselves,
 //   BUT they have no dedicated unit test of their own either — they're only
@@ -43,6 +50,7 @@ const config = {
         "src/auth/rate-limit.ts",
         "src/content/reading-time.ts",
         "src/content/blocks.ts",
+        "src/content/draft-blocks.ts",
         "src/content/lifecycle.ts",
         "src/content/slug.ts",
         "src/content/slugify.ts",

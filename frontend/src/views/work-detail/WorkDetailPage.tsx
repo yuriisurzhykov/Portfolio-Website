@@ -16,6 +16,8 @@ export interface WorkDetailPageProps {
     /** `caseStudy` is guaranteed non-null here — the route (app/(site)/work/[slug]/page.tsx) already 404s otherwise. */
     item: WorkDetail;
     relatedPost: PostSummary | null;
+    /** Same reasoning as `JournalDetailPage.isPreview` — see its comment. */
+    isPreview?: boolean;
 }
 
 /**
@@ -29,13 +31,18 @@ export interface WorkDetailPageProps {
  * "sections" became heading+paragraph block pairs and "approach" became
  * an `approachList` block during the Phase 3 data import.
  */
-export function WorkDetailPage({ item, relatedPost }: WorkDetailPageProps) {
+export function WorkDetailPage({ item, relatedPost, isPreview = false }: WorkDetailPageProps) {
     const { ln, pick } = useTranslation();
     const caseStudy = item.caseStudy!;
     const isShipped = item.status === "shipped";
 
     return (
         <main>
+            {isPreview && (
+                <div className="sticky top-0 z-50 bg-status-warning-tint-bg text-status-warning border-b border-border-subtle py-2 px-4 text-center text-caption font-medium">
+                    Preview — showing unpublished draft content, not what's currently live.
+                </div>
+            )}
             <div
                 className="max-w-(--layout-content-reading) mx-auto px-[clamp(20px,4vw,24px)] pt-[clamp(48px,7vw,80px)] pb-[100px]">
                 <Link href="/work" className="font-mono text-caption text-text-muted">

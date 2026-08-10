@@ -12,6 +12,15 @@ import { prisma } from "../db/client";
 export async function resetTestDatabase(): Promise<void> {
     await prisma.session.deleteMany();
     await prisma.user.deleteMany();
+    // Before Post/Work — no FK ties these to either (see schema.prisma's
+    // own comment, same polymorphism as `SlugHistory` below), but a stale
+    // draft/revision row surviving into the next test can still collide on
+    // `ContentDraft`'s `@@unique([kind, entityId])` if that test happens to
+    // reuse the same `Post`/`Work` id (cuid collision odds are effectively
+    // zero, but the leftover row would silently feed a WRONG draft into an
+    // unrelated test either way, cuid collision or not).
+    await prisma.contentDraft.deleteMany();
+    await prisma.contentRevision.deleteMany();
     await prisma.post.deleteMany();
     await prisma.work.deleteMany();
     await prisma.block.deleteMany();
