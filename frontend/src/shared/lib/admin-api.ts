@@ -2,8 +2,11 @@
 
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE, LOGIN_PATH } from "@/shared/lib/auth/constants";
 import type {
+    AdminPostDetail,
+    AdminWorkDetail,
     PostInput,
     PostSummary,
+    RevisionSummary,
     SiteContentDataMap,
     SiteContentKey,
     TechIcon,
@@ -223,19 +226,37 @@ export const adminApi = {
     },
 
     createPost: (input: PostInput) => request<PostSummary>("POST", "/api/admin/posts", input),
+    // PUT here only ever writes the post's DRAFT now — see the route's own
+    // comment (admin-posts.ts's `savePostDraft`). Kept the name
+    // `updatePost` (not `savePostDraft`) on THIS client method — every
+    // caller already reads as "save the post," and renaming it here would
+    // suggest the semantics changed at the call site, when the whole
+    // point of the draft/publish split is that callers don't have to
+    // know or care where a save actually lands.
     updatePost: (slug: string, input: PostInput) => request<PostSummary>("PUT", `/api/admin/posts/${ encodeURIComponent(slug) }`, input),
     deletePost: (slug: string) => request<{ ok: true }>("DELETE", `/api/admin/posts/${ encodeURIComponent(slug) }`),
     // No body — see the route's own comment (admin-posts.ts's
     // `publishPost`/`unpublishPost`): these validate/flip whatever's
-    // already saved, they don't accept content changes.
+    // already saved, they don't accept content changes. `publishPost` is
+    // also what an already-published post's "Update" button calls — same
+    // endpoint, same action ("apply the pending draft"), just a different
+    // label depending on `lifecycleState`.
     publishPost: (slug: string) => request<PostSummary>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/publish`),
     unpublishPost: (slug: string) => request<PostSummary>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/unpublish`),
+    discardPostDraft: (slug: string) => request<AdminPostDetail>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/draft/discard`),
+    listPostRevisions: (slug: string) => request<RevisionSummary[]>("GET", `/api/admin/posts/${ encodeURIComponent(slug) }/revisions`),
+    restorePostRevision: (slug: string, revisionId: string) =>
+        request<AdminPostDetail>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/revisions/${ encodeURIComponent(revisionId) }/restore`),
 
     createWork: (input: WorkInput) => request<WorkSummary>("POST", "/api/admin/work", input),
     updateWork: (slug: string, input: WorkInput) => request<WorkSummary>("PUT", `/api/admin/work/${ encodeURIComponent(slug) }`, input),
     deleteWork: (slug: string) => request<{ ok: true }>("DELETE", `/api/admin/work/${ encodeURIComponent(slug) }`),
     publishWork: (slug: string) => request<WorkSummary>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/publish`),
     unpublishWork: (slug: string) => request<WorkSummary>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/unpublish`),
+    discardWorkDraft: (slug: string) => request<AdminWorkDetail>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/draft/discard`),
+    listWorkRevisions: (slug: string) => request<RevisionSummary[]>("GET", `/api/admin/work/${ encodeURIComponent(slug) }/revisions`),
+    restoreWorkRevision: (slug: string, revisionId: string) =>
+        request<AdminWorkDetail>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/revisions/${ encodeURIComponent(revisionId) }/restore`),
 
     // Separate from `updatePost`/`updateWork` — see the two `[slug]/translation`
     // route files' top comments — this is the only path that ever writes

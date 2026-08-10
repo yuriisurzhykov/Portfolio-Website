@@ -1,5 +1,22 @@
 # views/admin-work-editor — WorkEditorPage
 
+## 2026-08-09 — Черновик/публикация разведены: autosave больше никогда не пишет в живой work-item
+
+Идентично `admin-post-editor/README.md`'s одноимённой записи — тот же
+`saveWorkDraft` (было `updateWork`), тот же единый Publish/Update-эндпоинт
+(`adminApi.publishWork`), та же кнопка **Discard changes**
+(`adminApi.discardWorkDraft`), та же **Preview** (открывает
+`/work/[slug]?preview=1`), та же **History**
+(`views/admin-work-history`), тот же `draftSlug`/`currentSlug`
+(pending-переименование vs. живой, маршрутизируемый slug), тот же
+`<BlockEditor key={contentVersion}>` для принудительного remount после
+Discard/восстановления из истории, то же удалённое auto-unpublish
+уведомление. Единственная Work-специфичная деталь: `Discard`/`Load into
+draft` сбрасывают ЦЕЛИКОМ секцию "Case study" (`form.hasCaseStudy` +
+`startedLabel`/`shippedLabel`/`role`/`heroImage`), не только тело — весь
+кейс-стади это одна условно рендерящаяся секция формы, у которой нет
+отдельного механизма частичного откат.
+
 ## 2026-07-31 — Фаза 3 (мгновенный черновик + непрерывный autosave)
 
 Идентично `admin-post-editor/README.md`'s одноимённой записи — тот же

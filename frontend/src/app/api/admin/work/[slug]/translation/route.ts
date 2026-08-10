@@ -7,7 +7,7 @@ interface RouteParams {
     slug: string;
 }
 
-/** See posts/[slug]/translation/route.ts's top comment — same separation, same reasoning, applied to `Work`. */
+/** See posts/[slug]/translation/route.ts's top comment — same separation, same reasoning (including the draft/publish note), applied to `Work`. */
 export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {
         const { slug } = await params;

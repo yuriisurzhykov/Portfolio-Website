@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { createPost, publishPost, translatePost, updatePost } from "../src/content/admin-posts";
+import { createPost, publishPost, savePostDraft, translatePost } from "../src/content/admin-posts";
 import { createWork, publishWork, translateWork } from "../src/content/admin-work";
 import { resetTestDatabase } from "../src/test-utils/db";
 import { prisma } from "../src/db/client";
@@ -273,17 +273,38 @@ async function main(): Promise<void> {
     // redirect. `seo.spec.ts` asserts that, which is the only way to prove
     // end-to-end that a rename doesn't throw away the old address (see
     // backend/src/content/slug-history.ts).
-    await updatePost(FIXTURES.posts.secondPost.slug, {
+    //
+    // **Correction, 2026-08-09 (draft/publish split).** A slug rename now
+    // only reaches the live row — and therefore `SlugHistory` — through
+    // `publishPost`, never through a draft save alone (`savePostDraft`,
+    // the direct successor of what used to be `updatePost`'s content-write
+    // half — see content/README.md's dated entry). So each rename below is
+    // a `savePostDraft` (stages the new slug) followed immediately by a
+    // `publishPost` (actually applies it) — the SAME two-step dance the
+    // real admin editor's Publish/Update button performs, not a shortcut
+    // this script invented for itself.
+    await savePostDraft(FIXTURES.posts.secondPost.slug, {
         ...FIXTURES.posts.secondPost,
         slug: RENAMED_FROM.post,
     });
-    await updatePost(RENAMED_FROM.post, FIXTURES.posts.secondPost);
+    await publishPost(FIXTURES.posts.secondPost.slug);
+    await savePostDraft(RENAMED_FROM.post, FIXTURES.posts.secondPost);
+    await publishPost(RENAMED_FROM.post);
 
+    // Same correction as the rename above: `translatePost`/`translateWork`
+    // only stage the Russian side in a draft now (see admin-posts.ts's
+    // `translatePost`) — without the `publishPost`/`publishWork` call
+    // right after, the translation would never actually reach the live
+    // row, and every e2e assertion that depends on a REAL Russian page
+    // existing (hreflang in `seo.spec.ts`, Cyrillic glyphs in
+    // `og-image.spec.ts`) would silently stop having anything to find.
     for (const [slug, translation] of Object.entries(TRANSLATIONS.posts)) {
         await translatePost(slug, translation);
+        await publishPost(slug);
     }
     for (const [slug, translation] of Object.entries(TRANSLATIONS.work)) {
         await translateWork(slug, translation);
+        await publishWork(slug);
     }
 
     console.log(
