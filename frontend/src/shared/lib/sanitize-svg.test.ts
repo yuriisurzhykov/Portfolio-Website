@@ -60,4 +60,31 @@ describe("sanitizeSvg", () => {
         expect(clean).not.toContain("<iframe");
         expect(clean).not.toContain("javascript:");
     });
+
+    /**
+     * The regression this file was missing before 2026-08-10's live bug
+     * report ("no Mermaid diagram shows its label text"). The test above
+     * only proves an ATTACK payload's `<iframe>` doesn't survive inside a
+     * `<foreignObject>` — it says nothing about whether LEGITIMATE content
+     * one level deeper (an actual Mermaid label: a plain `<div>`/`<span>`
+     * with text and a class, no script/event-handler anywhere in sight)
+     * survives at all. It didn't, in this installed DOMPurify version,
+     * until `sanitizeSvg` opted back in to `foreignObject` as an HTML
+     * entry point (see the dated comment in sanitize-svg.ts). Markup shape
+     * copied from real `mermaid.render()` output, not invented by hand.
+     */
+    it("keeps a legitimate Mermaid-style label's text and markup inside a <foreignObject>", () => {
+        const mermaidLikeLabel =
+            '<svg xmlns="http://www.w3.org/2000/svg"><g class="node"><rect width="100" height="20"/>' +
+            '<foreignObject width="100" height="20">' +
+            '<div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell;" class="nodeLabel">' +
+            '<span class="nodeLabel">Decision</span></div>' +
+            "</foreignObject></g></svg>";
+        const clean = sanitizeSvg(mermaidLikeLabel);
+
+        expect(clean).toContain("<foreignObject");
+        expect(clean).toContain("Decision");
+        expect(clean).toContain('class="nodeLabel"');
+        expect(clean).toContain("<rect");
+    });
 });
