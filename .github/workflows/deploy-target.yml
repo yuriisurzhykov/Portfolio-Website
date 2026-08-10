@@ -76,7 +76,7 @@ jobs:
       # .scripts/deploy-frontend.sh simply doesn't exist in this job's workspace and
       # scp-action silently has nothing to send.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download artifact
         uses: actions/download-artifact@v4

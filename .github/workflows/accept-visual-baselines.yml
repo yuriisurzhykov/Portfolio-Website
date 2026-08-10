@@ -137,7 +137,7 @@ jobs:
 
     steps:
       - name: Checkout PR head commit (immutable)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.repository }}
           ref: ${{ needs.guard.outputs.head_sha }}
