@@ -16,11 +16,29 @@ export type ContentKind = "post" | "work";
  * 2. **A row whose `formerSlug` IS the new slug is deleted.** Rename a→b
  *    and then b→a, and without this the table holds `a → b` and `b → a`
  *    at once — an infinite redirect, on the entity's own live URL.
- * 3. Only then is the new row written.
+ * 3. The row for `formerSlug` is UPSERTED, not created.
+ *
+ * Step 3 was a plain `create`, and that was a real bug found in review:
+ * a slug can be a former address of one entity and later a live address
+ * of another (`assertSlugAvailable` only looks at live rows — see
+ * `claimSlug`). Renaming that second entity away then hit the unique
+ * constraint on `(kind, formerSlug)` — and because this runs AFTER the
+ * entity's own `update` has committed, the caller saw a failure for a
+ * rename that had actually happened, and retrying with the old slug 404'd.
+ * `claimSlug` now prevents that state from arising at all; the upsert is
+ * what keeps this function correct anyway, including for rows written
+ * before that fix existed.
+ *
+ * Last writer wins, which is the only defensible rule: whoever vacated
+ * the address most recently is who a visitor following that old link most
+ * likely meant.
  *
  * Not wrapped in a transaction, matching this module's neighbours: one
  * admin edits sequentially, and `admin-posts.ts`'s `assertSlugAvailable`
- * already documents the same accepted check-then-act race.
+ * already documents the same accepted check-then-act race. The window
+ * that leaves is a degradation, never corruption — a failure between the
+ * entity's `update` and this call means the old address 404s instead of
+ * redirecting, which is exactly what it did before this table existed.
  */
 export async function recordSlugChange(kind: ContentKind, formerSlug: string, currentSlug: string): Promise<void> {
     if (formerSlug === currentSlug) {
@@ -32,7 +50,27 @@ export async function recordSlugChange(kind: ContentKind, formerSlug: string, cu
         data: { currentSlug },
     });
     await prisma.slugHistory.deleteMany({ where: { kind, formerSlug: currentSlug } });
-    await prisma.slugHistory.create({ data: { kind, formerSlug, currentSlug } });
+    await prisma.slugHistory.upsert({
+        where: { kind_formerSlug: { kind, formerSlug } },
+        create: { kind, formerSlug, currentSlug },
+        update: { currentSlug },
+    });
+}
+
+/**
+ * Releases any redirect that pointed at `slug`, because a NEW entity is
+ * taking that address over.
+ *
+ * Called by `createPost`/`createWork`. Their `assertSlugAvailable` only
+ * checks live rows, so a slug that some other entity moved away from is
+ * genuinely free to reuse — but the old `slug → …` row is wrong the moment
+ * that happens. It stays dormant while the new entity is live (the read
+ * side prefers the real entity, see `findCurrentSlug`) and then comes back
+ * to life if that entity is ever deleted, silently redirecting its address
+ * to an unrelated post.
+ */
+export async function claimSlug(kind: ContentKind, slug: string): Promise<void> {
+    await deleteSlugRowsFor(kind, slug);
 }
 
 /**
@@ -61,6 +99,20 @@ export async function findCurrentSlug(kind: ContentKind, formerSlug: string): Pr
  * the crawler pays for a hop and lands on the same nothing.
  */
 export async function forgetSlugHistory(kind: ContentKind, slug: string): Promise<void> {
+    await deleteSlugRowsFor(kind, slug);
+}
+
+/**
+ * Shared by `claimSlug` and `forgetSlugHistory` — identical effect, two
+ * genuinely different reasons, hence two named callers rather than one
+ * function doing double duty at both call sites. Reading
+ * `forgetSlugHistory` inside `createPost` would be a puzzle.
+ *
+ * Both directions are removed: rows where this slug is the OLD address
+ * (they would redirect away from an address that is now live or gone) and
+ * rows where it is the DESTINATION (they would redirect to it).
+ */
+async function deleteSlugRowsFor(kind: ContentKind, slug: string): Promise<void> {
     await prisma.slugHistory.deleteMany({
         where: { kind, OR: [{ currentSlug: slug }, { formerSlug: slug }] },
     });

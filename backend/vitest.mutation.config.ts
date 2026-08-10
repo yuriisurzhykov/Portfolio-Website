@@ -34,6 +34,7 @@ export default defineConfig({
             "src/auth/rate-limit.test.ts",
             "src/content/reading-time.test.ts",
             "src/content/blocks.test.ts",
+            "src/content/draft-blocks.test.ts",
             "src/content/lifecycle.test.ts",
             "src/content/slug.test.ts",
             "src/content/slugify.test.ts",

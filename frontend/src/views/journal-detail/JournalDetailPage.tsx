@@ -14,6 +14,8 @@ import { formatMonthYear } from "@/shared/lib/date-format";
 export interface JournalDetailPageProps {
     post: PostDetail;
     relatedWork: WorkDetail | null;
+    /** Set only by the route when `?preview=1` came from an authenticated admin (see `(site)/journal/[slug]/page.tsx`) — renders a banner so the page can never be mistaken for what a real reader sees, and `post` in this case is the DRAFT-priority content, not necessarily what's actually live. */
+    isPreview?: boolean;
 }
 
 /**
@@ -26,11 +28,16 @@ export interface JournalDetailPageProps {
  * data has one (the route file), so the hack goes away rather than
  * carrying it forward.
  */
-export function JournalDetailPage({ post, relatedWork }: JournalDetailPageProps) {
+export function JournalDetailPage({ post, relatedWork, isPreview = false }: JournalDetailPageProps) {
     const { ln, pick } = useTranslation();
 
     return (
         <main>
+            {isPreview && (
+                <div className="sticky top-0 z-50 bg-status-warning-tint-bg text-status-warning border-b border-border-subtle py-2 px-4 text-center text-caption font-medium">
+                    Preview — showing unpublished draft content, not what's currently live.
+                </div>
+            )}
             <div
                 className="max-w-(--layout-content-reading) mx-auto px-[clamp(20px,4vw,24px)] pt-[clamp(48px,7vw,80px)] pb-[100px]">
                 <Link href="/journal" className="font-mono text-caption text-text-muted">

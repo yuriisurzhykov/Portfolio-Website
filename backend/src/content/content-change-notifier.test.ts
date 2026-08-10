@@ -6,8 +6,8 @@ import {
     type ContentChangeNotifier,
     setContentChangeNotifier,
 } from "./content-change-notifier";
-import { createPost, deletePost, publishPost, translatePost, unpublishPost, updatePost, type PostInput } from "./admin-posts";
-import { createWork, deleteWork, publishWork, translateWork, unpublishWork, updateWork, type WorkInput } from "./admin-work";
+import { createPost, deletePost, publishPost, savePostDraft, translatePost, unpublishPost, type PostInput } from "./admin-posts";
+import { createWork, deleteWork, publishWork, saveWorkDraft, translateWork, unpublishWork, type WorkInput } from "./admin-work";
 
 /**
  * The check that is impossible to write when the "tell search engines"
@@ -69,40 +69,63 @@ describe("post lifecycle events", () => {
         ]);
     });
 
-    it("updatePost on a PUBLISHED post announces the change", async () => {
+    it("savePostDraft on a PUBLISHED post announces NOTHING — a draft has no public address of its own yet", async () => {
         await createPost(postInput);
         await publishPost("a-post");
         captured.length = 0;
 
-        await updatePost("a-post", { ...postInput, excerpt: "A better excerpt." });
+        await savePostDraft("a-post", { ...postInput, excerpt: "A better excerpt." });
+
+        expect(captured).toEqual([]);
+    });
+
+    it("publishPost applying a pending draft edit (the Update button) announces the change", async () => {
+        await createPost(postInput);
+        await publishPost("a-post");
+        await savePostDraft("a-post", { ...postInput, excerpt: "A better excerpt." });
+        captured.length = 0;
+
+        await publishPost("a-post");
 
         expect(captured).toEqual([
             { kind: "post", slug: "a-post", previousSlug: null, isPublic: true, availableLocales: ["en"] },
         ]);
     });
 
-    it("a RENAME carries both the new slug and the previous one", async () => {
+    it("a RENAME carries both the new slug and the previous one — only once the pending rename is actually PUBLISHED", async () => {
         // Without `previousSlug` the old address keeps 404ing while still
         // sitting in Bing's index. The use case knows the old slug because
         // it read the row before writing — this is why the public return
-        // type of `updatePost` did not need to grow a field.
+        // type of `publishPost` did not need to grow a field.
         await createPost(postInput);
         await publishPost("a-post");
+        await savePostDraft("a-post", { ...postInput, slug: "a-renamed-post" });
         captured.length = 0;
 
-        await updatePost("a-post", { ...postInput, slug: "a-renamed-post" });
+        await publishPost("a-post");
 
         expect(captured).toEqual([
             { kind: "post", slug: "a-renamed-post", previousSlug: "a-post", isPublic: true, availableLocales: ["en"] },
         ]);
     });
 
-    it("translatePost announces the Russian version's existence via availableLocales", async () => {
+    it("translatePost announces NOTHING — the translation is only a pending draft until Publish/Update", async () => {
         await createPost(postInput);
         await publishPost("a-post");
         captured.length = 0;
 
         await translatePost("a-post", { title: "Пост", category: "Заметки", excerpt: "Отрывок.", blocks: [{ type: "lead", text: "Лид." }] });
+
+        expect(captured).toEqual([]);
+    });
+
+    it("publishPost applying a pending translation reports both locales", async () => {
+        await createPost(postInput);
+        await publishPost("a-post");
+        await translatePost("a-post", { title: "Пост", category: "Заметки", excerpt: "Отрывок.", blocks: [{ type: "lead", text: "Лид." }] });
+        captured.length = 0;
+
+        await publishPost("a-post");
 
         expect(captured).toEqual([
             { kind: "post", slug: "a-post", previousSlug: null, isPublic: true, availableLocales: ["en", "ru"] },
@@ -138,11 +161,11 @@ describe("post lifecycle events", () => {
         expect(captured).toEqual([]);
     });
 
-    it("editing a DRAFT announces nothing, so autosave can't become a stream of pings", async () => {
+    it("editing a DRAFT (never published) announces nothing, so autosave can't become a stream of pings", async () => {
         await createPost(postInput);
         captured.length = 0;
 
-        await updatePost("a-post", { ...postInput, excerpt: "Still drafting." });
+        await savePostDraft("a-post", { ...postInput, excerpt: "Still drafting." });
 
         expect(captured).toEqual([]);
     });
@@ -160,6 +183,16 @@ describe("work lifecycle events", () => {
         ]);
     });
 
+    it("saveWorkDraft on a PUBLISHED item announces nothing", async () => {
+        await createWork(workInput);
+        await publishWork("a-project");
+        captured.length = 0;
+
+        await saveWorkDraft("a-project", { ...workInput, summary: "A better summary." });
+
+        expect(captured).toEqual([]);
+    });
+
     it("unpublishWork announces that the address is gone", async () => {
         await createWork(workInput);
         await publishWork("a-project");
@@ -172,7 +205,7 @@ describe("work lifecycle events", () => {
         ]);
     });
 
-    it("translateWork with a case study reports both locales", async () => {
+    it("translateWork announces nothing until the pending translation is published", async () => {
         await createWork(workInput);
         await publishWork("a-project");
         captured.length = 0;
@@ -184,7 +217,9 @@ describe("work lifecycle events", () => {
             role: "Единственный разработчик",
             blocks: [{ type: "lead", text: "Лид." }],
         });
+        expect(captured).toEqual([]);
 
+        await publishWork("a-project");
         expect(captured).toEqual([
             { kind: "work", slug: "a-project", previousSlug: null, isPublic: true, availableLocales: ["en", "ru"] },
         ]);

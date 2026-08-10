@@ -26,6 +26,40 @@ describe("isDatabaseConnectionError", () => {
         expect(isDatabaseConnectionError(error)).toBe(true);
     });
 
+    /**
+     * The shape that actually broke a build. With a driver adapter
+     * (Prisma 7+), a refused connection can arrive as a
+     * `PrismaClientKnownRequestError` carrying the raw Node socket code
+     * instead of `P1001` — this classifier missed it, so it was never
+     * translated into `DatabaseUnavailableError` and the graceful fallback
+     * declined to handle the one case it exists for.
+     */
+    it("recognizes a raw socket code like ECONNREFUSED, not just Prisma's P1001", () => {
+        const error = new Prisma.PrismaClientKnownRequestError("Invalid `prisma.siteContent.findUnique()` invocation", {
+            code: "ECONNREFUSED",
+            clientVersion: "7.9.1",
+        });
+        expect(isDatabaseConnectionError(error)).toBe(true);
+    });
+
+    it("recognizes the other reach/timeout/hang-up codes", () => {
+        for (const code of ["P1002", "P1017", "ECONNRESET", "ENOTFOUND", "EHOSTUNREACH", "ETIMEDOUT", "EPIPE"]) {
+            const error = new Prisma.PrismaClientKnownRequestError("connection problem", { code, clientVersion: "7.9.1" });
+            expect(isDatabaseConnectionError(error), code).toBe(true);
+        }
+    });
+
+    it("does NOT treat an authentication failure as an outage", () => {
+        // P1000 is a misconfigured deployment. Hiding it behind "the
+        // database is temporarily unavailable" would promise a recovery
+        // that waiting can never deliver.
+        const error = new Prisma.PrismaClientKnownRequestError("Authentication failed", {
+            code: "P1000",
+            clientVersion: "7.9.1",
+        });
+        expect(isDatabaseConnectionError(error)).toBe(false);
+    });
+
     it("does NOT treat a different PrismaClientKnownRequestError code as a connection error", () => {
         // P2002 = unique constraint violation — a real application-level
         // error (e.g. duplicate slug), not an outage. Must not be

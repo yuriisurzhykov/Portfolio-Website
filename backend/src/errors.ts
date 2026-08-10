@@ -19,22 +19,59 @@ export class DatabaseUnavailableError extends Error {
 }
 
 /**
- * Prisma's error CODE (`P1001`) is the stable, documented signal for "the
- * database server could not be reached" — see
- * https://www.prisma.io/docs/orm/reference/error-reference#p1001. Matching
- * on this code, not on `error.message` text, is what keeps this working
- * across Prisma versions/drivers: message strings aren't a stable contract,
- * error codes are. `PrismaClientInitializationError` is the other shape a
- * connection failure can take (e.g. failing before a query even starts).
+ * Prisma's own error CODES for "the server could not be reached, reached
+ * too slowly, or hung up" — matching on codes, not on `error.message`
+ * text, is what keeps this working across Prisma versions: message strings
+ * aren't a stable contract, codes are. See
+ * https://www.prisma.io/docs/orm/reference/error-reference.
+ *
+ * `P1000` (authentication failed) is deliberately absent: that is a
+ * misconfigured deployment, not an outage, and swallowing it into a
+ * friendly "try again later" page would hide a bug that no amount of
+ * waiting fixes.
  */
-const DATABASE_UNREACHABLE_CODE = "P1001";
+const PRISMA_UNREACHABLE_CODES = new Set([
+    "P1001", // Can't reach database server
+    "P1002", // Server was reached but timed out
+    "P1017", // Server has closed the connection
+]);
+
+/**
+ * Socket-level codes that arrive INSTEAD of a `P1…` code.
+ *
+ * Found from a failing CI build, not by reading Prisma's docs: with a
+ * driver adapter (`@prisma/adapter-pg`, required since Prisma 7 — see
+ * `db/client.ts`), a connection failure can surface as a
+ * `PrismaClientKnownRequestError` whose `code` is the raw Node socket
+ * error — `ECONNREFUSED` — rather than being mapped to `P1001`. The build
+ * prerenders `/opengraph-image`, which reads `SiteContent`, against a
+ * placeholder `DATABASE_URL` with nothing listening; the error escaped
+ * this classifier, so it was never translated into
+ * `DatabaseUnavailableError`, so the graceful fallback that exists for
+ * exactly this case declined to handle it and the build died.
+ *
+ * The build was only the messenger. The same gap meant a production
+ * Postgres refusing connections in this shape would have crashed pages to
+ * `error.tsx` instead of showing `<ServiceUnavailable/>` — the one
+ * scenario that whole fallback exists for. It went unnoticed because a
+ * stopped container (how this was tested by hand) produces the
+ * `PrismaClientInitializationError` shape, which this always recognized.
+ */
+const SOCKET_UNREACHABLE_CODES = new Set([
+    "ECONNREFUSED", // nothing listening on the port
+    "ECONNRESET", // connection dropped mid-flight
+    "ENOTFOUND", // host doesn't resolve
+    "EHOSTUNREACH",
+    "ETIMEDOUT",
+    "EPIPE", // wrote to a socket the server already closed
+]);
 
 export function isDatabaseConnectionError(error: unknown): boolean {
     if (error instanceof Prisma.PrismaClientInitializationError) {
         return true;
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        return error.code === DATABASE_UNREACHABLE_CODE;
+        return PRISMA_UNREACHABLE_CODES.has(error.code) || SOCKET_UNREACHABLE_CODES.has(error.code);
     }
     return false;
 }
