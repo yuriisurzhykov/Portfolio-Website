@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import { findCurrentSlug, getWorkBySlug } from "@portfolio/backend";
+import { findCurrentSlug, getPostPreview, getWorkBySlug, type PostDetail } from "@portfolio/backend";
 import { JournalDetailPage } from "@/views/journal-detail";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
 import { getRequestLocale } from "@/shared/lib/get-request-locale";
 import { cachedPostBySlug, cachedSiteContent } from "@/shared/lib/cached-content";
+import { isAdminPreviewRequest } from "@/shared/lib/preview";
 import { NOINDEX } from "@/shared/lib/seo/noindex";
 import { pickFor } from "@/shared/i18n";
 import { alternatesFor, localizedPath } from "@/shared/lib/seo/alternates";
@@ -17,6 +18,24 @@ import { postOgImagePath } from "@/shared/lib/seo/og/paths";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+/**
+ * `getPostPreview` (draft-priority, never lifecycle-filtered) for an
+ * authenticated admin's `?preview=1`, the real public `cachedPostBySlug`
+ * otherwise — resolved once per request and reused by both
+ * `generateMetadata` and the page body, same reasoning `cachedPostBySlug`
+ * itself already documents (one memoized read per request, not per
+ * caller). NOT wrapped in React's own `cache()` like the public reader —
+ * a preview is a rare, admin-only path where the tiny duplicate read cost
+ * isn't worth a second module-level cache binding for.
+ */
+async function resolvePost(slug: string, locale: Awaited<ReturnType<typeof getRequestLocale>>, searchParams: Record<string, string | string[] | undefined>): Promise<{ post: PostDetail | null; isPreview: boolean }> {
+    if (await isAdminPreviewRequest(searchParams)) {
+        return { post: await getPostPreview(slug, locale), isPreview: true };
+    }
+    return { post: await cachedPostBySlug(slug, locale), isPreview: false };
 }
 
 /**
@@ -35,13 +54,21 @@ interface PageProps {
  * real error; see `orDatabaseOutageFallback` for why that distinction is
  * not optional.
  */
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
     const { slug } = await params;
     const locale = await getRequestLocale();
+    const search = await searchParams;
 
     return orDatabaseOutageFallback(async () => {
-        const [post, config] = await Promise.all([cachedPostBySlug(slug, locale), cachedSiteContent("config")]);
+        const [{ post, isPreview }, config] = await Promise.all([resolvePost(slug, locale, search), cachedSiteContent("config")]);
         if (!post) {
+            return NOINDEX;
+        }
+        // A preview must never be indexed, even for a post that's
+        // otherwise perfectly indexable once published — it's shown at
+        // the SAME URL a real reader eventually gets, and a crawler must
+        // never mistake a work-in-progress draft for the final article.
+        if (isPreview) {
             return NOINDEX;
         }
 
@@ -73,25 +100,33 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }, NOINDEX, `metadata for /journal/${ slug }`);
 }
 
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params, searchParams }: PageProps) {
     const { slug } = await params;
     const locale = await getRequestLocale();
+    const search = await searchParams;
 
     return renderOrServiceUnavailable(
         async () => {
-            const post = await cachedPostBySlug(slug, locale);
+            const { post, isPreview } = await resolvePost(slug, locale, search);
             if (!post) {
-                // Renamed, not gone: answer the old address with a
-                // permanent redirect so external links keep working and the
-                // signals it accumulated move to the new URL. Without this
-                // the IndexNow submission for `previousSlug` would send a
-                // crawler to a 404, which drops the URL instead of
-                // forwarding it. Looked up only AFTER the real post misses,
-                // so a slug currently in use always wins over one that
-                // merely used to point somewhere.
-                const current = await findCurrentSlug("post", slug);
-                if (current) {
-                    permanentRedirect(localizedPath(`/journal/${ current }`, locale));
+                // A preview's slug is exactly what the admin typed into
+                // the editor's URL bar a moment ago — there's no crawler
+                // to redirect and no accumulated signal to carry over, so
+                // this skips straight to `notFound()` rather than
+                // resolving a public rename.
+                if (!isPreview) {
+                    // Renamed, not gone: answer the old address with a
+                    // permanent redirect so external links keep working and the
+                    // signals it accumulated move to the new URL. Without this
+                    // the IndexNow submission for `previousSlug` would send a
+                    // crawler to a 404, which drops the URL instead of
+                    // forwarding it. Looked up only AFTER the real post misses,
+                    // so a slug currently in use always wins over one that
+                    // merely used to point somewhere.
+                    const current = await findCurrentSlug("post", slug);
+                    if (current) {
+                        permanentRedirect(localizedPath(`/journal/${ current }`, locale));
+                    }
                 }
                 notFound();
             }
@@ -101,9 +136,9 @@ export default async function Page({ params }: PageProps) {
             // through here at all.
             const relatedWork = post.relatedWorkSlug ? await getWorkBySlug(post.relatedWorkSlug) : null;
             const config = await cachedSiteContent("config");
-            return { post, relatedWork, config };
+            return { post, relatedWork, config, isPreview };
         },
-        ({ post, relatedWork, config }) => (
+        ({ post, relatedWork, config, isPreview }) => (
             <>
                 {/* Person and BlogPosting travel together in one @graph: Google
                     wants `author` to be a Person object with a `name`, and
@@ -135,7 +170,7 @@ export default async function Page({ params }: PageProps) {
                         ]),
                     )}
                 />
-                <JournalDetailPage post={post} relatedWork={relatedWork} />
+                <JournalDetailPage post={post} relatedWork={relatedWork} isPreview={isPreview} />
             </>
         ),
     );

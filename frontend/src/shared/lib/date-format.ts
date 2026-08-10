@@ -36,3 +36,18 @@ export function formatAdminDate(isoDate: string): string {
 export function todayIsoDate(): string {
     return new Date().toISOString().slice(0, 10);
 }
+
+/**
+ * "Aug 9, 2026, 3:04 PM" — a REAL instant (`ContentRevision.publishedAt`),
+ * not a date-only string, so this deliberately does NOT pin `timeZone:
+ * "UTC"` the way `formatAdminDate`/`formatMonthYear` above do — those
+ * exist to work around `new Date("2026-02-11")` parsing as UTC midnight
+ * for a date-ONLY ISO string; a full timestamp has a real time-of-day
+ * component and should render in whichever timezone the admin's own
+ * browser is actually in.
+ */
+const adminDateTimeFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+
+export function formatAdminDateTime(isoDateTime: string): string {
+    return adminDateTimeFormatter.format(new Date(isoDateTime));
+}

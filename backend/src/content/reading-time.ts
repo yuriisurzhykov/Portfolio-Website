@@ -85,9 +85,11 @@ export function countWords(text: string): number {
 
 /**
  * `readMins` is derived, never admin-entered — see `admin-posts.ts`'s
- * `createPost`/`updatePost`, the only two callers. Recomputed on every
- * save (not just at creation), so it always reflects the post's ACTUAL
- * current length, the same way `date` is set once but `readMins` tracks
+ * `createPost`/`publishPost` (the live `Post.readMins` column), and
+ * `toEffectiveSummary` (the admin editor's own live preview of it before
+ * publishing). Recomputed on every publish (not just at creation), so it
+ * always reflects the post's ACTUAL current length, the same way `date` is
+ * set once but `readMins` tracks
  * the body as it grows/shrinks across edits.
  *
  * Word count is taken as-is from each block's Markdown text — `**bold**`/

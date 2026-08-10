@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import { findCurrentSlug, getPostBySlug } from "@portfolio/backend";
+import { findCurrentSlug, getPostBySlug, getWorkPreview, type WorkDetail } from "@portfolio/backend";
 import { WorkDetailPage } from "@/views/work-detail";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
 import { getRequestLocale } from "@/shared/lib/get-request-locale";
 import { cachedSiteContent, cachedWorkBySlug } from "@/shared/lib/cached-content";
+import { isAdminPreviewRequest } from "@/shared/lib/preview";
 import { NOINDEX } from "@/shared/lib/seo/noindex";
 import { pickFor } from "@/shared/i18n";
 import { alternatesFor, localizedPath } from "@/shared/lib/seo/alternates";
@@ -17,16 +18,31 @@ import { workOgImagePath } from "@/shared/lib/seo/og/paths";
 
 interface PageProps {
     params: Promise<{ slug: string }>;
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+/** Work's half of `journal/[slug]/page.tsx`'s `resolvePost` — same reasoning, same admin-only draft-preview gate. */
+async function resolveWork(slug: string, locale: Awaited<ReturnType<typeof getRequestLocale>>, searchParams: Record<string, string | string[] | undefined>): Promise<{ item: WorkDetail | null; isPreview: boolean }> {
+    if (await isAdminPreviewRequest(searchParams)) {
+        return { item: await getWorkPreview(slug, locale), isPreview: true };
+    }
+    return { item: await cachedWorkBySlug(slug, locale), isPreview: false };
 }
 
 /** Same shape and same failure-classification reasoning as `journal/[slug]`'s — see its comment. */
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
     const { slug } = await params;
     const locale = await getRequestLocale();
+    const search = await searchParams;
 
     return orDatabaseOutageFallback(async () => {
-        const [item, config] = await Promise.all([cachedWorkBySlug(slug, locale), cachedSiteContent("config")]);
+        const [{ item, isPreview }, config] = await Promise.all([resolveWork(slug, locale, search), cachedSiteContent("config")]);
         if (!item) {
+            return NOINDEX;
+        }
+        // Same reasoning as `journal/[slug]`'s identical check — a preview
+        // must never be indexed, even for an otherwise-indexable item.
+        if (isPreview) {
             return NOINDEX;
         }
 
@@ -54,21 +70,25 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }, NOINDEX, `metadata for /work/${ slug }`);
 }
 
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params, searchParams }: PageProps) {
     const { slug } = await params;
     const locale = await getRequestLocale();
+    const search = await searchParams;
 
     return renderOrServiceUnavailable(
         async () => {
-            const item = await cachedWorkBySlug(slug, locale);
+            const { item, isPreview } = await resolveWork(slug, locale, search);
             if (!item) {
-                // Same reasoning as `journal/[slug]`'s — see its comment.
-                // Only when the item is MISSING, not when it merely has no
-                // case study: that one exists, it just has no page here, so
-                // redirecting anywhere would be a lie.
-                const current = await findCurrentSlug("work", slug);
-                if (current) {
-                    permanentRedirect(localizedPath(`/work/${ current }`, locale));
+                // Same "skip the public rename lookup for a preview" reasoning as `journal/[slug]`'s — see its comment.
+                if (!isPreview) {
+                    // Same reasoning as `journal/[slug]`'s — see its comment.
+                    // Only when the item is MISSING, not when it merely has no
+                    // case study: that one exists, it just has no page here, so
+                    // redirecting anywhere would be a lie.
+                    const current = await findCurrentSlug("work", slug);
+                    if (current) {
+                        permanentRedirect(localizedPath(`/work/${ current }`, locale));
+                    }
                 }
                 notFound();
             }
@@ -80,9 +100,9 @@ export default async function Page({ params }: PageProps) {
             // excerpt, so its body-document locale doesn't matter.
             const relatedPost = item.relatedPostSlug ? await getPostBySlug(item.relatedPostSlug) : null;
             const config = await cachedSiteContent("config");
-            return { item, relatedPost, config };
+            return { item, relatedPost, config, isPreview };
         },
-        ({ item, relatedPost, config }) => (
+        ({ item, relatedPost, config, isPreview }) => (
             <>
                 {/* No `BlogPosting` here — a case study is not an article, and
                     the plan's structured-data rule is that markup describes
@@ -104,7 +124,7 @@ export default async function Page({ params }: PageProps) {
                         ]),
                     )}
                 />
-                <WorkDetailPage item={item} relatedPost={relatedPost} />
+                <WorkDetailPage item={item} relatedPost={relatedPost} isPreview={isPreview} />
             </>
         ),
     );

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { LifecycleState, WorkSummary } from "@portfolio/backend";
+import type { AdminWorkListItem, LifecycleState } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { LinkButton } from "@/shared/ui/button/LinkButton";
 import { StatusBadge } from "@/shared/ui/status-badge";
@@ -11,11 +11,11 @@ import { AdminListItem } from "@/shared/ui/admin-list-item";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 
 export interface AdminWorkListPageProps {
-    items: WorkSummary[];
+    items: AdminWorkListItem[];
 }
 
 /** Same tab shape/reasoning as `AdminJournalListPage`'s `lifecycleOptions` — see its comment. */
-function lifecycleOptions(items: WorkSummary[]): StatusToggleOption<LifecycleState>[] {
+function lifecycleOptions(items: AdminWorkListItem[]): StatusToggleOption<LifecycleState>[] {
     const count = (state: LifecycleState) => items.filter((item) => item.lifecycleState === state).length;
     return [
         { value: "PUBLISHED", label: `Published (${ count("PUBLISHED") })`, tone: "success" },
@@ -70,6 +70,9 @@ export function AdminWorkListPage({ items }: AdminWorkListPageProps) {
                                 <>
                                     <StatusBadge tone={item.status === "shipped" ? "success" : "warning"}>{item.status}</StatusBadge>
                                     {item.featured && <StatusBadge tone="accent">Featured</StatusBadge>}
+                                    {item.lifecycleState === "PUBLISHED" && item.hasUnpublishedChanges && (
+                                        <StatusBadge tone="warning">Unpublished changes</StatusBadge>
+                                    )}
                                 </>
                             )}
                             meta={item.year}

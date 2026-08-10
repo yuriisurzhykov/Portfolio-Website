@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { LifecycleState, PostSummary } from "@portfolio/backend";
+import type { AdminPostListItem, LifecycleState } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { LinkButton } from "@/shared/ui/button/LinkButton";
 import { StatusBadge } from "@/shared/ui/status-badge";
@@ -12,7 +12,7 @@ import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { formatAdminDate } from "@/shared/lib/date-format";
 
 export interface AdminJournalListPageProps {
-    entries: PostSummary[];
+    entries: AdminPostListItem[];
 }
 
 /**
@@ -22,7 +22,7 @@ export interface AdminJournalListPageProps {
  * for Draft mirrors "upcoming"/"in-progress" elsewhere in the admin —
  * "not fully live yet," the same visual meaning.
  */
-function lifecycleOptions(entries: PostSummary[]): StatusToggleOption<LifecycleState>[] {
+function lifecycleOptions(entries: AdminPostListItem[]): StatusToggleOption<LifecycleState>[] {
     const count = (state: LifecycleState) => entries.filter((e) => e.lifecycleState === state).length;
     return [
         { value: "PUBLISHED", label: `Published (${ count("PUBLISHED") })`, tone: "success" },
@@ -76,7 +76,15 @@ export function AdminJournalListPage({ entries }: AdminJournalListPageProps) {
                     {visibleEntries.map((post) => (
                         <AdminListItem
                             key={post.slug}
-                            badges={<StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>}
+                            badges={(
+                                <>
+                                    <StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>
+                                    {/* Only meaningful for an already-PUBLISHED post — a DRAFT one is unpublished either way, so this would just be noise. */}
+                                    {post.lifecycleState === "PUBLISHED" && post.hasUnpublishedChanges && (
+                                        <StatusBadge tone="warning">Unpublished changes</StatusBadge>
+                                    )}
+                                </>
+                            )}
                             meta={formatAdminDate(post.date)}
                             title={post.title.en}
                             slug={post.slug}

@@ -130,7 +130,8 @@ model Block {
 /// separate `Document` (own blocks, own count/order), not a `ru` field
 /// bolted onto every English block — see blocks.ts's top comment for why.
 /// Written only through the translation endpoint (admin-posts.ts's
-/// `translatePost`), never through `createPost`/`updatePost`.
+/// `translatePost`, staged in a `ContentDraft` and applied by
+/// `publishPost` — see `content-draft.ts`), never through `createPost`.
 model Post {
   id               String    @id @default(cuid())
   slug             String    @unique
@@ -157,16 +158,19 @@ model Post {
   /// comment for why that backfill is mandatory, not optional.
   lifecycleState   LifecycleState @default(DRAFT)
   /// Set the first time this row transitions into PUBLISHED, then left
-  /// alone — an UNPUBLISH (explicit or the auto-unpublish safety net in
-  /// `updatePost`) does NOT clear it, so it keeps meaning "when was this
-  /// last published," not "is this published right now" (that's what
-  /// `lifecycleState` is for).
+  /// alone — an UNPUBLISH does NOT clear it, so it keeps meaning "when was
+  /// this last published," not "is this published right now" (that's what
+  /// `lifecycleState` is for). No auto-unpublish safety net exists anymore
+  /// (2026-08-09, draft/publish split) — a draft can no longer reach this
+  /// row at all, so there's nothing left for a safety net to protect
+  /// against; `publishPost` is the only path that ever moves this field.
   publishedAt      DateTime?
   /// "The CONTENT changed", as opposed to `updatedAt`'s "the ROW was
   /// touched" — the `lastmod` a search engine reads out of sitemap.xml and
-  /// the `dateModified` in this post's JSON-LD. Written explicitly by
-  /// `updatePost`/`translatePost` only; deliberately NOT by
-  /// `publishPost`/`unpublishPost`, which move `@updatedAt` without a
+  /// the `dateModified` in this post's JSON-LD. Written by `publishPost`
+  /// ONLY when it actually applies a pending draft (a bare "Update" click
+  /// with nothing pending is a genuine no-op, see `publishPost`'s own
+  /// comment) — never by `unpublishPost`, which moves `@updatedAt` without a
   /// single character of the article changing. A systematically untruthful
   /// `lastmod` makes Google stop trusting it site-wide, which is why this
   /// couldn't just reuse `updatedAt`. Nullable with no backfill: rows
@@ -218,15 +222,17 @@ model Work {
   /// Same field, same reasoning as `Post.publishedAt` above.
   publishedAt           DateTime?
   /// Same field, same reasoning as `Post.contentUpdatedAt` above — written
-  /// by `updateWork`/`translateWork`, never by `publishWork`/`unpublishWork`.
+  /// by `publishWork`, and only when it actually applies a pending draft.
   contentUpdatedAt      DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 }
 
 /// One row per slug a `Post`/`Work` USED to live at, pointing at where it
-/// lives now. Written only by `updatePost`/`updateWork` when a rename
-/// actually changes the slug (see content/slug-history.ts).
+/// lives now. Written only by `publishPost`/`publishWork` when a pending
+/// rename actually reaches the live slug (see content/slug-history.ts) —
+/// staging a rename via `savePostDraft`/`saveWorkDraft` alone never
+/// touches this table, since the live slug hasn't changed yet.
 ///
 /// Exists because a rename otherwise throws away everything the old
 /// address had earned: every external link to it breaks, and the search
@@ -259,6 +265,66 @@ model SlugHistory {
   @@unique([kind, formerSlug])
   /// Read by the chain-flattening update on every rename.
   @@index([kind, currentSlug])
+}
+
+/// The in-progress edit of a `Post`/`Work` that hasn't been published yet —
+/// see backend/src/content/README.md's "черновик vs публикация" entry for
+/// the bug this exists to fix (autosave used to overwrite the LIVE row
+/// directly, so editing a published post could wipe what readers see
+/// before the admin ever confirmed anything). `kind`/`entityId` (not a real
+/// FK — same polymorphism as `SlugHistory` above) point at the `Post`/
+/// `Work` row this is a pending edit of; `entityId` is the row's `id`, NOT
+/// its `slug` — a rename can be part of an unpublished draft, so the slug
+/// itself isn't a stable key while a draft exists. `data` is the whole
+/// editable payload (`PostInput`/`WorkInput` plus an optional pending
+/// `translation` section) as one JSON blob, validated at the application
+/// layer (`content/content-draft.ts`) — same "untyped Json column, typed
+/// boundary" split already used by `Block.text`/`Block.data`/
+/// `SiteContent.data` above; a draft's shape already has exactly one
+/// definition (the existing `postDraftInputSchema`/`workDraftInputSchema`),
+/// so duplicating it as ~15 real columns here would just be a second
+/// place for the two to silently drift apart.
+///
+/// One row per entity, not one per edit — `@@unique([kind, entityId])`
+/// makes every autosave an upsert onto the SAME row, which is exactly
+/// right: a draft is "what's pending right now," not a log of every
+/// keystroke (that's what `ContentRevision` below is for, and it only
+/// records PUBLISHED snapshots, not drafts-in-progress).
+model ContentDraft {
+  id        String   @id @default(cuid())
+  kind      String
+  entityId  String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, entityId])
+}
+
+/// A snapshot of a `Post`/`Work`'s content taken immediately before an
+/// already-PUBLISHED entity's live content is overwritten by a new
+/// publish/update — i.e. "what readers were looking at right before this
+/// change." Never written for a post's FIRST publish (there is nothing
+/// live yet to preserve) — see `publishPost`/`publishWork`'s own comment.
+/// `data` is the same draft-payload shape `ContentDraft.data` uses, so
+/// "restore this version" is just "copy `data` back into a `ContentDraft`
+/// row" (`restoreRevisionToDraft`), never a direct write to the live row —
+/// a restore is reviewed and re-published like any other edit, not a
+/// silent rollback of what's on the site right now.
+///
+/// Pruned to the most recent `MAX_REVISIONS` per entity by
+/// `snapshotRevision` — this is version history for "I broke something,
+/// let me go back," not a permanent audit log, so unbounded growth isn't
+/// a trade-off worth making for a personal portfolio's admin panel.
+model ContentRevision {
+  id          String   @id @default(cuid())
+  kind        String
+  entityId    String
+  data        Json
+  publishedAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([kind, entityId, createdAt])
 }
 
 /// A generic key→JSON settings bag for the handful of small, singleton
