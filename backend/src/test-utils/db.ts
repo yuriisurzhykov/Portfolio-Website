@@ -17,4 +17,10 @@ export async function resetTestDatabase(): Promise<void> {
     await prisma.block.deleteMany();
     await prisma.document.deleteMany();
     await prisma.siteContent.deleteMany();
+    // No foreign key ties this to `Post`/`Work` (see schema.prisma's own
+    // comment on why), so nothing cascades it away — leaving it out meant
+    // rows surviving into the next test and colliding on
+    // `@@unique([kind, formerSlug])`. Found by the tests themselves, which
+    // is exactly the "one more line here" this function's comment predicts.
+    await prisma.slugHistory.deleteMany();
 }

@@ -24,6 +24,17 @@ export interface WorkSummary {
     lifecycleState: LifecycleState;
     /** Mirrors `Work.publishedAt` — see schema.prisma's comment for why an UNPUBLISH never clears it. */
     publishedAt: string | null;
+    /** Same field, same two consumers as `PostSummary.contentUpdatedAt` (posts.ts). */
+    contentUpdatedAt: string | null;
+    /**
+     * Same meaning as `PostSummary.availableLocales` (posts.ts), derived
+     * from a different column for a real reason: `translateWork` writes
+     * `summary.ru` unconditionally but only writes `caseStudyDocumentIdRu`
+     * when an English case study exists, so a Work item can be half
+     * translated in a way a Post never can. Only the case-study document
+     * answers "is there a Russian PAGE at `/ru/work/:slug`".
+     */
+    availableLocales: ContentLocale[];
 }
 
 export interface CaseStudy {
@@ -53,9 +64,10 @@ interface RawWorkRow {
     role: unknown;
     heroImage: string | null;
     caseStudyDocumentId: string | null;
-    caseStudyDocumentIdRu?: string | null;
+    caseStudyDocumentIdRu: string | null;
     lifecycleState: LifecycleState;
     publishedAt: Date | null;
+    contentUpdatedAt: Date | null;
 }
 
 /** Exported for reuse by admin-work.ts (Phase 4) — same reasoning as posts.ts's `toPostSummary`. */
@@ -73,6 +85,8 @@ export function toWorkSummary(row: RawWorkRow): WorkSummary {
         hasCaseStudy: row.caseStudyDocumentId !== null,
         lifecycleState: row.lifecycleState,
         publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+        contentUpdatedAt: row.contentUpdatedAt ? row.contentUpdatedAt.toISOString() : null,
+        availableLocales: row.caseStudyDocumentIdRu !== null ? ["en", "ru"] : ["en"],
     };
 }
 

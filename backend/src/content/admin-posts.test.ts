@@ -4,6 +4,7 @@ import { prisma } from "../db/client";
 import { isSlugAlreadyExistsError } from "../errors";
 import { isInvalidLifecycleTransitionError } from "./lifecycle";
 import { getJournalEntries, getPostBySlug } from "./posts";
+import { findCurrentSlug } from "./slug-history";
 import {
     createPost,
     deletePost,
@@ -293,6 +294,86 @@ describe("deletePost", () => {
 
         expect(await deletePost("test-post")).toBe(true);
         expect(await prisma.document.count()).toBe(0);
+    });
+});
+
+describe("renaming keeps the old address resolvable", () => {
+    it("updatePost records the former slug so it can redirect", async () => {
+        // Without this, the IndexNow submission for the old slug sends a
+        // crawler to a 404 — the URL is dropped instead of forwarded, and
+        // every external link to it breaks.
+        await createPost(basePostInput);
+
+        await updatePost("test-post", { ...basePostInput, slug: "renamed-post" });
+
+        expect(await findCurrentSlug("post", "test-post")).toBe("renamed-post");
+    });
+
+    it("records nothing on an ordinary save that doesn't rename", async () => {
+        await createPost(basePostInput);
+
+        await updatePost("test-post", { ...basePostInput, excerpt: "Edited." });
+
+        expect(await findCurrentSlug("post", "test-post")).toBeNull();
+    });
+
+    it("deletePost forgets the entity's former addresses", async () => {
+        await createPost(basePostInput);
+        await updatePost("test-post", { ...basePostInput, slug: "renamed-post" });
+
+        await deletePost("renamed-post");
+
+        expect(await findCurrentSlug("post", "test-post")).toBeNull();
+    });
+});
+
+describe("contentUpdatedAt — \"the content changed\", not \"the row was touched\"", () => {
+    it("is not set by createPost — a brand new draft has never been modified", async () => {
+        const created = await createPost(basePostInput);
+        expect(created.contentUpdatedAt).toBeNull();
+    });
+
+    it("survives a publish/unpublish/publish cycle untouched", async () => {
+        // The entire reason this column exists instead of reusing
+        // `updatedAt`: all three of these calls move `@updatedAt` without a
+        // character of the article changing. A mutant that adds
+        // `contentUpdatedAt` to publish/unpublish's `data` has to die here,
+        // or the column collapses back into `updatedAt` and `lastmod`
+        // starts lying — which makes Google distrust it site-wide.
+        await createPost(basePostInput);
+        await updatePost("test-post", basePostInput);
+        const afterEdit = (await getPostForAdmin("test-post"))!.contentUpdatedAt;
+        expect(afterEdit).not.toBeNull();
+
+        await publishPost("test-post");
+        expect((await getPostForAdmin("test-post"))!.contentUpdatedAt).toBe(afterEdit);
+
+        await unpublishPost("test-post");
+        expect((await getPostForAdmin("test-post"))!.contentUpdatedAt).toBe(afterEdit);
+
+        await publishPost("test-post");
+        expect((await getPostForAdmin("test-post"))!.contentUpdatedAt).toBe(afterEdit);
+    });
+
+    it("moves on updatePost", async () => {
+        await createPost(basePostInput);
+        await updatePost("test-post", basePostInput);
+        const first = (await getPostForAdmin("test-post"))!.contentUpdatedAt;
+
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        await updatePost("test-post", { ...basePostInput, excerpt: "Edited." });
+
+        const second = (await getPostForAdmin("test-post"))!.contentUpdatedAt;
+        expect(second).not.toBe(first);
+        expect(Date.parse(second!)).toBeGreaterThan(Date.parse(first!));
+    });
+
+    it("moves on translatePost", async () => {
+        await createPost(basePostInput);
+        expect((await getPostForAdmin("test-post"))!.contentUpdatedAt).toBeNull();
+
+        await translatePost("test-post", baseTranslationInput);
+        expect((await getPostForAdmin("test-post"))!.contentUpdatedAt).not.toBeNull();
     });
 });
 

@@ -47,6 +47,45 @@ describe("getAllWork / getFeaturedWork", () => {
     });
 });
 
+describe("WorkSummary.availableLocales", () => {
+    it("is [\"en\"] for an item with a translated summary but NO Russian case study", async () => {
+        // The case Post can never be in: `translateWork` writes
+        // `summary.ru` unconditionally and the case-study half only when an
+        // English case study exists. Declaring this page a Russian version
+        // in hreflang would be a lie — the body is English.
+        const document = await prisma.document.create({ data: {} });
+        await prisma.work.create({
+            data: {
+                ...baseWorkData,
+                slug: "half-translated",
+                summary: { en: "English summary", ru: "Русское описание" },
+                caseStudyDocumentId: document.id,
+            },
+        });
+
+        const [item] = await getAllWork();
+        expect(item.availableLocales).toEqual(["en"]);
+    });
+
+    it("includes \"ru\" once a Russian case-study document exists", async () => {
+        const en = await prisma.document.create({ data: {} });
+        const ru = await prisma.document.create({ data: {} });
+        await prisma.work.create({
+            data: { ...baseWorkData, slug: "translated", caseStudyDocumentId: en.id, caseStudyDocumentIdRu: ru.id },
+        });
+
+        const [item] = await getAllWork();
+        expect(item.availableLocales).toEqual(["en", "ru"]);
+    });
+
+    it("reports contentUpdatedAt as null on a row that has never been edited", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "untouched" } });
+
+        const [item] = await getAllWork();
+        expect(item.contentUpdatedAt).toBeNull();
+    });
+});
+
 describe("getWorkBySlug", () => {
     it("returns null for an unknown slug", async () => {
         expect(await getWorkBySlug("does-not-exist")).toBeNull();

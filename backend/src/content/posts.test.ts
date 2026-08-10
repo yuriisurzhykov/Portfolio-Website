@@ -65,6 +65,82 @@ describe("getJournalEntries", () => {
         expect(entry.lifecycleState).toBe("PUBLISHED");
         expect(entry.publishedAt).toBe(publishedAt.toISOString());
     });
+
+    it("reports contentUpdatedAt as null on a row that has never been edited", async () => {
+        // No backfill was applied by the migration on purpose — falling
+        // back to `publishedAt` is honest, inventing a modification date
+        // is not.
+        await prisma.post.create({
+            data: {
+                slug: "a", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED",
+            },
+        });
+
+        const [entry] = await getJournalEntries();
+        expect(entry.contentUpdatedAt).toBeNull();
+    });
+});
+
+describe("PostSummary.hasBody", () => {
+    it("is false for a published stub with no body document — sitemap.ts's filter depends on this", async () => {
+        // `status: "published"` alone is not enough: this row would pass a
+        // status check and then 404 on /journal/[slug].
+        await prisma.post.create({
+            data: {
+                slug: "stub", date: "2026-01-01", title: { en: "a", ru: "" }, category: { en: "a", ru: "" },
+                readMins: 0, excerpt: { en: "a", ru: "" }, status: "published", lifecycleState: "PUBLISHED",
+            },
+        });
+
+        const [entry] = await getJournalEntries();
+        expect(entry.status).toBe("published");
+        expect(entry.hasBody).toBe(false);
+    });
+
+    it("is true once a body document exists", async () => {
+        const bodyDocumentId = await makeDocument([{ type: "paragraph", text: "Body" }]);
+        await prisma.post.create({
+            data: {
+                slug: "real", date: "2026-01-01", title: { en: "a", ru: "" }, category: { en: "a", ru: "" },
+                readMins: 1, excerpt: { en: "a", ru: "" }, status: "published", lifecycleState: "PUBLISHED", bodyDocumentId,
+            },
+        });
+
+        const [entry] = await getJournalEntries();
+        expect(entry.hasBody).toBe(true);
+    });
+});
+
+describe("PostSummary.availableLocales", () => {
+    it("is [\"en\"] when only a Russian TITLE was written — a headline is not a Russian version", async () => {
+        const bodyDocumentId = await makeDocument([{ type: "paragraph", text: "English body" }]);
+        await prisma.post.create({
+            data: {
+                slug: "title-only", date: "2026-01-01", title: { en: "a", ru: "Заголовок" },
+                category: { en: "a", ru: "Категория" }, readMins: 1, excerpt: { en: "a", ru: "Аннотация" },
+                status: "published", lifecycleState: "PUBLISHED", bodyDocumentId,
+            },
+        });
+
+        const [entry] = await getJournalEntries();
+        expect(entry.availableLocales).toEqual(["en"]);
+    });
+
+    it("includes \"ru\" once a Russian body document exists", async () => {
+        const bodyDocumentId = await makeDocument([{ type: "paragraph", text: "English body" }]);
+        const bodyDocumentIdRu = await makeDocument([{ type: "paragraph", text: "Русское тело" }]);
+        await prisma.post.create({
+            data: {
+                slug: "translated", date: "2026-01-01", title: { en: "a", ru: "a" }, category: { en: "a", ru: "a" },
+                readMins: 1, excerpt: { en: "a", ru: "a" }, status: "published", lifecycleState: "PUBLISHED",
+                bodyDocumentId, bodyDocumentIdRu,
+            },
+        });
+
+        const [entry] = await getJournalEntries();
+        expect(entry.availableLocales).toEqual(["en", "ru"]);
+    });
 });
 
 describe("getLatestPublishedPost", () => {

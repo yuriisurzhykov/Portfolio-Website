@@ -162,6 +162,17 @@ model Post {
   /// last published," not "is this published right now" (that's what
   /// `lifecycleState` is for).
   publishedAt      DateTime?
+  /// "The CONTENT changed", as opposed to `updatedAt`'s "the ROW was
+  /// touched" — the `lastmod` a search engine reads out of sitemap.xml and
+  /// the `dateModified` in this post's JSON-LD. Written explicitly by
+  /// `updatePost`/`translatePost` only; deliberately NOT by
+  /// `publishPost`/`unpublishPost`, which move `@updatedAt` without a
+  /// single character of the article changing. A systematically untruthful
+  /// `lastmod` makes Google stop trusting it site-wide, which is why this
+  /// couldn't just reuse `updatedAt`. Nullable with no backfill: rows
+  /// predating this column report `publishedAt` instead of being handed a
+  /// modification date that never happened.
+  contentUpdatedAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -206,8 +217,48 @@ model Work {
   lifecycleState        LifecycleState @default(DRAFT)
   /// Same field, same reasoning as `Post.publishedAt` above.
   publishedAt           DateTime?
+  /// Same field, same reasoning as `Post.contentUpdatedAt` above — written
+  /// by `updateWork`/`translateWork`, never by `publishWork`/`unpublishWork`.
+  contentUpdatedAt      DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+}
+
+/// One row per slug a `Post`/`Work` USED to live at, pointing at where it
+/// lives now. Written only by `updatePost`/`updateWork` when a rename
+/// actually changes the slug (see content/slug-history.ts).
+///
+/// Exists because a rename otherwise throws away everything the old
+/// address had earned: every external link to it breaks, and the search
+/// engines that were just told (via IndexNow) that the URL changed find a
+/// 404 there and simply drop it. A permanent redirect is what carries the
+/// accumulated signals across; this table is the only place that knows
+/// where to send them.
+///
+/// `kind` is a plain String, not a Prisma enum — same reasoning as
+/// `Block.type` above: the set of content types is expected to grow, and
+/// an enum would make each addition a migration. Unlike `LifecycleState`,
+/// this isn't a closed transition graph owned by a state machine.
+///
+/// No foreign key to `Post`/`Work`: the reference is by slug (not by id)
+/// and is polymorphic across two models, neither of which Prisma can
+/// express as one relation. The consequence is handled explicitly —
+/// `deletePost`/`deleteWork` clear an entity's rows, so a redirect can
+/// never point at something that no longer exists.
+model SlugHistory {
+  id          String   @id @default(cuid())
+  kind        String
+  formerSlug  String
+  /// Kept FLAT, never a chain: renaming a→b→c rewrites the a-row to point
+  /// straight at c rather than leaving a→b→c for a crawler to walk.
+  currentSlug String
+  createdAt   DateTime @default(now())
+
+  /// One destination per old address — a second row for the same
+  /// `(kind, formerSlug)` would be an ambiguous redirect.
+  @@unique([kind, formerSlug])
+  /// Read by the chain-flattening update on every rename.
+  @@index([kind, currentSlug])
 }
 
 /// A generic key→JSON settings bag for the handful of small, singleton

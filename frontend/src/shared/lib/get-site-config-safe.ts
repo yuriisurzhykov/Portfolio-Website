@@ -1,4 +1,5 @@
-import { getSiteContent, SITE_CONTENT_DEFAULTS, type ConfigContent } from "@portfolio/backend";
+import { SITE_CONTENT_DEFAULTS, type ConfigContent } from "@portfolio/backend";
+import { cachedSiteContent } from "./cached-content";
 
 /**
  * Unlike every `app/**\/page.tsx` (which use `renderOrServiceUnavailable`
@@ -13,10 +14,14 @@ import { getSiteContent, SITE_CONTENT_DEFAULTS, type ConfigContent } from "@port
  * info as of the last deploy, not placeholder text) on ANY failure here
  * means the header/footer keep working even while the page body they
  * wrap shows `<ServiceUnavailable/>`.
+ *
+ * `cachedSiteContent`, not `getSiteContent` directly — the landing page
+ * reads the same `config` key, so before this the site chrome and the page
+ * body under it issued two identical queries on every request to `/`.
  */
 export async function getSiteConfigSafe(): Promise<ConfigContent> {
     try {
-        return await getSiteContent("config");
+        return await cachedSiteContent("config");
     } catch {
         return SITE_CONTENT_DEFAULTS.config;
     }

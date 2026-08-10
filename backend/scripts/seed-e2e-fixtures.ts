@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { createPost, publishPost } from "../src/content/admin-posts";
-import { createWork, publishWork } from "../src/content/admin-work";
+import { createPost, publishPost, translatePost, updatePost } from "../src/content/admin-posts";
+import { createWork, publishWork, translateWork } from "../src/content/admin-work";
 import { resetTestDatabase } from "../src/test-utils/db";
 import { prisma } from "../src/db/client";
 
@@ -197,6 +197,49 @@ const FIXTURES = {
     },
 };
 
+/**
+ * Russian versions for exactly ONE post and ONE work item, on purpose.
+ *
+ * Until these existed, every fixture title in this file was English, so the
+ * entire Russian branch — `availableLocales`, hreflang, and the canonical
+ * of an UNTRANSLATED Russian page pointing back at the English URL — had no
+ * e2e coverage at all: with everything translated (or nothing), whichever
+ * of the two canonical rules is wrong would still look right. Leaving
+ * `testing-culture` and `onboarding-flow` untranslated is what makes both
+ * branches live at once.
+ *
+ * The Cyrillic here is also what `og-image.spec.ts` needs: a broken font
+ * subset renders as "tofu" only when there are non-Latin glyphs to draw.
+ */
+/** The address `testing-culture` briefly lived at during seeding, purely so a redirect exists to test. */
+const RENAMED_FROM = { post: "testing-culture-draft" };
+
+const TRANSLATIONS = {
+    posts: {
+        flowbus: {
+            title: "Заметки о Flowbus (E2E-фикстура)",
+            category: "Архитектура",
+            excerpt: "Фикстурный пост, покрывающий вариант шаблона с блоком кода.",
+            blocks: [
+                { type: "lead" as const, text: "Фикстурный контент для e2e-набора, а не настоящий пост." },
+                { type: "paragraph" as const, text: "Этот пост существует, чтобы проверить отрисовку блока кода." },
+            ],
+        },
+    },
+    work: {
+        "navigation-engine": {
+            summary: "Фикстурный кейс: hero-изображение и сетка шагов подхода.",
+            startedLabel: "Янв 2025",
+            shippedLabel: "Июн 2025",
+            role: "Ведущий инженер",
+            blocks: [
+                { type: "lead" as const, text: "Как детерминированный движок навигации заменил стихийный роутинг." },
+                { type: "paragraph" as const, text: "Фикстурный контент для e2e-набора, а не настоящий кейс." },
+            ],
+        },
+    },
+};
+
 async function main(): Promise<void> {
     await resetTestDatabase();
 
@@ -224,7 +267,29 @@ async function main(): Promise<void> {
         await publishPost(post.slug);
     }
 
-    console.log("Seeded e2e fixtures: 3 work items (2 with a case study, 1 without), 3 posts (2 with a body, 1 without).");
+    // Creates a slug-history row WITHOUT changing the final fixture set:
+    // the post ends up at `testing-culture` either way, but
+    // `/journal/testing-culture-draft` now has to answer with a permanent
+    // redirect. `seo.spec.ts` asserts that, which is the only way to prove
+    // end-to-end that a rename doesn't throw away the old address (see
+    // backend/src/content/slug-history.ts).
+    await updatePost(FIXTURES.posts.secondPost.slug, {
+        ...FIXTURES.posts.secondPost,
+        slug: RENAMED_FROM.post,
+    });
+    await updatePost(RENAMED_FROM.post, FIXTURES.posts.secondPost);
+
+    for (const [slug, translation] of Object.entries(TRANSLATIONS.posts)) {
+        await translatePost(slug, translation);
+    }
+    for (const [slug, translation] of Object.entries(TRANSLATIONS.work)) {
+        await translateWork(slug, translation);
+    }
+
+    console.log(
+        "Seeded e2e fixtures: 3 work items (2 with a case study, 1 without), 3 posts (2 with a body, 1 without), " +
+        `1 post and 1 work item translated into Russian, 1 slug-history entry (/journal/${ RENAMED_FROM.post }).`,
+    );
 }
 
 main()

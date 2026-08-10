@@ -186,6 +186,21 @@ When set, `playwright.config.ts` uses it as `baseURL` directly and skips startin
 `webServer` entirely (no point building the app locally if you're testing a deployed instance).
 Unset (the default) it falls back to `http://localhost:3100`.
 
+**Two variables added 2026-08-08 for `seo.spec.ts`, in `backend/.env.test`:**
+
+```bash
+SEO_INDEXABLE="true"
+SITE_URL="https://e2e.example.com"
+```
+
+Indexing is opt-in (`frontend/src/shared/lib/seo/site-url.ts`), so without these the
+`webServer`-started app serves the **noindex** variant of the site — that is, the one that never
+runs in production, leaving the branch that does run covered by no test at all. The host is
+fictional on purpose: it only has to look public, since `frontend/src/instrumentation.node.ts`
+refuses to start on `SEO_INDEXABLE=true` combined with a localhost `SITE_URL`. In CI the same
+two are job-level `env` in `visual-tests.yml` and `accept-visual-baselines.yml` (they must match
+each other — baselines regenerated against the noindex build would then fail the real check).
+
 No other `.env` files exist or are needed anywhere else in this repo for this feature.
 
 ## 4. Test structure & how to add pages
@@ -207,6 +222,8 @@ frontend/
       visual.spec.ts
       component-gallery.spec.ts
       a11y.spec.ts
+      seo.spec.ts                   # no baselines — asserts on served HTML/robots.txt/sitemap.xml
+      og-image.spec.ts              # baselines of the OG image ROUTES' output (see section 4)
       reporters/summary-reporter.ts
     visual-snapshots/               # committed baseline PNGs (the "references" folder)
       home/
@@ -226,6 +243,11 @@ frontend/
           dark-Desktop.png
         card/                (same 2 files)
         ...                  (one folder per frontend/tests/e2e/component-gallery.manifest.ts entry)
+      og-default/                  # og-image.spec.ts's baselines — one file each, Desktop only
+        desktop.png
+      og-journal-en/               (same 1 file)
+      og-journal-ru/
+      og-work-ru/
 ```
 
 One folder per page (5 folders × 6 files = 30), rather than 30 flat files — much easier to review
@@ -372,6 +394,42 @@ at least newly covers the Mermaid half of it.
 2. Add `{ id: "your-slug", label: "YourComponent" }` to `component-gallery.manifest.ts`.
 3. Run `npm run test:e2e:update:components` (or comment `/update-snapshots` on the PR — section 8 —
    which now regenerates both suites together) to generate its first baseline.
+
+### SEO assertions (`seo.spec.ts`) and OG-image baselines (`og-image.spec.ts`)
+
+Added 2026-08-08 alongside the SEO layer (`frontend/src/shared/lib/seo/README.md` has the full
+design). Two specs, deliberately separate from everything above.
+
+**`seo.spec.ts` stores no images.** It asserts on what a crawler actually receives: two different
+posts have two different `<title>`s and `description`s, `canonical` is present and absolute,
+hreflang covers exactly the locales the content really has, JSON-LD parses and its `author`
+resolves to a `Person` node in the same document, `/robots.txt` and `/sitemap.xml` answer 200,
+and `/error/429` and `/storybook` carry `noindex`. It also cross-checks the URL set in
+`/sitemap.xml` against `pages.manifest.ts` — the same trick `component-gallery.spec.ts` uses on
+its manifest, for the same reason: the static-route list exists twice in the repo (in
+`app/sitemap.ts` and in `generate-pages-manifest.ts`'s `staticPages`) and can't be shared
+directly, because the second lives in a script that writes JSON before Playwright starts. Both
+apply identical `hasBody`/`hasCaseStudy` guards, so the two sets must match exactly — a new
+public page forgotten in the sitemap turns a red build instead of quietly not being indexed.
+
+**This spec needs `SEO_INDEXABLE=true` and a public-looking `SITE_URL`** (see section 3).
+Without them the app under test is the noindex variant, which is precisely the one that never
+runs in production — the branch that does run would be covered by nothing. The first test fails
+loudly on a bare `Disallow: /` rather than asserting against the wrong build.
+
+**`og-image.spec.ts` screenshots the ROUTE's output, not the template rendered as a component**,
+and that distinction is the whole point. satori (behind `next/og`) has no system fonts at all:
+everything it draws comes from the TTF buffers `shared/lib/seo/og/fonts.ts` hands it. A browser
+silently falls back to a system font and draws Cyrillic correctly — so a component-level
+screenshot of the same template would stay green with a completely broken font subset, while the
+real card came out as "tofu". Three of the four baselines are Russian for exactly this reason;
+`flowbus` and `navigation-engine` are the two translated fixtures.
+
+Desktop only, one baseline per route — an OG image has no theme, so there are four baselines
+here rather than eight. This falls out of `playwright.config.ts`'s existing projects for free,
+the same way `component-gallery.spec.ts` does. Baselines are accepted through
+`/update-snapshots` like every other one (`test:e2e:update:all` now includes this spec); never
+generate them on Windows — font rendering differs between platforms (section 2).
 
 ### How to add pages
 

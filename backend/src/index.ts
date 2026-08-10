@@ -18,6 +18,10 @@ export type { LocalizedText } from "./content/localized-text";
 export type { ContentLocale } from "./content/locale";
 export { isInvalidLifecycleTransitionError, nextState } from "./content/lifecycle";
 export type { LifecycleAction, LifecycleState } from "./content/lifecycle";
+export { setContentChangeNotifier } from "./content/content-change-notifier";
+export type { ContentChange, ContentChangeNotifier } from "./content/content-change-notifier";
+export { findCurrentSlug } from "./content/slug-history";
+export type { ContentKind } from "./content/slug-history";
 
 export { getSiteContent, iconRefSchema, isSiteContentKey, SITE_CONTENT_KEYS, siteContentSchemas, techIconSchema, updateSiteContent } from "./content/site-content";
 export type {

@@ -9,6 +9,33 @@ import { localizedTextSchema, type LocalizedText } from "./localized-text";
 import { estimateReadMins } from "./reading-time";
 import { generateUniqueSlug, slugSchema } from "./slug";
 import { toPostSummary, type PostStatus, type PostSummary } from "./posts";
+import { notifyContentChanged } from "./content-change-notifier";
+import { forgetSlugHistory, recordSlugChange } from "./slug-history";
+
+/**
+ * One rule for every write path in this file: announce a change whenever
+ * it touched a PUBLIC address — either the post is public now, or it was
+ * public a moment ago and this operation took that away. Editing a draft
+ * is deliberately silent: there is no address for a crawler to recheck,
+ * and the 3-minute autosave behind `updatePost` would otherwise turn a
+ * writing session into a stream of notifications about a page nobody can
+ * reach.
+ */
+function announcePostChange(
+    summary: PostSummary,
+    options: { wasPublic: boolean; isPublic: boolean; previousSlug: string | null },
+): void {
+    if (!options.isPublic && !options.wasPublic) {
+        return;
+    }
+    notifyContentChanged({
+        kind: "post",
+        slug: summary.slug,
+        previousSlug: options.previousSlug,
+        isPublic: options.isPublic,
+        availableLocales: summary.availableLocales,
+    });
+}
 
 /**
  * The STRICT contract — what a Post must satisfy to be shown on the public
@@ -260,10 +287,32 @@ export async function updatePost(slug: string, input: PostInput): Promise<PostSu
             relatedWorkSlug: input.relatedWorkSlug ?? null,
             bodyDocumentId,
             lifecycleState,
+            // Explicit, not `@updatedAt` — this is one of exactly two write
+            // paths that genuinely change what a reader sees; see
+            // `Post.contentUpdatedAt` in schema.prisma.
+            contentUpdatedAt: new Date(),
         },
     });
 
-    return toPostSummary(row);
+    // BEFORE announcing, so the old address already redirects by the time
+    // a search engine acts on the notification. Announcing first would
+    // send a crawler to a URL that still 404s, which is exactly the
+    // signal-losing outcome the history table exists to prevent.
+    await recordSlugChange("post", slug, newSlug);
+
+    const summary = toPostSummary(row);
+    announcePostChange(summary, {
+        wasPublic: existing.lifecycleState === "PUBLISHED",
+        isPublic: row.lifecycleState === "PUBLISHED",
+        // A rename means two addresses changed: the new one appeared, and
+        // the old one now answers with a permanent redirect. Submitting
+        // the old one is what lets the crawler follow that redirect and
+        // carry the accumulated signals over — which is why the event
+        // carries the previous slug rather than this function's public
+        // return type growing a field.
+        previousSlug: newSlug === slug ? null : slug,
+    });
+    return summary;
 }
 
 /**
@@ -309,7 +358,10 @@ export async function publishPost(slug: string): Promise<PostSummary | null> {
             publishedAt: wasAlreadyPublished ? existing.publishedAt : new Date(),
         },
     });
-    return toPostSummary(row);
+
+    const summary = toPostSummary(row);
+    announcePostChange(summary, { wasPublic: wasAlreadyPublished, isPublic: true, previousSlug: null });
+    return summary;
 }
 
 /**
@@ -329,7 +381,10 @@ export async function unpublishPost(slug: string): Promise<PostSummary | null> {
         where: { slug },
         data: { lifecycleState: nextState(existing.lifecycleState, "UNPUBLISH") },
     });
-    return toPostSummary(row);
+
+    const summary = toPostSummary(row);
+    announcePostChange(summary, { wasPublic: true, isPublic: false, previousSlug: null });
+    return summary;
 }
 
 /** `null` when `slug` doesn't exist — what `/admin/journal/[slug]/translate` loads before rendering. */
@@ -375,10 +430,18 @@ export async function translatePost(slug: string, input: TranslatePostInput): Pr
             category: { ...existingCategory, ru: input.category },
             excerpt: { ...existingExcerpt, ru: input.excerpt },
             bodyDocumentIdRu,
+            // Moves the ENGLISH page's `lastmod` too, and that's accepted:
+            // sitemap.xml carries one `lastmod` per `<url>` entry with the
+            // Russian version hanging off it as `xhtml:link`, so the format
+            // has nowhere to put a per-locale date even if we tracked one.
+            contentUpdatedAt: new Date(),
         },
     });
 
-    return toPostSummary(row);
+    const summary = toPostSummary(row);
+    const isPublic = row.lifecycleState === "PUBLISHED";
+    announcePostChange(summary, { wasPublic: isPublic, isPublic, previousSlug: null });
+    return summary;
 }
 
 /** `false` when `slug` doesn't exist — the API route turns that into a 404. */
@@ -400,5 +463,17 @@ export async function deletePost(slug: string): Promise<boolean> {
         await prisma.document.delete({ where: { id: existing.bodyDocumentIdRu } });
     }
 
+    // A redirect pointing at a slug that no longer exists is worse than
+    // the old address 404ing directly — the crawler pays for a hop and
+    // lands on the same nothing.
+    await forgetSlugHistory("post", slug);
+
+    // Built from `existing`, read before the delete — the row it describes
+    // is gone by now, but that's exactly the fact being announced.
+    announcePostChange(toPostSummary(existing), {
+        wasPublic: existing.lifecycleState === "PUBLISHED",
+        isPublic: false,
+        previousSlug: null,
+    });
     return true;
 }

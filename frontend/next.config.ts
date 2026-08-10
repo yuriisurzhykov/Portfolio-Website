@@ -30,6 +30,14 @@ const nextConfig: NextConfig = {
   // Next.js sends "X-Powered-By: Next.js" on every response by default —
   // a free hint to an attacker about which framework-specific CVEs to try.
   poweredByHeader: false,
+  // No `headers()` declaring `Vary: x-locale` here, deliberately — it was
+  // tried and removed. Next.js overwrites `Vary` with its own list on
+  // Server-Component pages (it survives only on route handlers), so the
+  // one place it was needed is the one place it never arrived; verified
+  // with `curl -D -` against a real production build. `proxy.ts` carries
+  // the locale in the rewritten URL instead, which makes every response a
+  // pure function of its URL and removes the need for `Vary` at all — see
+  // `handleLocale`'s comment.
 };
 
 export default nextConfig;
