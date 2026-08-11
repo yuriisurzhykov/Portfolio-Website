@@ -1,6 +1,11 @@
 import type { CoverBrief } from "./cover-brief";
 import { buildCoverComposition, renderCoverSvg, COVER_HEIGHT, COVER_WIDTH } from "./cover-composition";
+import { sha256Hex } from "./content-hash";
+import { coverFonts } from "./cover-fonts";
 import { prngFromSeed } from "./cover-seed";
+
+/** Length of the stamp's `REF` code — 4 hex characters is plenty to visually distinguish covers without being long enough to look like it's meant to be a real, verifiable identifier. */
+const REF_LENGTH = 4;
 
 /**
  * The generator's raw output — bytes and a mime type, NOT an SVG string.
@@ -57,18 +62,30 @@ export function isImageGenerationError(error: unknown): boolean {
 }
 
 /**
- * Today's only real generator — synchronous math wrapped in the port's
- * async signature (see `ImageGenerator`'s own comment for why that
- * asymmetry is deliberate, not accidental). `brief.seed` is combined with
- * `styleVersion`/`variant` before seeding the PRNG, so a style-version bump
- * or a Phase-2 reroll produces a genuinely different layout for the exact
- * same post, not a silent no-op.
+ * Today's only real generator. Genuinely `await`s one thing now (`coverFonts()`,
+ * reading the embedded TTF subsets off disk, cached after the first call —
+ * see that function's own comment) on top of the port's async signature
+ * (see `ImageGenerator`'s own comment for why the signature was always
+ * shaped for a fallible network call, even before there was one).
+ * `brief.seed` is combined with `styleVersion`/`variant` before seeding the
+ * PRNG, so a style-version bump or a Phase-2 reroll produces a genuinely
+ * different layout for the exact same post, not a silent no-op.
  */
 export class ProceduralImageGenerator implements ImageGenerator {
     async generate(brief: CoverBrief): Promise<GeneratedImage> {
+        const fonts = await coverFonts();
         const prng = prngFromSeed(`${ brief.seed }:${ brief.styleVersion }:${ brief.variant }`);
-        const composition = buildCoverComposition(brief.hue, prng);
-        const svg = renderCoverSvg(composition);
+        // A short hash of the SLUG alone (not the styleVersion/variant-qualified
+        // seed above) — the stamp's `REF` code identifies the POST, and
+        // should read the same across a reroll/style bump, unlike the layout.
+        const ref = sha256Hex(Buffer.from(brief.seed, "utf-8")).slice(0, REF_LENGTH).toUpperCase();
+
+        const composition = buildCoverComposition(
+            { categoryHue: brief.hue, title: brief.title, excerpt: brief.sourceText, category: brief.category, date: brief.date, ref },
+            prng,
+            fonts,
+        );
+        const svg = renderCoverSvg(composition, fonts);
 
         return {
             bytes: Buffer.from(svg, "utf-8"),

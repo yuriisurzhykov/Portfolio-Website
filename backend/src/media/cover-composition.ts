@@ -1,101 +1,149 @@
-import { buildCoverPalette } from "./cover-palette";
-import { prngFromSeed, randomInRange, randomInt, type Prng } from "./cover-seed";
+import { buildFlowCurves, renderFlowCurves, type FlowCurve } from "./cover-flow";
+import { renderFontFaceStyle } from "./cover-font-face";
+import type { CoverFonts } from "./cover-fonts";
+import { buildLetterformClip, renderLetterformClipDef, renderLetterformLayer, type LetterformClip } from "./cover-letterform";
+import { buildCoverPalette, BASE_LIGHTNESS } from "./cover-palette";
+import { randomInRange, type Prng } from "./cover-seed";
+import { buildStampText, renderStampText } from "./cover-stamp";
+import { createTextMeasurer } from "./cover-text-measure";
+import { firstWordOf, statsFor } from "./cover-text-stats";
+import { buildTitleTextLayout, renderTitleTextLayer, TITLE_TEXT_FONT_SIZE, type TitleTextLayout } from "./cover-title-text";
+import { escapeXmlAttribute } from "./cover-xml";
+import { buildWaveRidges, renderWaveRidges, type WaveRidge } from "./cover-wave";
 
-/** Canonical cover pixel size — Open Graph's own 1200x630, reused here so the same aspect ratio holds all the way from the vector source to the final raster (`image-processing.ts`). */
+/**
+ * The v3 ("Organic", Bold mood) assembler — six layers, all confirmed live
+ * against real `sharp`/librsvg rasterization and real user feedback across
+ * three rounds of an interactive browser playground and a 12-category
+ * comparison gallery (see the `Generative Cover System v3` plan). Replaces
+ * the v1 "one mesh gradient" design entirely: `renderCoverSvg` now takes a
+ * fully-resolved `CoverComposition` PLUS the embedded font bytes, instead
+ * of a gradient-only data object.
+ */
+
+/** Canonical cover pixel size — Open Graph's own 1200x630. */
 export const COVER_WIDTH = 1200;
 export const COVER_HEIGHT = 630;
 
-const MIN_SPOTS = 3;
-const MAX_SPOTS = 5;
+/** Fixed spot count — v1 randomized this (3-5); the approved Bold mood uses a fixed, denser count instead, since variety now comes from flow/wave/letterform/title-text, not from how many mesh spots there are. */
+const SPOT_COUNT = 8;
+/** Spot radius as a fraction of canvas width — deliberately the SAME for every spot (not randomized per spot), unlike v1. */
+const SPOT_RADIUS_FRACTION = 0.48;
+const SPOT_OPACITY = 1;
+/** How far the extra two gradient stops sit (as a 0-1 "softness" fraction) — see `renderSpotGradient`'s own comment for the exact stop-position formula this drives. Fixed at 1 (maximum softness) in the approved Bold mood. */
+const SPOT_SOFTNESS = 1;
+/** Confirmed live (Day-0 gate, precise pixel-level check, not eyeballing) to be honoured by librsvg — see the plan's own gate section. */
+const MESH_BLEND_MODE = "overlay";
+const VIGNETTE_OPACITY = 0.22;
 
-interface CoverSpot {
+export interface CoverSpot {
     cx: number;
     cy: number;
     r: number;
     color: string;
 }
 
+/**
+ * Everything needed to render one cover, fully resolved — every random
+ * draw already made, every text already wrapped/measured. `renderCoverSvg`
+ * does no further decision-making, only string assembly, which is what
+ * lets a test hand-build one of these directly (see
+ * `cover-composition.test.ts`'s exact-markup test) without going through
+ * `buildCoverComposition` (and therefore without needing a real `Prng` or
+ * real font bytes) at all.
+ */
 export interface CoverComposition {
     base: string;
     spots: CoverSpot[];
-    /** Seeds the grain-tile dot layout (see `renderCoverSvg`) — one of the few things that varies purely for texture, independent of the colour/layout identity above. */
-    grainSeed: number;
+    flowCurves: FlowCurve[];
+    waveRidges: WaveRidge[];
+    letterformClip: LetterformClip;
+    titleTextLayout: TitleTextLayout | null;
+    stampText: string;
+}
+
+export interface CoverCompositionInput {
+    categoryHue: number;
+    title: string;
+    excerpt: string;
+    category: string;
+    date: string;
+    ref: string;
 }
 
 /**
- * Deterministic layout for one cover: how many spots (3-5), where each one
- * sits, how large it is, and its colour (via `cover-palette.ts`). `prng`
- * alone decides every value here, drawn in a FIXED order — given the exact
- * same `Prng` sequence (i.e. the same seed string, see `image-generator.ts`)
- * this returns byte-for-byte the same composition, which is what
- * `renderCoverSvg`'s determinism test pins end to end.
- *
- * Spot count and category hue are pure inputs; position/radius/hue-drift are
- * everything that makes two posts in the SAME category look like siblings,
- * not clones — see `media/README.md`'s "Алгоритм" section.
+ * Builds the fully-resolved composition for one cover. `prng` alone
+ * decides every RANDOM draw (spot positions, flow-curve shapes), drawn in
+ * a FIXED order, so the same `Prng` sequence always reproduces the exact
+ * same composition (pinned end to end by `covers.test.ts`'s
+ * cross-process determinism check). `fonts` is only consulted for the
+ * readable-title layer's real glyph-width measurement (`cover-text-measure.ts`)
+ * — it does no I/O itself, since `fonts` is already-read bytes by the time
+ * this runs (see `image-generator.ts`).
  */
-export function buildCoverComposition(categoryHue: number, prng: Prng): CoverComposition {
-    const spotCount = randomInt(prng, MIN_SPOTS, MAX_SPOTS);
-    const palette = buildCoverPalette(categoryHue, prng, spotCount);
+export function buildCoverComposition(input: CoverCompositionInput, prng: Prng, fonts: CoverFonts): CoverComposition {
+    const stats = statsFor(input.title, input.excerpt);
+    const palette = buildCoverPalette(input.categoryHue, prng, SPOT_COUNT);
 
     const spots: CoverSpot[] = palette.spots.map((color) => ({
-        // Kept away from the exact edges (10-90% of each axis) so a spot's
-        // soft-gradient falloff has room to read as a rounded blob rather
-        // than visibly clipping against the canvas edge.
-        cx: randomInRange(prng, 0.1, 0.9) * COVER_WIDTH,
-        cy: randomInRange(prng, 0.15, 0.85) * COVER_HEIGHT,
-        // Wide, heavily overlapping radii — this is what makes the result
-        // read as one continuous mesh instead of a few isolated dots with a
-        // visible seam of bare base colour between them (found by actually
-        // rendering a sample cover and looking at it, not assumed: a
-        // narrower 0.32-0.5 range left a hard-edged gap between two spots).
-        r: randomInRange(prng, 0.55, 0.75) * COVER_WIDTH,
+        cx: randomInRange(prng, 0.05, 0.95) * COVER_WIDTH,
+        cy: randomInRange(prng, 0.05, 0.95) * COVER_HEIGHT,
+        r: SPOT_RADIUS_FRACTION * COVER_WIDTH,
         color,
     }));
+
+    const flowCurves = buildFlowCurves(prng, stats, COVER_WIDTH, COVER_HEIGHT);
+    const waveRidges = buildWaveRidges(`${ input.title } ${ input.excerpt }`, COVER_WIDTH, COVER_HEIGHT);
+    const letterformClip = buildLetterformClip(firstWordOf(input.title), COVER_WIDTH, COVER_HEIGHT, "letterform-clip");
+
+    const titleMeasurer = createTextMeasurer(fonts.interExtraBold, TITLE_TEXT_FONT_SIZE);
+    const titleTextLayout = buildTitleTextLayout(titleMeasurer, input.title, COVER_WIDTH, COVER_HEIGHT, BASE_LIGHTNESS);
 
     return {
         base: palette.base,
         spots,
-        grainSeed: randomInt(prng, 1, 1_000_000),
+        flowCurves,
+        waveRidges,
+        letterformClip,
+        titleTextLayout,
+        stampText: buildStampText(input.category, input.ref, input.date),
     };
 }
 
 // ---------------------------------------------------------------------------
 // SVG rendering.
 //
-// Deliberately NO `feGaussianBlur`/`feTurbulence` anywhere below — librsvg
-// (sharp's built-in SVG rasterizer, see `image-processing.ts`) does not
-// render either identically to a browser, and this feature's whole premise
-// is ONE canonical raster computed once on the server (see
-// `media/README.md`'s "Гейт на первый день" entry). Every soft edge here is
-// a wide multi-stop `<radialGradient>` (the same technique the design
-// system's own CSS `meshGradient` token already uses — see
-// `frontend/src/shared/ui/theme/tokens.ts`), and the grain texture is a
-// small tiled `<pattern>` of plain, hard-edged dots — both render
-// byte-for-byte identically in every SVG implementation, because neither
-// uses a raster filter at all.
+// No `feGaussianBlur`/`feTurbulence` anywhere below (same reasoning as v1 —
+// librsvg's filter-primitive fidelity was never going to be trusted without
+// a live check, and every soft edge here is achievable with plain gradient
+// stops instead). `mix-blend-mode` IS used (`MESH_BLEND_MODE`) — confirmed
+// live to be honoured, unlike the filter primitives, which were never
+// re-tested and are still avoided out of the same caution.
 // ---------------------------------------------------------------------------
 
-const GRAIN_TILE_SIZE = 10;
-const GRAIN_DOTS_PER_TILE = 5;
-
-function escapeXmlAttribute(value: string): string {
-    return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-}
-
+/**
+ * Four gradient stops, not two — a wide, soft falloff is what reads as
+ * "blurred" using only gradient stops. The middle two stops' positions
+ * come from `SPOT_SOFTNESS` (confirmed in the browser playground: higher
+ * softness pushes the 55%-opacity stop further out, capped at 85% so it
+ * never reaches the fully-transparent edge stop).
+ */
 function renderSpotGradient(spot: CoverSpot, index: number): string {
     const id = `spot-${ index }`;
     const color = escapeXmlAttribute(spot.color);
-    // Four stops, not two — a long, gentle tail (55%/85% at 1/3 and 1/10
-    // opacity) is what actually reads as "softly blurred" using only
-    // gradient stops (no `feGaussianBlur`, see this module's top comment);
-    // a shorter falloff left a visible ring where one spot's gradient ended
-    // and the base colour showed through starkly, found the same way as
-    // the radius tuning above — by rendering a sample and looking at it.
+    const midStopPercent = 30 + SPOT_SOFTNESS * 25;
+    // `Math.min` vs `Math.max` here is unobservable at the CURRENT fixed
+    // `SPOT_SOFTNESS = 1` (midStopPercent + 30 always equals exactly 85,
+    // verified by hand), but this is a defensive clamp for a FUTURE
+    // `SPOT_SOFTNESS` change, not dead code to delete — unlike the
+    // opacity checks elsewhere in this slice that guarded a branch with no
+    // real future use.
+    // Stryker disable next-line MethodExpression
+    const outerStopPercent = Math.min(85, midStopPercent + 30);
     return `<radialGradient id="${ id }" cx="50%" cy="50%" r="50%">` +
-        `<stop offset="0%" stop-color="${ color }" stop-opacity="0.9"/>` +
-        `<stop offset="35%" stop-color="${ color }" stop-opacity="0.6"/>` +
-        `<stop offset="65%" stop-color="${ color }" stop-opacity="0.28"/>` +
+        `<stop offset="0%" stop-color="${ color }" stop-opacity="${ SPOT_OPACITY }"/>` +
+        `<stop offset="${ midStopPercent.toFixed(0) }%" stop-color="${ color }" stop-opacity="${ (SPOT_OPACITY * 0.55).toFixed(2) }"/>` +
+        `<stop offset="${ outerStopPercent.toFixed(0) }%" stop-color="${ color }" stop-opacity="${ (SPOT_OPACITY * 0.18).toFixed(2) }"/>` +
         `<stop offset="100%" stop-color="${ color }" stop-opacity="0"/>` +
         "</radialGradient>";
 }
@@ -104,52 +152,47 @@ function renderSpotCircle(spot: CoverSpot, index: number): string {
     return `<circle cx="${ spot.cx.toFixed(2) }" cy="${ spot.cy.toFixed(2) }" r="${ spot.r.toFixed(2) }" fill="url(#spot-${ index })"/>`;
 }
 
-/**
- * A small tiled dot pattern standing in for `feTurbulence` grain — see this
- * module's top comment for why. Re-seeded from `grainSeed` alone via
- * `prngFromSeed` (not the composition's own PRNG instance, which is long
- * exhausted by the time rendering runs) — reusing the exact same primitive
- * the rest of this slice uses, rather than a second hash algorithm, is what
- * keeps "deterministic" meaning the same thing everywhere in this file.
- */
-function renderGrainPattern(grainSeed: number): string {
-    const prng = prngFromSeed(String(grainSeed));
-    const dots = Array.from({ length: GRAIN_DOTS_PER_TILE }, () => {
-        const cx = randomInRange(prng, 0.5, GRAIN_TILE_SIZE - 0.5);
-        const cy = randomInRange(prng, 0.5, GRAIN_TILE_SIZE - 0.5);
-        const opacity = randomInRange(prng, 0.02, 0.06);
-        return `<circle cx="${ cx.toFixed(2) }" cy="${ cy.toFixed(2) }" r="0.6" fill="#ffffff" opacity="${ opacity.toFixed(3) }"/>`;
-    }).join("");
-
-    return `<pattern id="grain" width="${ GRAIN_TILE_SIZE }" height="${ GRAIN_TILE_SIZE }" patternUnits="userSpaceOnUse">${ dots }</pattern>`;
+/** The blended mesh group — reused VERBATIM both as the cover's main background layer and (a second time, same markup, referencing the same `<defs>` gradients by id) as the letterform-fill layer's clipped content, so the two visually match exactly. */
+function renderMeshSpots(spots: CoverSpot[]): string {
+    const circles = spots.map(renderSpotCircle).join("");
+    return `<g style="mix-blend-mode:${ MESH_BLEND_MODE }">${ circles }</g>`;
 }
 
 /**
- * Renders `composition` to a complete, standalone SVG document — the
+ * Renders `composition` to a complete, standalone SVG document —
  * `ProceduralImageGenerator`'s entire output (see `image-generator.ts`).
- * Pure and total: every input composition, including the degenerate
- * `spots: []` case, produces a valid SVG string (a bare base-colour fill),
- * never throws.
+ * `fonts` is needed here (not just at `buildCoverComposition` time)
+ * because the embedded-font `<style>` block references the actual bytes,
+ * not just their measurements. Pure and total: every composition,
+ * including a degenerate empty one, produces a valid SVG string, never
+ * throws.
  */
-export function renderCoverSvg(composition: CoverComposition): string {
+export function renderCoverSvg(composition: CoverComposition, fonts: CoverFonts): string {
     const spotGradients = composition.spots.map(renderSpotGradient).join("");
-    const spotCircles = composition.spots.map(renderSpotCircle).join("");
+    const meshMarkup = renderMeshSpots(composition.spots);
+
+    const letterformFill = `<rect width="${ COVER_WIDTH }" height="${ COVER_HEIGHT }" fill="${ escapeXmlAttribute(composition.base) }"/>${ meshMarkup }`;
 
     return (
         `<svg width="${ COVER_WIDTH }" height="${ COVER_HEIGHT }" viewBox="0 0 ${ COVER_WIDTH } ${ COVER_HEIGHT }" ` +
         `xmlns="http://www.w3.org/2000/svg">` +
         "<defs>" +
+        renderFontFaceStyle(fonts) +
         spotGradients +
-        renderGrainPattern(composition.grainSeed) +
-        `<radialGradient id="vignette" cx="50%" cy="50%" r="72%">` +
+        renderLetterformClipDef(composition.letterformClip) +
+        `<radialGradient id="vignette" cx="50%" cy="50%" r="75%">` +
         `<stop offset="55%" stop-color="#000000" stop-opacity="0"/>` +
-        `<stop offset="100%" stop-color="#000000" stop-opacity="0.4"/>` +
+        `<stop offset="100%" stop-color="#000000" stop-opacity="${ VIGNETTE_OPACITY }"/>` +
         "</radialGradient>" +
         "</defs>" +
         `<rect width="${ COVER_WIDTH }" height="${ COVER_HEIGHT }" fill="${ escapeXmlAttribute(composition.base) }"/>` +
-        spotCircles +
-        `<rect width="${ COVER_WIDTH }" height="${ COVER_HEIGHT }" fill="url(#grain)"/>` +
+        meshMarkup +
+        `<g>${ renderFlowCurves(composition.flowCurves) }</g>` +
+        `<g>${ renderWaveRidges(composition.waveRidges) }</g>` +
+        renderLetterformLayer(composition.letterformClip, letterformFill) +
+        renderTitleTextLayer(composition.titleTextLayout) +
         `<rect width="${ COVER_WIDTH }" height="${ COVER_HEIGHT }" fill="url(#vignette)"/>` +
+        renderStampText(composition.stampText, COVER_HEIGHT) +
         "</svg>"
     );
 }

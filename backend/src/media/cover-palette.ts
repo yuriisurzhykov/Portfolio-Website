@@ -5,35 +5,39 @@ import { randomInRange, type Prng } from "./cover-seed";
  * Lightness/chroma tokens — FIXED across every cover so only hue (identity,
  * from the category) and layout (variety, from the per-post seed) ever
  * change; a cover can never accidentally render too dark, too pale, or
- * radioactively oversaturated. Same OKLCH "family" as the design system's
- * own accent token (`frontend/src/shared/ui/theme/tokens.ts`'s
- * `palette.accent = oklch(0.72 0.17 45)`) — picked independently here
- * rather than imported, since `backend/` has no dependency on `frontend/`'s
- * token file (this package produces server-rendered SVG bytes, not app UI).
+ * radioactively oversaturated. Values are the "Bold" mood confirmed live in
+ * the `Generative Cover System v3` plan's interactive playground/gallery
+ * (`MOOD_B_BOLD`) — lighter and more saturated than v1's mesh gradient
+ * (`BASE_LIGHTNESS` was 0.2, `SPOT_LIGHTNESS` was 0.62), matched to how the
+ * new mesh renders with `overlay` blending (`cover-composition.ts`) rather
+ * than v1's plain alpha-stacked spots.
  *
- * Two roles, not one shared value: `BASE_*` is the dark, low-chroma canvas
- * every spot sits on top of (this is what makes the cover read as a mesh
- * gradient rather than a wash of one flat colour); `SPOT_*` is the vivid
- * colour of each blurred blob.
+ * Two roles, not one shared value: `BASE_*` is the canvas every spot sits
+ * on top of (this is what makes the cover read as a mesh gradient rather
+ * than a wash of one flat colour); `SPOT_*` is the vivid colour of each
+ * blurred blob.
  */
-export const BASE_LIGHTNESS = 0.2;
-export const BASE_CHROMA = 0.05;
-export const SPOT_LIGHTNESS = 0.62;
+export const BASE_LIGHTNESS = 0.39;
+export const BASE_CHROMA = 0.07;
+export const SPOT_LIGHTNESS = 0.8;
 export const SPOT_CHROMA = 0.16;
 
 /**
- * How far a spot's hue may drift from the category's own hue. Wide enough
- * that several spots read as distinct colour zones, never so wide that
- * mixing two of them crosses into muddy territory — OKLCH keeps a wide hue
- * spread looking clean far better than RGB does, but a mesh gradient still
- * only reads as ONE family of colour within a bounded spread (see
- * `media/README.md`'s "Алгоритм" section).
+ * How far a spot's hue may drift from the category's own hue — deliberately
+ * NARROW (was 20-40° in v1). Found live, not guessed: a wider spread (this
+ * module briefly went as high as 45-120° during playground exploration)
+ * let a "purple" category's spots drift far enough to visibly read as
+ * "pink" or "blue" instead, because OKLCH's in-gamut sRGB region is uneven
+ * across hues — the magenta/violet zone crosses into a different NAMED
+ * colour after a much smaller hue delta than, say, the green zone does. See
+ * the plan's "Как мы сюда пришли" section for the exact user-reported
+ * symptom this fixes.
  */
-const MIN_HUE_SPREAD_DEG = 20;
-const MAX_HUE_SPREAD_DEG = 40;
+export const MIN_HUE_SPREAD_DEG = 16;
+export const MAX_HUE_SPREAD_DEG = 17;
 
 export interface CoverPalette {
-    /** The dark, low-chroma canvas colour every spot sits on top of. */
+    /** The muted, low-chroma canvas colour every spot sits on top of. */
     base: string;
     /** `spotCount` vivid, related-hue colours — one per mesh-gradient spot, see `cover-composition.ts`. */
     spots: string[];

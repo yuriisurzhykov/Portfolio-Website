@@ -2,7 +2,7 @@ import type { Post as PostRow } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db/client";
 import { SlugAlreadyExistsError } from "../errors";
-import { ensureCoverMatchesCategory, generateCoverForPost } from "../media/covers";
+import { ensureCoverIsCurrent, generateCoverForPost } from "../media/covers";
 import { blockInputSchema, type Block } from "./blocks";
 import {
     discardAllDraftHistory,
@@ -408,16 +408,18 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
     await assertSlugAvailable(slug);
 
     const bodyDocumentId = await replaceDocumentContent(null, input.blocks);
+    const date = new Date().toISOString().slice(0, 10);
     const cover = await generateCoverForPost({
         slug,
         titleEn: input.title,
         excerptEn: input.excerpt,
         categoryEn: input.category,
+        date,
     });
     const row = await prisma.post.create({
         data: {
             slug,
-            date: new Date().toISOString().slice(0, 10),
+            date,
             title: { en: input.title, ru: "" },
             category: { en: input.category, ru: "" },
             readMins: estimateReadMins(input.blocks),
@@ -504,11 +506,11 @@ async function applyPostDraftToRow(
     const newSlug = data.slug ?? existing.slug;
     await assertSlugAvailable(newSlug, existing.slug);
 
-    // Runs BEFORE either `replaceDocumentContent` call below, deliberately
-    // — found in review: `replaceDocumentContent` mutates the LIVE
-    // `Document` in place, so a fallible cover generation (Sharp, disk
-    // I/O, the `MediaAsset` insert — see `IMAGE_GENERATOR=failing`)
-    // failing AFTER it used to leave readers seeing the new draft's body
+    // Runs BEFORE `replaceDocumentContent` below, deliberately — see this
+    // repo's dated fix entry in content/README.md (2026-08-11): `replaceDocumentContent`
+    // mutates the LIVE `Document` in place, so a fallible cover generation
+    // (Sharp, disk I/O, the `MediaAsset` insert — see `IMAGE_GENERATOR=failing`)
+    // failing AFTER it would leave readers seeing the new draft's body
     // combined with the OLD title/category/cover — a torn state "Discard
     // changes" cannot undo (it only deletes the `ContentDraft` row).
     // Generating the cover first means a failure here touches nothing
@@ -518,18 +520,19 @@ async function applyPostDraftToRow(
     // own comment above already gives for not threading a transactional
     // Prisma client through `replaceDocumentContent`.
     //
-    // Also the ONE place a category change is allowed to reach the live
-    // cover — same rule as every other field this function writes:
-    // nothing reaches `Post` until Publish/Update, INCLUDING the cover
-    // (see `savePostDraft`'s own comment for the real bug that existed
-    // before this rule applied to `coverAssetId` too). A no-op
-    // read-then-compare when the category didn't actually change — see
-    // `ensureCoverMatchesCategory`'s own comment for why that's cheap.
-    const coverAssetId = await ensureCoverMatchesCategory(existing.coverAssetId, {
+    // Also the ONE place a category/title/excerpt change is allowed to
+    // reach the live cover — same rule as every other field this function
+    // writes: nothing reaches `Post` until Publish/Update, INCLUDING the
+    // cover (see `savePostDraft`'s own comment for the real bug that
+    // existed before this rule applied to `coverAssetId` too). A no-op
+    // read-then-compare when nothing relevant actually changed — see
+    // `ensureCoverIsCurrent`'s own comment for why that's cheap.
+    const coverAssetId = await ensureCoverIsCurrent(existing.coverAssetId, {
         slug: newSlug,
         titleEn: data.title,
         excerptEn: data.excerpt,
         categoryEn: data.category,
+        date: existing.date,
     });
 
     const bodyDocumentId = await replaceDocumentContent(existing.bodyDocumentId, data.blocks);

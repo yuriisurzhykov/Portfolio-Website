@@ -91,7 +91,7 @@ export {
 export {
     clearPostCover,
     coverUrlFor,
-    ensureCoverMatchesCategory,
+    ensureCoverIsCurrent,
     generateCoverForPost,
     regenerateCoverForPost,
     resolveCategoryHue,

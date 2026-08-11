@@ -245,7 +245,7 @@ describe("savePostDraft", () => {
     it("does NOT touch the live cover — same draft/publish rule as every other field, verified for coverAssetId specifically", async () => {
         // `createPost`'s very first autosave fires the moment `title` stops
         // being empty, almost always BEFORE the admin has typed a category
-        // — see media/covers.ts's `ensureCoverMatchesCategory`. Reproduced
+        // — see media/covers.ts's `ensureCoverIsCurrent`. Reproduced
         // here exactly: create with an empty category first.
         const created = await createPost({ ...basePostInput, category: "" });
         const uncategorizedCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: created.slug } })).coverAssetId;
@@ -317,17 +317,32 @@ describe("publishPost — cover follows the category", () => {
         expect((await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId).toBe(originalCoverId);
     });
 
-    it("is idempotent — republishing with no category change reuses the same cover, no wasted MediaAsset rows", async () => {
+    it("is idempotent — republishing with no title/excerpt/category change reuses the same cover, no wasted MediaAsset rows", async () => {
         await createPost(basePostInput);
         await publishPost("test-post");
         const originalCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId;
 
-        await savePostDraft("test-post", { ...basePostInput, excerpt: "Just editing the excerpt." });
+        // Body blocks don't feed the cover at all (see cover-composition.ts)
+        // — editing them must never trigger a regeneration.
+        await savePostDraft("test-post", { ...basePostInput, blocks: [{ type: "lead", text: "A rewritten lead." }] });
         await publishPost("test-post");
 
         const after = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
         expect(after.coverAssetId).toBe(originalCoverId);
         expect(await prisma.mediaAsset.count()).toBe(1);
+    });
+
+    it("regenerates the cover on an excerpt-only change — v3's flow/wave/readable-title layers are shaped by the excerpt too, unlike v1's hue-only comparison", async () => {
+        await createPost(basePostInput);
+        await publishPost("test-post");
+        const originalCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId;
+
+        await savePostDraft("test-post", { ...basePostInput, excerpt: "A completely rewritten excerpt." });
+        await publishPost("test-post");
+
+        const after = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
+        expect(after.coverAssetId).not.toBe(originalCoverId);
+        expect(await prisma.mediaAsset.count()).toBe(2);
     });
 });
 

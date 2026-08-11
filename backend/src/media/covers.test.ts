@@ -3,9 +3,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
-import { coverUrlFor, ensureCoverMatchesCategory, generateCoverForPost, resolveCategoryHue } from "./covers";
+import { CURRENT_COVER_STYLE_VERSION } from "./cover-brief";
+import { computeContentHash, coverUrlFor, ensureCoverIsCurrent, generateCoverForPost, resolveCategoryHue } from "./covers";
 import { hueForOrdinal } from "./cover-hue";
 import { DiskMediaStore, setMediaStoreForTesting } from "./media-store";
+
+const DATE = "2026-08-10";
 
 beforeEach(async () => {
     await resetTestDatabase();
@@ -75,6 +78,7 @@ describe("generateCoverForPost", () => {
             titleEn: "My First Post",
             excerptEn: "An excerpt.",
             categoryEn: "Kotlin",
+            date: DATE,
         });
 
         expect(asset.kind).toBe("post-cover");
@@ -85,12 +89,27 @@ describe("generateCoverForPost", () => {
         expect(await prisma.mediaAsset.count()).toBe(1);
     });
 
-    it("is deterministic across processes: the same slug/category/variant reproduces the exact same contentHash", async () => {
+    it("records the current styleVersion and a contentHash derived from title+excerpt", async () => {
+        const asset = await generateCoverForPost({
+            slug: "flowbus",
+            titleEn: "FlowBus",
+            excerptEn: "Why I built it.",
+            categoryEn: "Architecture",
+            date: DATE,
+        });
+
+        const generation = asset.generation as { styleVersion: number; contentHash: string };
+        expect(generation.styleVersion).toBe(CURRENT_COVER_STYLE_VERSION);
+        expect(generation.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("is deterministic across processes: the same slug/category/title/excerpt/variant reproduces the exact same contentHash", async () => {
         const first = await generateCoverForPost({
             slug: "flowbus",
             titleEn: "FlowBus",
             excerptEn: "Why I built it.",
             categoryEn: "Architecture",
+            date: DATE,
         });
 
         // Simulates "regenerate after a restart" — a brand-new PRNG/sharp
@@ -100,6 +119,7 @@ describe("generateCoverForPost", () => {
             titleEn: "FlowBus",
             excerptEn: "Why I built it.",
             categoryEn: "Architecture",
+            date: DATE,
         });
 
         expect(second.contentHash).toBe(first.contentHash);
@@ -116,6 +136,7 @@ describe("generateCoverForPost", () => {
             titleEn: "FlowBus",
             excerptEn: "Why I built it.",
             categoryEn: "Architecture",
+            date: DATE,
             variant: 1,
         });
         const variant2 = await generateCoverForPost({
@@ -123,6 +144,7 @@ describe("generateCoverForPost", () => {
             titleEn: "FlowBus",
             excerptEn: "Why I built it.",
             categoryEn: "Architecture",
+            date: DATE,
             variant: 2,
         });
 
@@ -135,12 +157,14 @@ describe("generateCoverForPost", () => {
             titleEn: "Post A",
             excerptEn: "",
             categoryEn: "Kotlin",
+            date: DATE,
         });
         const second = await generateCoverForPost({
             slug: "post-b",
             titleEn: "Post B",
             excerptEn: "",
             categoryEn: "Kotlin",
+            date: DATE,
         });
 
         expect(second.contentHash).not.toBe(first.contentHash);
@@ -150,13 +174,14 @@ describe("generateCoverForPost", () => {
     });
 });
 
-describe("ensureCoverMatchesCategory", () => {
+describe("ensureCoverIsCurrent", () => {
     it("regenerates when there is no existing cover at all", async () => {
-        const assetId = await ensureCoverMatchesCategory(null, {
+        const assetId = await ensureCoverIsCurrent(null, {
             slug: "no-cover-yet",
             titleEn: "No Cover Yet",
             excerptEn: "",
             categoryEn: "Kotlin",
+            date: DATE,
         });
 
         const asset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: assetId } });
@@ -164,19 +189,21 @@ describe("ensureCoverMatchesCategory", () => {
         expect((asset.generation as { hue: number }).hue).toBeCloseTo(category.hue);
     });
 
-    it("reuses the SAME cover when the category hasn't changed — the fix's whole point: no wasted regeneration on every autosave tick", async () => {
+    it("reuses the SAME cover when NOTHING relevant changed — no wasted regeneration on every publish where the post is unchanged", async () => {
         const first = await generateCoverForPost({
-            slug: "stable-category",
-            titleEn: "Stable Category",
-            excerptEn: "",
+            slug: "stable-post",
+            titleEn: "Stable Post",
+            excerptEn: "An unchanging excerpt.",
             categoryEn: "Kotlin",
+            date: DATE,
         });
 
-        const second = await ensureCoverMatchesCategory(first.id, {
-            slug: "stable-category",
-            titleEn: "Stable Category (edited title)",
-            excerptEn: "An excerpt added later.",
+        const second = await ensureCoverIsCurrent(first.id, {
+            slug: "stable-post",
+            titleEn: "Stable Post",
+            excerptEn: "An unchanging excerpt.",
             categoryEn: "Kotlin",
+            date: DATE,
         });
 
         expect(second).toBe(first.id);
@@ -193,21 +220,116 @@ describe("ensureCoverMatchesCategory", () => {
             titleEn: "Post In Progress",
             excerptEn: "",
             categoryEn: "",
+            date: DATE,
         });
 
-        // The admin then types the real category — the NEXT autosave
-        // (`savePostDraft`) must correct the cover, not leave it frozen.
-        const corrected = await ensureCoverMatchesCategory(uncategorized.id, {
+        // The admin then types the real category — the NEXT publish must
+        // correct the cover, not leave it frozen.
+        const corrected = await ensureCoverIsCurrent(uncategorized.id, {
             slug: "post-in-progress",
             titleEn: "Post In Progress",
             excerptEn: "",
             categoryEn: "Architecture",
+            date: DATE,
         });
 
         expect(corrected).not.toBe(uncategorized.id);
         const correctedAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: corrected } });
         const category = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "architecture" } });
         expect((correctedAsset.generation as { hue: number }).hue).toBeCloseTo(category.hue);
+    });
+
+    it("regenerates when the title/excerpt changed but the category stayed the same — v3's title-driven layers would otherwise go stale", async () => {
+        // The behavior v1's `ensureCoverMatchesCategory` deliberately did
+        // NOT have (it only ever compared hue) — v3's flow/wave/letterform/
+        // readable-title layers are all shaped by title+excerpt, so an
+        // edited title with an unchanged category must still regenerate.
+        const first = await generateCoverForPost({
+            slug: "retitled-post",
+            titleEn: "Original Title",
+            excerptEn: "Original excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        const second = await ensureCoverIsCurrent(first.id, {
+            slug: "retitled-post",
+            titleEn: "A Completely Different Title",
+            excerptEn: "Original excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(second).not.toBe(first.id);
+        expect(await prisma.mediaAsset.count()).toBe(2);
+    });
+
+    it("regenerates when only the excerpt changed, title and category unchanged", async () => {
+        const first = await generateCoverForPost({
+            slug: "re-excerpted-post",
+            titleEn: "Same Title",
+            excerptEn: "Original excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        const second = await ensureCoverIsCurrent(first.id, {
+            slug: "re-excerpted-post",
+            titleEn: "Same Title",
+            excerptEn: "A totally different excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(second).not.toBe(first.id);
+    });
+
+    it("regenerates a cover whose stored styleVersion is older than CURRENT_COVER_STYLE_VERSION, even with matching hue AND contentHash", async () => {
+        // Simulates a real v1 row from before this rewrite: same hue, same
+        // contentHash (title/excerpt haven't changed) as what today's post
+        // would compute — but rendered by an OLDER algorithm, so its actual
+        // pixels are stale even though its BOOKKEEPING fields (hue,
+        // contentHash) still match. A crafted row with a random, never-
+        // colliding `contentHash` column (distinct from the metadata
+        // `contentHash` field inside `generation`, which is what
+        // `ensureCoverIsCurrent` actually compares) is used here instead of
+        // a real `generateCoverForPost` call, specifically so the RE-render
+        // this test triggers can't spuriously dedup back onto this same
+        // row — see this test file's own history for why a same-bytes
+        // dedup hit made an earlier version of this test meaningless.
+        const category = await resolveCategoryHue("Kotlin");
+        const staleRow = await prisma.mediaAsset.create({
+            data: {
+                contentHash: `stale-row-${ crypto.randomUUID() }`,
+                storageKey: "covers/stale-row",
+                mimeType: "image/webp",
+                width: 1200,
+                height: 630,
+                byteSize: 1,
+                placeholder: "data:image/webp;base64,",
+                kind: "post-cover",
+                generation: {
+                    generator: "procedural",
+                    styleVersion: CURRENT_COVER_STYLE_VERSION - 1,
+                    variant: 1,
+                    seed: "stale-style-version",
+                    hue: category,
+                    contentHash: computeContentHash("Same Title", "Same excerpt."),
+                },
+            },
+        });
+
+        const upgraded = await ensureCoverIsCurrent(staleRow.id, {
+            slug: "stale-style-version",
+            titleEn: "Same Title",
+            excerptEn: "Same excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(upgraded).not.toBe(staleRow.id);
+        const upgradedAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: upgraded } });
+        expect((upgradedAsset.generation as { styleVersion: number }).styleVersion).toBe(CURRENT_COVER_STYLE_VERSION);
     });
 });
 
@@ -223,6 +345,7 @@ describe("coverUrlFor", () => {
             titleEn: "URL check",
             excerptEn: "",
             categoryEn: "Kotlin",
+            date: DATE,
         });
 
         const cover = coverUrlFor(asset);

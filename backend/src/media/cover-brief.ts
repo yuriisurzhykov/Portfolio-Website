@@ -5,12 +5,20 @@ import type { ContentLocale } from "../content/locale";
  * visible in `MediaAsset.generation` (see schema.prisma) — e.g. adopting a
  * new mesh-gradient technique. NOT bumped for a routine reroll (that's
  * `variant`, see below) or a category's hue changing (that's carried
- * separately, via `CoverBrief.hue`). Read by `covers.ts` when deciding
- * whether an existing `MediaAsset` can be reused, and folded into the PRNG
- * seed (`image-generator.ts`) so a style-version bump naturally produces a
- * different layout even for an unchanged slug.
+ * separately, via `CoverBrief.hue`). Read by `covers.ts`'s
+ * `ensureCoverIsCurrent` when deciding whether an existing `MediaAsset` can
+ * be reused, and folded into the PRNG seed (`image-generator.ts`) so a
+ * style-version bump naturally produces a different layout even for an
+ * unchanged slug.
+ *
+ * 2 (this value) is the "Generative Cover System v3 — Organic" rewrite:
+ * `cover-composition.ts` went from a single mesh gradient to six layers
+ * (mesh + flow curves + waveform + letterform-fill + readable title +
+ * stamp), all driven by title/excerpt content, not just hue. Bumping this
+ * is what makes `backfill-post-covers.ts` upgrade every existing v1 cover
+ * the next time it runs, with no new script needed.
  */
-export const CURRENT_COVER_STYLE_VERSION = 1;
+export const CURRENT_COVER_STYLE_VERSION = 2;
 
 /**
  * What a cover generator needs to know about a post — described by the
@@ -36,6 +44,8 @@ export interface CoverBrief {
     styleVersion: number;
     /** Which layout attempt this is for an otherwise-unchanged post — incremented by a Phase 2 reroll action, defaults to 1 for a brand-new post. */
     variant: number;
+    /** `Post.date` verbatim (already a display-formatted string, see schema.prisma) — read only by the v3 organic generator's technical-stamp layer (`cover-stamp.ts`), never parsed or reformatted here. */
+    date: string;
 }
 
 export interface CoverBriefInput {
@@ -44,6 +54,7 @@ export interface CoverBriefInput {
     excerpt: string;
     category: string;
     hue: number;
+    date: string;
     locale?: ContentLocale;
     variant?: number;
 }
@@ -59,5 +70,6 @@ export function buildCoverBrief(input: CoverBriefInput): CoverBrief {
         locale: input.locale ?? "en",
         styleVersion: CURRENT_COVER_STYLE_VERSION,
         variant: input.variant ?? 1,
+        date: input.date,
     };
 }

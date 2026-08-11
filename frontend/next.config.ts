@@ -37,6 +37,13 @@ if (!process.env.MEDIA_DIR) {
   process.env.MEDIA_DIR = path.resolve(__dirname, "../backend/media");
 }
 
+// Same problem, same fix, for `backend/src/media/cover-fonts.ts`'s embedded
+// TTF subsets (the procedural cover generator's readable-title/letterform/
+// stamp layers) — see the comment above for the full story.
+if (!process.env.COVER_FONTS_DIR) {
+  process.env.COVER_FONTS_DIR = path.resolve(__dirname, "../backend/src/media/fonts");
+}
+
 const nextConfig: NextConfig = {
   // @portfolio/backend (npm workspace package, see /backend and frontend/README.md)
   // ships its own TypeScript source with no build step of its own — Next.js
