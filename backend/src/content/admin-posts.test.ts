@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { isSlugAlreadyExistsError } from "../errors";
 import { isInvalidLifecycleTransitionError } from "./lifecycle";
+import { FailingImageGenerator, setImageGeneratorForTesting } from "../media/image-generator";
 import { getJournalEntries, getPostBySlug } from "./posts";
 import { findCurrentSlug } from "./slug-history";
 import {
@@ -342,6 +343,45 @@ describe("publishPost — cover follows the category", () => {
         const after = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
         expect(after.coverAssetId).not.toBe(originalCoverId);
         expect(await prisma.mediaAsset.count()).toBe(2);
+    });
+});
+
+describe("publishPost — cover generation failure keeps the publish atomic", () => {
+    afterEach(() => {
+        setImageGeneratorForTesting(undefined);
+    });
+
+    it("rejects and leaves the live body/title/cover completely untouched when cover regeneration fails", async () => {
+        await createPost(basePostInput); // category: "Notes"
+        await publishPost("test-post");
+        const before = await getPostBySlug("test-post");
+        const originalCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId;
+
+        // A category change forces `ensureCoverMatchesCategory` to attempt a
+        // real regeneration (see the "cover follows the category" suite
+        // above) — paired here with a body/title edit, so a bug that lets
+        // the live document through BEFORE the (now failing) cover step
+        // would be caught: `before.body`/`before.title` would differ from
+        // what's actually live after the rejected publish.
+        await savePostDraft("test-post", {
+            ...basePostInput,
+            title: "Half-Finished Rewrite",
+            category: "Architecture",
+            blocks: [{ type: "lead", text: "This must never reach real readers." }],
+        });
+
+        setImageGeneratorForTesting(new FailingImageGenerator());
+        await expect(publishPost("test-post")).rejects.toThrow();
+
+        const after = await getPostBySlug("test-post");
+        expect(after?.title.en).toBe(before?.title.en);
+        expect(after?.body).toEqual(before?.body);
+        expect((await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId).toBe(originalCoverId);
+
+        // The failed publish must not have discarded the pending draft —
+        // the admin's edit is still there to retry once generation works.
+        const admin = await getPostForAdmin("test-post");
+        expect(admin?.hasUnpublishedChanges).toBe(true);
     });
 });
 

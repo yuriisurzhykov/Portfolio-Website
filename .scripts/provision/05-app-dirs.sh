@@ -29,7 +29,19 @@
 #       NEXT deploy instead of vanishing with the release directory that
 #       created it.
 #
-# Idempotent: `mkdir -p`/`chown`/`chmod` are naturally safe to re-run.
+# `shared/media` being mode 755 is NOT enough on its own for nginx to reach
+# it — found in review, not live: Unix path traversal requires execute
+# ("search") permission on EVERY ancestor directory, and `shared/` itself
+# is mode 700 (nextapp-only), which blocks nginx from ever entering it,
+# regardless of what `shared/media`'s own mode says. A plain `chmod` can't
+# fix this without ALSO exposing `shared/.env` (still mode 600, but now
+# listable/enterable by anyone) — a POSIX ACL grants nginx exactly one bit
+# (execute/traversal only, no read, no write) on `shared/` itself, so
+# `shared/.env`'s own mode stays the real access boundary for everyone
+# else. See this script's live-verification block at the bottom.
+#
+# Idempotent: `mkdir -p`/`chown`/`chmod`/`setfacl -m` are naturally safe to
+# re-run.
 #
 # Verified manually against the real VPS before being written here.
 set -euo pipefail
@@ -37,6 +49,10 @@ set -euo pipefail
 BASE_DIR="${APP_BASE_DIR:-/srv/apps/yuriisoft-web}"
 DEPLOY_USER="yuriisoft"
 APP_USER="nextapp"
+# Ubuntu's nginx package default worker user — not configured anywhere in
+# these provision scripts (10-nginx-site.sh assumes the distro default),
+# so it's named once here the same way APP_USER/DEPLOY_USER are.
+NGINX_USER="www-data"
 
 sudo mkdir -p "${BASE_DIR}/releases"
 sudo mkdir -p "${BASE_DIR}/shared"
@@ -53,6 +69,34 @@ sudo chmod 700 "${BASE_DIR}/shared"
 sudo chown "${APP_USER}:${APP_USER}" "${BASE_DIR}/shared/media"
 sudo chmod 755 "${BASE_DIR}/shared/media"
 
+if ! command -v setfacl &>/dev/null; then
+  echo "Installing acl package (setfacl/getfacl)..."
+  sudo apt-get update
+  sudo apt-get install -y acl
+fi
+
+# Execute-only, no read, no write — lets nginx traverse THROUGH shared/ to
+# reach shared/media/ without being able to list shared/'s contents or
+# open shared/.env (that file's own mode 600 already blocks reading it
+# outright; this ACL never touches that).
+sudo setfacl -m "u:${NGINX_USER}:--x" "${BASE_DIR}/shared"
+
 echo
 echo "Resulting layout:"
 ls -la "${BASE_DIR}/"
+getfacl "${BASE_DIR}/shared" 2>/dev/null | grep -v '^#'
+
+echo
+echo "Verifying nginx (${NGINX_USER}) can traverse into shared/media but still cannot read shared/.env..."
+if sudo -u "${NGINX_USER}" test -r "${BASE_DIR}/shared/media"; then
+  echo "OK: ${NGINX_USER} can reach ${BASE_DIR}/shared/media."
+else
+  echo "ERROR: ${NGINX_USER} still cannot reach ${BASE_DIR}/shared/media — check the ACL with: getfacl \"${BASE_DIR}/shared\"" >&2
+  exit 1
+fi
+
+if sudo -u "${NGINX_USER}" test -r "${BASE_DIR}/shared/.env" 2>/dev/null; then
+  echo "WARNING: ${NGINX_USER} can also read ${BASE_DIR}/shared/.env — the ACL is too broad." >&2
+else
+  echo "OK: ${NGINX_USER} still cannot read ${BASE_DIR}/shared/.env, as expected."
+fi

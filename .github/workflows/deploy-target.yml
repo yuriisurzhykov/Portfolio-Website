@@ -134,6 +134,27 @@ jobs:
               "SEO_INDEXABLE=${{ inputs.seo-indexable }}" \
               "SITE_URL=${{ inputs.site-url }}"
 
+      # Self-heals a target provisioned BEFORE `provision/06-app-env.sh`
+      # started writing MEDIA_DIR into a brand-new shared/.env — that
+      # script explicitly refuses to touch an EXISTING .env (by design, see
+      # its own comment), so a pre-existing dev/prod target would otherwise
+      # never pick this key up and would keep falling back to
+      # next.config.ts's release-local default, which vanishes every
+      # deploy while nginx keeps serving shared/media. Unconditional (no
+      # continue-on-error), unlike the Upstash/PlantUML sync below: this
+      # value is derived, always correct, and not a secret, so there's no
+      # "not configured yet" case to tolerate.
+      - name: Sync MEDIA_DIR (${{ inputs.environment-name }})
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            sudo /usr/local/bin/set-app-env-finish.sh ${{ inputs.base-dir }} \
+              "MEDIA_DIR=${{ inputs.base-dir }}/shared/media"
+
       - name: Deploy on Server (${{ inputs.environment-name }})
         uses: appleboy/ssh-action@v1.2.5
         with:
