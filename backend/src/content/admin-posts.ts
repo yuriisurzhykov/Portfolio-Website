@@ -506,9 +506,22 @@ async function applyPostDraftToRow(
     const newSlug = data.slug ?? existing.slug;
     await assertSlugAvailable(newSlug, existing.slug);
 
-    const bodyDocumentId = await replaceDocumentContent(existing.bodyDocumentId, data.blocks);
-    // The ONE place a category/title/excerpt change is allowed to reach
-    // the live cover — same rule as every other field this function
+    // Runs BEFORE `replaceDocumentContent` below, deliberately — see this
+    // repo's dated fix entry in content/README.md (2026-08-11): `replaceDocumentContent`
+    // mutates the LIVE `Document` in place, so a fallible cover generation
+    // (Sharp, disk I/O, the `MediaAsset` insert — see `IMAGE_GENERATOR=failing`)
+    // failing AFTER it would leave readers seeing the new draft's body
+    // combined with the OLD title/category/cover — a torn state "Discard
+    // changes" cannot undo (it only deletes the `ContentDraft` row).
+    // Generating the cover first means a failure here touches nothing
+    // live, at the cost of, at worst, one harmless orphaned `MediaAsset`
+    // row if a LATER step fails instead — the same "narrow, low-severity
+    // gap accepted on a single-admin app" reasoning `assertSlugAvailable`'s
+    // own comment above already gives for not threading a transactional
+    // Prisma client through `replaceDocumentContent`.
+    //
+    // Also the ONE place a category/title/excerpt change is allowed to
+    // reach the live cover — same rule as every other field this function
     // writes: nothing reaches `Post` until Publish/Update, INCLUDING the
     // cover (see `savePostDraft`'s own comment for the real bug that
     // existed before this rule applied to `coverAssetId` too). A no-op
@@ -521,6 +534,8 @@ async function applyPostDraftToRow(
         categoryEn: data.category,
         date: existing.date,
     });
+
+    const bodyDocumentId = await replaceDocumentContent(existing.bodyDocumentId, data.blocks);
 
     const existingTitle = localizedTextSchema.parse(existing.title);
     const existingCategory = localizedTextSchema.parse(existing.category);

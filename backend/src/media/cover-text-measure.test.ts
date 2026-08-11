@@ -60,15 +60,15 @@ describe("truncateWithEllipsis", () => {
     it("strips ALL trailing whitespace left after truncation, not just one character", () => {
         // "AB CD" at 10px/char, maxWidthPx=41: shrinks AB CD(60) -> AB C(50)
         // -> AB␣(40, first width <= 41) — landing exactly on a trailing
-        // space, which the final `.replace(/\s+$/, "")` must strip before
-        // appending the ellipsis.
+        // space, which the final `.trimEnd()` must strip before appending
+        // the ellipsis.
         expect(truncateWithEllipsis(fixedWidthMeasurer(10), "AB CD", 41)).toBe("AB…");
     });
 
-    it("strips a run of MULTIPLE trailing spaces entirely, not just the last one (kills a `\\s+$` -> `\\s$` mutant)", () => {
+    it("strips a run of MULTIPLE trailing spaces entirely, not just the last one", () => {
         // "AB  CD" (two spaces) at maxWidthPx=50 shrinks down to "AB  "
-        // (two trailing spaces) before the width check passes — a `\s$`
-        // mutant would strip only the LAST space, leaving one behind.
+        // (two trailing spaces) before the width check passes — `.trimEnd()`
+        // must strip the WHOLE run, not just the last space.
         expect(truncateWithEllipsis(fixedWidthMeasurer(10), "AB  CD", 50)).toBe("AB…");
     });
 
@@ -80,15 +80,15 @@ describe("truncateWithEllipsis", () => {
     });
 
     it("does not strip a non-whitespace character immediately before the end", () => {
-        // Guards against a mutant that widens the strip regex (e.g. to
-        // `\S+$`, which would eat real characters, not just whitespace).
+        // Guards against a mutant that strips more than whitespace (e.g.
+        // swapping `.trimEnd()` for something that also eats real characters).
         expect(truncateWithEllipsis(fixedWidthMeasurer(10), "abcdef", 100)).toBe("abcdef…");
     });
 
     it("only strips TRAILING whitespace, never whitespace elsewhere in the line", () => {
-        // Guards against a mutant that drops the `$` anchor (e.g. `\s+`
-        // alone), which would strip the FIRST run of whitespace instead
-        // of specifically the trailing one.
+        // Guards against a mutant that trims from the wrong end (e.g.
+        // `.trim()`/`.trimStart()` instead of `.trimEnd()`), which would
+        // strip whitespace it should leave alone.
         const result = truncateWithEllipsis(fixedWidthMeasurer(10), "a b", 100);
         expect(result).toBe("a b…");
     });

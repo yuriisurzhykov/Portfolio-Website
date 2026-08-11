@@ -268,7 +268,22 @@ const sha256Hex = async (str) => {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
     return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
-function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+// Every free-text field (title/excerpt/category/...) ends up embedded into
+// an SVG string that this same page later assigns to `innerHTML` (see
+// `rerender()` below) — a classic DOM-based-XSS shape (flagged by CodeQL:
+// "DOM text reinterpreted as HTML") if that text isn't escaped first. The
+// previous version of this function hand-rolled a regex `replace()` chain
+// that also happened to be INCOMPLETE (missing `>` and `'`) — using the
+// browser's own serializer instead (round-trip through a scratch element's
+// `textContent`/`innerHTML`) is both provably correct for every meta-
+// character and the standard, widely-recognized way to escape untrusted
+// text for safe HTML/SVG embedding, instead of trying to enumerate every
+// special character by hand.
+const escScratch = document.createElement("div");
+function esc(s) {
+    escScratch.textContent = String(s);
+    return escScratch.innerHTML;
+}
 
 // ---------------------------------------------------------------------------
 // Text statistics — the "expresses the title" input. Combines title +

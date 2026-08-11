@@ -57,7 +57,12 @@ export function truncateWithEllipsis(measurer: TextMeasurer, line: string, maxWi
     while (truncated.length > 1 && measurer.widthOf(truncated + ELLIPSIS) > maxWidthPx) {
         truncated = truncated.slice(0, -1);
     }
-    return truncated.replace(/\s+$/, "") + ELLIPSIS;
+    // `.trimEnd()`, not `.replace(/\s+$/, "")` — CodeQL flags the regex as a
+    // polynomial-time ReDoS risk on uncontrolled input (an unanchored-start,
+    // quantified pattern anchored only at `$`), and `line` ultimately comes
+    // from an admin-supplied post title. The built-in does the exact same
+    // trailing-whitespace trim with no backtracking at all.
+    return truncated.trimEnd() + ELLIPSIS;
 }
 
 /**
