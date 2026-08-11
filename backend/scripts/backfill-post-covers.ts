@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/db/client";
 import { localizedTextSchema } from "../src/content/localized-text";
-import { ensureCoverMatchesCategory } from "../src/media/covers";
+import { ensureCoverIsCurrent } from "../src/media/covers";
 
 /**
  * One-off backfill for posts created BEFORE procedural covers existed —
@@ -11,19 +11,25 @@ import { ensureCoverMatchesCategory } from "../src/media/covers";
  * ever revisits it (`publishPost` is a deliberate no-op for an
  * already-published post with no pending draft — see its own comment in
  * `admin-posts.ts` — so simply clicking "Update" in the editor does NOT
- * trigger this; that no-op path never reaches `ensureCoverMatchesCategory`
+ * trigger this; that no-op path never reaches `ensureCoverIsCurrent`
  * at all).
+ *
+ * Also the mechanism that upgrades every post to a NEW rendering algorithm
+ * after a `CURRENT_COVER_STYLE_VERSION` bump (see `cover-brief.ts`) —
+ * `ensureCoverIsCurrent` compares `styleVersion` too, not just category/
+ * title/excerpt, so re-running this exact script after the v3 "Organic"
+ * rewrite regenerates every v1 cover with no new script needed.
  *
  * Covers EVERY post regardless of lifecycle state (DRAFT and PUBLISHED
  * alike) — a draft deserves the same consistency an admin would expect
  * from `createPost`, even though only published ones are ever publicly
  * visible.
  *
- * Safe to re-run: `ensureCoverMatchesCategory` is a no-op (one indexed
- * read, no rasterization, no write) for any post whose cover already
- * matches its current category's hue — see that function's own comment.
- * Running this twice in a row costs one cheap read per post the second
- * time, nothing more.
+ * Safe to re-run: `ensureCoverIsCurrent` is a no-op (one indexed read, no
+ * rasterization, no write) for any post whose cover already matches its
+ * current category/title/excerpt/styleVersion — see that function's own
+ * comment. Running this twice in a row costs one cheap read per post the
+ * second time, nothing more.
  */
 async function main() {
     const posts = await prisma.post.findMany({ orderBy: { createdAt: "asc" } });
@@ -37,11 +43,12 @@ async function main() {
         const category = localizedTextSchema.parse(post.category).en;
         const excerpt = localizedTextSchema.parse(post.excerpt).en;
 
-        const coverAssetId = await ensureCoverMatchesCategory(post.coverAssetId, {
+        const coverAssetId = await ensureCoverIsCurrent(post.coverAssetId, {
             slug: post.slug,
             titleEn: title,
             excerptEn: excerpt,
             categoryEn: category,
+            date: post.date,
         });
 
         if (coverAssetId === post.coverAssetId) {

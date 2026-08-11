@@ -2,7 +2,8 @@ import { prisma } from "../db/client";
 import { isUniqueConstraintError } from "../errors";
 import type { ContentLocale } from "../content/locale";
 import { localizedTextSchema } from "../content/localized-text";
-import { buildCoverBrief } from "./cover-brief";
+import { buildCoverBrief, CURRENT_COVER_STYLE_VERSION } from "./cover-brief";
+import { sha256Hex } from "./content-hash";
 import { hueForOrdinal } from "./cover-hue";
 import { getImageGenerator } from "./image-generator";
 import { fullVariantKey, narrowVariantKey, rasterizeCover } from "./image-processing";
@@ -88,9 +89,24 @@ export interface CoverSourcePost {
     titleEn: string;
     excerptEn: string;
     categoryEn: string;
+    /** `Post.date` verbatim — see `cover-brief.ts`'s own comment on `CoverBrief.date`. */
+    date: string;
     locale?: ContentLocale;
     /** Which layout attempt this is — omit for a brand-new post (defaults to 1 inside `buildCoverBrief`); a Phase 2 reroll action passes an incremented value. */
     variant?: number;
+}
+
+/**
+ * A short hash of the text that actually shapes the v3 composition (flow
+ * curves, waveform, letterform-fill, readable title) — used by
+ * `ensureCoverIsCurrent` to detect "the title or excerpt changed" the same
+ * way it already detects "the category changed" via hue. Both title AND
+ * excerpt feed in (a `\0`-joined pair, not a naive concatenation, so
+ * `("ab", "c")` and `("a", "bc")` never accidentally collide on the same
+ * hash) — reuses `content-hash.ts`'s `sha256Hex`, no new hashing primitive.
+ */
+export function computeContentHash(titleEn: string, excerptEn: string): string {
+    return sha256Hex(Buffer.from(`${ titleEn }\0${ excerptEn }`, "utf-8"));
 }
 
 interface MediaAssetRow {
@@ -128,6 +144,7 @@ export async function generateCoverForPost(post: CoverSourcePost): Promise<Media
         excerpt: post.excerptEn,
         category: post.categoryEn,
         hue,
+        date: post.date,
         locale: post.locale,
         variant: post.variant,
     });
@@ -164,52 +181,94 @@ export async function generateCoverForPost(post: CoverSourcePost): Promise<Media
                 variant: brief.variant,
                 seed: brief.seed,
                 hue: brief.hue,
+                // Lets `ensureCoverIsCurrent` detect a changed title/excerpt
+                // the same way it already detects a changed category (via
+                // `hue`) — see `computeContentHash`'s own comment.
+                contentHash: computeContentHash(post.titleEn, post.excerptEn),
                 svgSource: generated.source ?? null,
             },
         },
     });
 }
 
-/** Reads `generation.hue` back out of a `MediaAsset`'s untyped `Json` column defensively — see `readVariant`'s identical reasoning below; a malformed/legacy value compares unequal to any real hue, which correctly forces a regeneration rather than silently keeping a cover that might not match. */
-function readHue(generation: unknown): number | null {
-    if (typeof generation === "object" && generation !== null && "hue" in generation) {
-        const value = (generation as { hue: unknown }).hue;
-        return typeof value === "number" ? value : null;
+/** Reads one numeric/string field back out of a `MediaAsset`'s untyped `Json` `generation` column defensively — a malformed/legacy value (or a field that didn't exist yet under an older `styleVersion`, like `contentHash`) reads back as `null`, which compares unequal to any real value and correctly forces a regeneration rather than silently keeping a cover that might not match. */
+function readGenerationField(generation: unknown, field: string): unknown {
+    if (typeof generation === "object" && generation !== null && field in generation) {
+        return (generation as Record<string, unknown>)[field];
     }
     return null;
 }
 
+function readHue(generation: unknown): number | null {
+    const value = readGenerationField(generation, "hue");
+    return typeof value === "number" ? value : null;
+}
+
+function readContentHash(generation: unknown): string | null {
+    const value = readGenerationField(generation, "contentHash");
+    return typeof value === "string" ? value : null;
+}
+
+function readStyleVersion(generation: unknown): number | null {
+    const value = readGenerationField(generation, "styleVersion");
+    return typeof value === "number" ? value : null;
+}
+
 /**
- * Keeps a post's cover in sync with its CURRENT category — the fix for a
- * real gap in the original design, found by the person actually using the
- * editor, not by reading code: `createPost` fires on the very first
- * autosave, the moment `title` stops being empty — almost always BEFORE
- * the admin has typed a category at all (people fill in title first). That
- * first cover is therefore usually generated against `categoryEn: ""`
- * (the "uncategorized" placeholder hue), and nothing in the original
- * design ever revisited it: `savePostDraft` only ever touched
- * `ContentDraft`, never `Post.coverAssetId`, so the cover stayed frozen on
- * "uncategorized" forever, even after the admin filled in the real
- * category and published.
+ * Keeps a post's cover in sync with its CURRENT category, title, excerpt,
+ * AND rendering algorithm version — v1 of this function (then named
+ * `ensureCoverMatchesCategory`) only compared `hue`, which was correct for
+ * v1's mesh-gradient-only algorithm (category was the only thing that
+ * shaped the composition at all). v3's organic algorithm ALSO shapes
+ * itself around title/excerpt (flow-curve count, waveform, letterform-fill,
+ * readable title text — see `cover-composition.ts`), so a title edit with
+ * no category change now needs to regenerate the cover too, or the
+ * readable-title layer would silently go stale relative to the post's real
+ * title. `contentHash` (`computeContentHash`) is what detects that.
  *
- * Called from both `savePostDraft` (so a preview taken mid-edit already
- * shows the right family) and `applyPostDraftToRow`/`publishPost` (a
- * safety net in case publish is ever reached without an intervening
- * autosave). Cheap when nothing changed: `resolveCategoryHue` is a single
- * indexed read for an already-known category, and comparing that hue
- * against the cover's own stored `generation.hue` avoids a wasted
- * rasterization + a pointless new `MediaAsset` row on every autosave tick
- * where the category didn't actually change.
+ * `styleVersion` is compared too, for the same reason `backfill-post-covers.ts`
+ * exists at all: bumping `CURRENT_COVER_STYLE_VERSION` (a whole-algorithm
+ * change, like v1 → v3) should upgrade every existing cover the next time
+ * ANY of these three functions' call sites runs, not require a brand-new
+ * one-off script per future style bump.
+ *
+ * The original bug this function was created to fix (found live, by the
+ * person using the editor, not by reading code — see `media/README.md`'s
+ * dated entry) still applies to `hue`: `createPost` fires on the very
+ * first autosave, almost always BEFORE the admin has typed a category
+ * (title is filled in first), so a post's first cover is usually generated
+ * against `categoryEn: ""`.
+ *
+ * Called ONLY from `applyPostDraftToRow` (via `publishPost`) — deliberately
+ * NOT from `savePostDraft`. A first version of this rule DID call it from
+ * `savePostDraft` too, reasoning "this is decor, not content, so the
+ * draft/publish split doesn't apply" — that reasoning was wrong (see
+ * `media/README.md`'s dated entry for the full story): `Post.coverAssetId`
+ * is exactly what real readers of an already-published post see, so
+ * updating it on every autosave reintroduced the exact bug the whole
+ * draft/publish split exists to prevent.
+ *
+ * Cheap when nothing changed: `resolveCategoryHue` is a single indexed
+ * read for an already-known category, and comparing against the cover's
+ * own stored `generation` fields avoids a wasted rasterization + a
+ * pointless new `MediaAsset` row on every publish where nothing relevant
+ * actually changed.
  */
-export async function ensureCoverMatchesCategory(currentCoverAssetId: string | null, post: CoverSourcePost): Promise<string> {
+export async function ensureCoverIsCurrent(currentCoverAssetId: string | null, post: CoverSourcePost): Promise<string> {
     const targetHue = await resolveCategoryHue(post.categoryEn);
+    const targetContentHash = computeContentHash(post.titleEn, post.excerptEn);
 
     if (currentCoverAssetId) {
         const current = await prisma.mediaAsset.findUnique({
             where: { id: currentCoverAssetId },
             select: { generation: true },
         });
-        if (current && readHue(current.generation) === targetHue) {
+        if (
+            current
+            && readHue(current.generation) === targetHue
+            && readContentHash(current.generation) === targetContentHash
+            && readStyleVersion(current.generation) === CURRENT_COVER_STYLE_VERSION
+        ) {
             return currentCoverAssetId;
         }
     }
@@ -249,6 +308,7 @@ export async function regenerateCoverForPost(slug: string): Promise<MediaAssetRo
         titleEn: title,
         excerptEn: excerpt,
         categoryEn: category,
+        date: post.date,
         variant: currentVariant + 1,
     });
 }

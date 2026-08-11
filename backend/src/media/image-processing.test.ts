@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { buildCoverComposition, renderCoverSvg } from "./cover-composition";
+import { coverFonts } from "./cover-fonts";
 import { prngFromSeed } from "./cover-seed";
 import { fullVariantKey, narrowVariantKey, rasterizeCover } from "./image-processing";
 
-function sampleSvg(): Buffer {
-    const svg = renderCoverSvg(buildCoverComposition(180, prngFromSeed("image-processing-test")));
-    return Buffer.from(svg, "utf-8");
+async function sampleSvg(seed = "image-processing-test", hue = 180): Promise<Buffer> {
+    const fonts = await coverFonts();
+    const composition = buildCoverComposition(
+        { categoryHue: hue, title: "Sample title for rasterization tests", excerpt: "A sample excerpt.", category: "Kotlin", date: "2026-08-10", ref: "0000" },
+        prngFromSeed(seed),
+        fonts,
+    );
+    return Buffer.from(renderCoverSvg(composition, fonts), "utf-8");
 }
 
 describe("rasterizeCover", () => {
     it("produces a full variant at the canonical 1200x630 size", async () => {
-        const processed = await rasterizeCover(sampleSvg(), "image/svg+xml");
+        const processed = await rasterizeCover(await sampleSvg(), "image/svg+xml");
 
         expect(processed.mimeType).toBe("image/webp");
         expect(processed.width).toBe(1200);
@@ -21,14 +27,14 @@ describe("rasterizeCover", () => {
     });
 
     it("produces a narrow variant at 640 wide, same aspect ratio", async () => {
-        const processed = await rasterizeCover(sampleSvg(), "image/svg+xml");
+        const processed = await rasterizeCover(await sampleSvg(), "image/svg+xml");
 
         expect(processed.narrow.width).toBe(640);
         expect(processed.narrow.height).toBe(Math.round(630 * (640 / 1200)));
     });
 
     it("returns a valid, small inline WebP placeholder", async () => {
-        const processed = await rasterizeCover(sampleSvg(), "image/svg+xml");
+        const processed = await rasterizeCover(await sampleSvg(), "image/svg+xml");
 
         expect(processed.placeholder.startsWith("data:image/webp;base64,")).toBe(true);
         // "Small" is the whole point of a blur-up placeholder — the base64
@@ -37,7 +43,7 @@ describe("rasterizeCover", () => {
     });
 
     it("is deterministic: identical input bytes yield the identical contentHash", async () => {
-        const bytes = sampleSvg();
+        const bytes = await sampleSvg();
         const first = await rasterizeCover(bytes, "image/svg+xml");
         const second = await rasterizeCover(bytes, "image/svg+xml");
 
@@ -46,11 +52,8 @@ describe("rasterizeCover", () => {
     });
 
     it("produces a different contentHash for different source bytes", async () => {
-        const a = await rasterizeCover(sampleSvg(), "image/svg+xml");
-        const b = await rasterizeCover(
-            Buffer.from(renderCoverSvg(buildCoverComposition(45, prngFromSeed("different"))), "utf-8"),
-            "image/svg+xml",
-        );
+        const a = await rasterizeCover(await sampleSvg(), "image/svg+xml");
+        const b = await rasterizeCover(await sampleSvg("different", 45), "image/svg+xml");
         expect(a.contentHash).not.toBe(b.contentHash);
     });
 });

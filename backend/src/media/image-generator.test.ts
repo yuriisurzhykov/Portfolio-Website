@@ -17,6 +17,7 @@ const BRIEF: CoverBrief = {
     locale: "en",
     styleVersion: 1,
     variant: 1,
+    date: "2026-08-10",
 };
 
 describe("ProceduralImageGenerator", () => {
