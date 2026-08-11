@@ -30,7 +30,7 @@
         background-color: #0e0e10;
     }
     #canvasWrap { width: 100%; max-width: 1100px; box-shadow: 0 20px 60px rgba(0,0,0,.6); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
-    #canvasWrap svg { display: block; width: 100%; height: auto; }
+    #canvasWrap img { display: block; width: 100%; height: auto; }
     #panel { width: 400px; min-width: 400px; background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 20px; }
     h1 { font-size: 16px; margin: 0 0 4px; }
     .subtitle { font-size: 12px; color: var(--text2); margin: 0 0 18px; line-height: 1.5; }
@@ -613,6 +613,32 @@ function readParams() {
     return p;
 }
 
+// The generated SVG is rendered into an <img>, backed by a Blob URL —
+// NEVER assigned via innerHTML — even though every free-text field that
+// reaches the SVG string is already escaped (see `esc()` above). CodeQL's
+// "DOM text reinterpreted as HTML" query keeps flagging the innerHTML
+// assignment regardless (its taint tracking can't fully see through
+// `renderCover`'s several layers of template-literal composition to
+// confirm every tainted fragment is individually escaped) — rather than
+// fight that imprecision, this removes the whole SINK category instead:
+// an <img> (unlike a live DOM node tree from innerHTML) never executes an
+// embedded <script>, and critically, unlike innerHTML, never wires up an
+// inline event-handler attribute (onload=/onerror=/onclick=) either,
+// since the browser only ever decodes it as a static/animated image, not
+// as markup to attach to the document. This is strictly SAFER than the
+// previous innerHTML-based rendering, not just quieter for the scanner —
+// verified live: a manually crafted title containing `"><script>`/
+// `<img onerror=...>` still renders as inert, visible text on the cover
+// (proving `esc()` also works), AND no longer even has a codepath that
+// could execute it if `esc()` had a bug, since <img> src is never parsed
+// as HTML in the first place.
+const previewImg = document.createElement("img");
+previewImg.alt = "";
+document.getElementById("canvasWrap").appendChild(previewImg);
+let previewBlobUrl = null;
+/** The exact, unmodified markup last handed to `renderCover` — what "Download SVG" below saves; kept separate from the DOM (never read back out of it) now that the preview is an <img>, not a live SVG node tree. */
+let lastSvgMarkup = "";
+
 let renderToken = 0;
 async function rerender() {
     const token = ++renderToken;
@@ -620,7 +646,18 @@ async function rerender() {
     for (const id of rangeIds) { const out = document.getElementById(id + "Val"); if (out) out.textContent = document.getElementById(id).value; }
     const result = await renderCover(p);
     if (token !== renderToken) return;
-    document.getElementById("canvasWrap").innerHTML = result.svg;
+    lastSvgMarkup = result.svg;
+    const blob = new Blob([result.svg], { type: "image/svg+xml" });
+    const nextUrl = URL.createObjectURL(blob);
+    previewImg.src = nextUrl;
+    // Revokes the PREVIOUS render's blob URL, never the one just assigned
+    // above — that previous image is being replaced regardless of whether
+    // its load had finished, so there's nothing left needing that URL to
+    // stay alive. Without this, every slider drag (many "input" events,
+    // many rerenders) would leak one Blob URL each, for as long as the
+    // page stays open.
+    if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+    previewBlobUrl = nextUrl;
     document.getElementById("statsOut").textContent =
         `words: ${result.stats.wordCount}  avgWordLen: ${result.stats.avgWordLen.toFixed(2)}\n` +
         `vowelRatio: ${result.stats.vowelRatio.toFixed(2)}  hue: ${Math.round(result.hue)}  ordinal: ${result.ordinal}`;
@@ -647,8 +684,10 @@ document.getElementById("btnRandomAll").addEventListener("click", () => {
     rerender();
 });
 document.getElementById("btnDownloadSvg").addEventListener("click", () => {
-    const svg = document.getElementById("canvasWrap").innerHTML;
-    const blob = new Blob([svg], { type: "image/svg+xml" });
+    // `lastSvgMarkup`, not the DOM — the preview is an <img> now (see
+    // `rerender()`'s own comment), so there is no live SVG node tree left
+    // to read markup back out of.
+    const blob = new Blob([lastSvgMarkup], { type: "image/svg+xml" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "cover.svg";
