@@ -1,4 +1,5 @@
 import { prisma } from "../db/client";
+import { coverUrlFor, type CoverImageData } from "../media/covers";
 import type { Block } from "./blocks";
 import { getDocumentBlocks } from "./document";
 import type { LifecycleState } from "./lifecycle";
@@ -60,6 +61,16 @@ export interface PostSummary {
      * new VALUE rather than a new field to add at every consumer.
      */
     availableLocales: ContentLocale[];
+    /**
+     * `null` only for a post that predates this feature (created before the
+     * `coverAssetId` migration ran) — every post created through
+     * `createPost` since gets one automatically (see `media/covers.ts`'s
+     * `generateCoverForPost`) and this is never null for it. Callers
+     * (`JournalListPage`, `JournalPreview`, the post detail hero) render
+     * conditionally rather than assuming non-null, precisely to stay
+     * correct for that pre-existing-content case without a backfill.
+     */
+    cover: CoverImageData | null;
 }
 
 export interface PostDetail extends PostSummary {
@@ -92,6 +103,15 @@ export function toPostSummary(row: {
     lifecycleState: LifecycleState;
     publishedAt: Date | null;
     contentUpdatedAt: Date | null;
+    /**
+     * Optional and possibly `undefined` (as opposed to `null`) on purpose —
+     * a caller that queried `Post` WITHOUT `include: { cover: true }` (every
+     * admin read that doesn't render a cover thumbnail yet, see
+     * `admin-posts.ts`) simply never has this key at all, and this function
+     * treats that identically to "no cover" rather than requiring every
+     * call site to remember to fetch a relation it doesn't use.
+     */
+    cover?: { storageKey: string; placeholder: string; width: number; height: number } | null;
 }): PostSummary {
     return {
         slug: row.slug,
@@ -107,6 +127,7 @@ export function toPostSummary(row: {
         contentUpdatedAt: row.contentUpdatedAt ? row.contentUpdatedAt.toISOString() : null,
         hasBody: row.bodyDocumentId !== null,
         availableLocales: row.bodyDocumentIdRu !== null ? ["en", "ru"] : ["en"],
+        cover: coverUrlFor(row.cover),
     };
 }
 
@@ -124,7 +145,11 @@ export function toPostSummary(row: {
  * `admin-posts.ts`'s `getPostsForAdmin()`.
  */
 export async function getJournalEntries(): Promise<PostSummary[]> {
-    const rows = await prisma.post.findMany({ where: { lifecycleState: "PUBLISHED" }, orderBy: { date: "desc" } });
+    const rows = await prisma.post.findMany({
+        where: { lifecycleState: "PUBLISHED" },
+        orderBy: { date: "desc" },
+        include: { cover: true },
+    });
     return rows.map(toPostSummary);
 }
 
@@ -162,6 +187,7 @@ export async function getLatestPublishedPost(): Promise<PostSummary | null> {
     const row = await prisma.post.findFirst({
         where: { status: "published", lifecycleState: "PUBLISHED" },
         orderBy: { date: "desc" },
+        include: { cover: true },
     });
     return row ? toPostSummary(row) : null;
 }
@@ -181,7 +207,7 @@ export async function getLatestPublishedPost(): Promise<PostSummary | null> {
  * added (see admin-posts.ts's `translatePost`).
  */
 export async function getPostBySlug(slug: string, locale: ContentLocale = "en"): Promise<PostDetail | null> {
-    const row = await prisma.post.findUnique({ where: { slug } });
+    const row = await prisma.post.findUnique({ where: { slug }, include: { cover: true } });
     if (!row || row.lifecycleState !== "PUBLISHED") {
         return null;
     }

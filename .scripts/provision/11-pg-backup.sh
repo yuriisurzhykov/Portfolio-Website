@@ -55,6 +55,16 @@ set -euo pipefail
 
 : "${PORTFOLIO_DB_PASSWORD:?Set PORTFOLIO_DB_PASSWORD}"
 RCLONE_CRYPT_REMOTE="${RCLONE_CRYPT_REMOTE:-gdrive-crypt}"
+# Space-separated list of `shared/media` directories to back up alongside
+# the database — one per provisioned target (05-app-dirs.sh creates
+# `${APP_BASE_DIR}/shared/media`). Generated covers are DERIVED data (the
+# same slug+category+seed reproduces the identical bytes — see
+# backend/src/media/README.md's determinism invariant), so losing this
+# directory is recoverable by regenerating every post's cover, unlike
+# losing the database itself — this backup exists to avoid that
+# regeneration chore after a disk failure, not because the data is
+# irreplaceable the way Postgres's is.
+MEDIA_DIRS="${MEDIA_DIRS:-/srv/apps/yuriisoft-frontend/shared/media}"
 
 sudo tee /root/.pgpass > /dev/null <<EOF
 127.0.0.1:5432:portfolio:portfolio:${PORTFOLIO_DB_PASSWORD}
@@ -81,6 +91,20 @@ PGPASSFILE=/root/.pgpass pg_dump -h 127.0.0.1 -U portfolio portfolio | gzip > "\
 chmod 600 "\$FILE"
 find "\$BACKUP_DIR" -name "portfolio_*.sql.gz" -mtime +14 -delete
 rclone sync "\$BACKUP_DIR" ${RCLONE_CRYPT_REMOTE}:portfolio-backups --log-file=/var/log/pg-backup.log
+
+# Media sync — one destination FOLDER per source directory (its basename,
+# e.g. "yuriisoft-frontend" vs "yuriisoft-frontend-dev"), so dev and prod
+# covers never collide in the same encrypted remote path. A second
+# \`rclone sync\` call, not folded into the pg_dump pipeline above: a media
+# directory has no meaningful "dump" step (it already IS a plain directory
+# of files) and no 14-day rotation applies — \`sync\` mirrors whatever
+# covers currently exist, deletions included, same as the source.
+for media_dir in ${MEDIA_DIRS}; do
+    if [ -d "\$media_dir" ]; then
+        target_name="\$(basename "\$(dirname "\$(dirname "\$media_dir")")")"
+        rclone sync "\$media_dir" "${RCLONE_CRYPT_REMOTE}:portfolio-media/\${target_name}" --log-file=/var/log/pg-backup.log
+    fi
+done
 EOF
 sudo chmod +x /usr/local/bin/pg-backup.sh
 
@@ -91,3 +115,4 @@ echo "Installed. Run once now to verify end-to-end:"
 echo "  sudo /usr/local/bin/pg-backup.sh"
 echo "  ls -l /var/backups/postgres  # confirm dumps are mode 600, dir is mode 700"
 echo "  rclone lsf ${RCLONE_CRYPT_REMOTE}:portfolio-backups  # filenames should be unrecognizable base32, not portfolio_*.sql.gz"
+echo "  rclone lsf ${RCLONE_CRYPT_REMOTE}:portfolio-media  # one subfolder per target's media directory"

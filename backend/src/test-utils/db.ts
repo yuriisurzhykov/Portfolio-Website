@@ -25,6 +25,13 @@ export async function resetTestDatabase(): Promise<void> {
     await prisma.work.deleteMany();
     await prisma.block.deleteMany();
     await prisma.document.deleteMany();
+    // After Post (which references it via `coverAssetId`, `onDelete:
+    // SetNull`) — deleting Post first, rather than relying on the FK's own
+    // SetNull behavior to clear the reference first, keeps this file's
+    // stated ordering rule ("children before parents") true for every row
+    // here, not just most of them.
+    await prisma.mediaAsset.deleteMany();
+    await prisma.categoryHue.deleteMany();
     await prisma.siteContent.deleteMany();
     // No foreign key ties this to `Post`/`Work` (see schema.prisma's own
     // comment on why), so nothing cascades it away — leaving it out meant

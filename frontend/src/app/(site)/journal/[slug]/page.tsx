@@ -11,6 +11,7 @@ import { NOINDEX } from "@/shared/lib/seo/noindex";
 import { pickFor } from "@/shared/i18n";
 import { alternatesFor, localizedPath } from "@/shared/lib/seo/alternates";
 import { ogAlternateLocales, ogLocale, TWITTER_CARD } from "@/shared/lib/seo/open-graph";
+import { clampMetaDescription } from "@/shared/lib/seo/meta-description";
 import { SITE_URL } from "@/shared/lib/seo/site-url";
 import { blogPostingJsonLd, breadcrumbJsonLd, jsonLdGraph, personJsonLd, serializeJsonLd } from "@/shared/lib/seo/json-ld";
 import { JsonLd } from "@/shared/lib/seo/JsonLd";
@@ -73,7 +74,8 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
         }
 
         const title = pickFor(post.title, locale);
-        const description = pickFor(post.excerpt, locale);
+        const description = clampMetaDescription(pickFor(post.excerpt, locale));
+        const path = alternatesFor(`/journal/${ slug }`, locale, post.availableLocales).canonical;
 
         return {
             title,
@@ -86,6 +88,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 siteName: config.name,
                 locale: ogLocale(locale),
                 alternateLocale: ogAlternateLocales(locale),
+                url: `${ SITE_URL }${ path }`,
                 publishedTime: post.publishedAt ?? undefined,
                 modifiedTime: post.contentUpdatedAt ?? post.publishedAt ?? undefined,
                 // Relative — `metadataBase` makes it absolute. Set by hand

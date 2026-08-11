@@ -179,6 +179,27 @@ model Post {
   contentUpdatedAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  /// Set automatically by `createPost` — see `media/covers.ts`'s
+  /// `generateCoverForPost`. Nullable only because Prisma requires it for
+  /// an optional relation column, never actually null in practice once
+  /// `createPost` has run; there is no admin flow that removes a cover
+  /// without immediately generating a replacement (see `media/README.md`).
+  ///
+  /// Deliberately NOT `@unique` — a first design draft made it one-to-one
+  /// and immediately broke `MediaAsset.contentHash`'s own dedup guarantee
+  /// (found by a real, failing integration test, not by reasoning about
+  /// it up front): two posts whose title/category/slug happen to produce
+  /// byte-identical rasterized covers are supposed to share ONE
+  /// `MediaAsset` row for free, and a unique constraint here would reject
+  /// the second post's insert outright the moment that happened. A
+  /// content-addressed asset is inherently many-to-one from the referring
+  /// side, the same way two files with identical bytes share one blob in
+  /// any content-addressed store.
+  coverAssetId String?
+  cover        MediaAsset? @relation(fields: [coverAssetId], references: [id])
+
+  @@index([coverAssetId])
 }
 
 /// Project/work item. `startedLabel`/`shippedLabel`/`role` are case-study
@@ -345,4 +366,79 @@ model SiteContent {
   key       String   @id
   data      Json
   updatedAt DateTime @updatedAt
+}
+
+/// One row per generated file on disk — a journal post's cover today, any
+/// future image (work covers, AI-generated art) tomorrow, without a new
+/// table per image kind. See `backend/src/media/README.md` for the full
+/// design; this comment only covers the columns.
+///
+/// `contentHash` is the sha256 of the FINAL rasterized bytes (the 1200x630
+/// WebP, see `image-processing.ts`) — `@unique` gives byte-for-byte
+/// deduplication for free: regenerating an identical cover (same slug, same
+/// hue, same styleVersion, same variant — see `content-hash.ts`) reuses the
+/// existing row and file instead of writing a second copy that differs only
+/// in `id`.
+///
+/// `storageKey`, never an absolute URL — `media-store.ts`'s `MediaStore`
+/// port is what turns a `storageKey` into a servable URL, so switching
+/// storage backends later (disk → R2/S3, see media/README.md) is a
+/// migration of the FILES, not of this column's meaning.
+///
+/// `generation` is untyped `Json` — same "typed at the application
+/// boundary, not the database" split as `Block.text`/`Block.data`/
+/// `SiteContent.data` above. Today it holds `{ generator: "procedural",
+/// styleVersion, variant, seed, hue, svgSource }`; Phase 3's AI generator
+/// adds `model`/`prompt` keys to the SAME column, no migration required —
+/// that's the reason this is Json and not N separate nullable columns one
+/// per generator's own fields.
+model MediaAsset {
+  id          String   @id @default(cuid())
+  contentHash String   @unique
+  storageKey  String
+  mimeType    String
+  width       Int
+  height      Int
+  byteSize    Int
+  /// Inline low-quality placeholder (a tiny base64 data URI) — read
+  /// straight off this row for `CoverImage`'s blur-up, no second disk read
+  /// or extra network request just to show a placeholder while the real
+  /// image loads.
+  placeholder String
+  /// What this asset is FOR — `"post-cover"` today, future kinds (a work
+  /// cover, an inline body image) add a new string value here, never a new
+  /// table. Plain `String`, not a Prisma enum, same reasoning as
+  /// `Block.type`/`SlugHistory.kind` above: this set is expected to grow.
+  kind        String
+  generation  Json?
+  createdAt   DateTime @default(now())
+
+  /// A list, not `Post?` — see `Post.coverAssetId`'s own comment: this is a
+  /// content-addressed row, and more than one `Post` sharing an identical
+  /// rendered cover is an intended outcome of that, not an edge case.
+  posts Post[]
+
+  @@index([kind])
+}
+
+/// The persisted assignment of a hue (0-360°, OKLCH) to a post category —
+/// see `media/README.md`'s "Назначение тона категории" entry for why this
+/// has to be a stored assignment and cannot be a pure hash of the category
+/// string. One row per category ever seen; never deleted by a rename (a
+/// renamed category is a NEW key, and gets its own new row/ordinal/hue —
+/// see that same README entry).
+model CategoryHue {
+  id         String   @id @default(cuid())
+  /// Normalized `category.en` (see `content/localized-text.ts`) — the hue
+  /// must not depend on the reader's locale, and a post's cover is the same
+  /// asset in both languages.
+  category   String   @unique
+  hue        Float
+  /// Assignment order — `hueForOrdinal(ordinal)` (cover-hue.ts) is a pure
+  /// function of this number, van der Corput sequence base 2. Stored
+  /// explicitly rather than derived from `count()` at read time: deleting a
+  /// row (a category that's since been renamed away from) must never cause
+  /// a LATER category to silently inherit an earlier ordinal's hue.
+  ordinal    Int      @unique
+  assignedAt DateTime @default(now())
 }

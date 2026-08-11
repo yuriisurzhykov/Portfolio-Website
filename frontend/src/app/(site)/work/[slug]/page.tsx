@@ -11,6 +11,7 @@ import { NOINDEX } from "@/shared/lib/seo/noindex";
 import { pickFor } from "@/shared/i18n";
 import { alternatesFor, localizedPath } from "@/shared/lib/seo/alternates";
 import { ogAlternateLocales, ogLocale, TWITTER_CARD } from "@/shared/lib/seo/open-graph";
+import { clampMetaDescription } from "@/shared/lib/seo/meta-description";
 import { SITE_URL } from "@/shared/lib/seo/site-url";
 import { breadcrumbJsonLd, jsonLdGraph, personJsonLd, serializeJsonLd } from "@/shared/lib/seo/json-ld";
 import { JsonLd } from "@/shared/lib/seo/JsonLd";
@@ -47,7 +48,8 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
         }
 
         const title = item.title;
-        const description = pickFor(item.summary, locale);
+        const description = clampMetaDescription(pickFor(item.summary, locale));
+        const path = alternatesFor(`/work/${ slug }`, locale, item.availableLocales).canonical;
 
         return {
             title,
@@ -60,6 +62,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 siteName: config.name,
                 locale: ogLocale(locale),
                 alternateLocale: ogAlternateLocales(locale),
+                url: `${ SITE_URL }${ path }`,
                 publishedTime: item.publishedAt ?? undefined,
                 modifiedTime: item.contentUpdatedAt ?? item.publishedAt ?? undefined,
                 // See `journal/[slug]/page.tsx`'s comment on the same line.

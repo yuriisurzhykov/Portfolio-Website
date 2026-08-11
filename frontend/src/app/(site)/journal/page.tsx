@@ -9,6 +9,9 @@ import { NOINDEX } from "@/shared/lib/seo/noindex";
 import { pickFor } from "@/shared/i18n";
 import { alternatesFor } from "@/shared/lib/seo/alternates";
 import { ogAlternateLocales, ogLocale, TWITTER_CARD } from "@/shared/lib/seo/open-graph";
+import { DEFAULT_OG_IMAGE_PATH } from "@/shared/lib/seo/og/paths";
+import { clampMetaDescription } from "@/shared/lib/seo/meta-description";
+import { SITE_URL } from "@/shared/lib/seo/site-url";
 
 // See app/(site)/page.tsx's comment — same reasoning, this list page would
 // otherwise be baked in at build time and miss new posts until a redeploy.
@@ -39,7 +42,8 @@ export async function generateMetadata(): Promise<Metadata> {
             cachedSiteContent("config"),
         ]);
         const title = pickFor(journalPage.heading, locale);
-        const description = pickFor(journalPage.description, locale);
+        const description = clampMetaDescription(pickFor(journalPage.description, locale));
+        const path = alternatesFor("/journal", locale, ALL_LOCALES).canonical;
 
         return {
             title,
@@ -52,6 +56,9 @@ export async function generateMetadata(): Promise<Metadata> {
                 siteName: config.name,
                 locale: ogLocale(locale),
                 alternateLocale: ogAlternateLocales(locale),
+                url: `${ SITE_URL }${ path }`,
+                // Same fix as app/(site)/page.tsx — see its comment.
+                images: [{ url: DEFAULT_OG_IMAGE_PATH, width: 1200, height: 630, alt: title }],
             },
             twitter: { card: TWITTER_CARD, title, description },
         };

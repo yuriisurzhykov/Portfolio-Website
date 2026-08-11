@@ -28,7 +28,15 @@
 //   `db/client` imports AND has its own dedicated, DB-free test file — see
 //   errors.ts, which does import `Prisma` from `@prisma/client` for
 //   `instanceof` error classification only (no query, no live DB needed by
-//   its tests).
+//   its tests). The five media/*.ts files (2026-08-10, procedural post
+//   covers) joined the list the same way: cover-seed/cover-hue/
+//   cover-palette/cover-composition/content-hash have zero `prisma` imports
+//   and each has its own unit-test file. `covers.ts` (DB-backed:
+//   `resolveCategoryHue`/`generateCoverForPost` read and write
+//   `CategoryHue`/`MediaAsset`) and `image-generator.ts`/`media-store.ts`/
+//   `image-processing.ts` (env-factories and a real `sharp` call — not
+//   pure, and already covered by their own real-DB/real-sharp integration
+//   tests) are deliberately NOT here, same reasoning as `admin-posts.ts`.
 //
 // vitest.configFile points at a dedicated config, not vitest.config.ts — see
 // vitest.mutation.config.ts's comment for why (a real bug found by running
@@ -56,6 +64,11 @@ const config = {
         "src/content/slugify.ts",
         "src/content/tech-slug.ts",
         "src/errors.ts",
+        "src/media/cover-seed.ts",
+        "src/media/cover-hue.ts",
+        "src/media/cover-palette.ts",
+        "src/media/cover-composition.ts",
+        "src/media/content-hash.ts",
     ],
     reporters: ["html", "clear-text", "progress"],
     // Speeds up the run — Stryker's own warning flagged static mutants

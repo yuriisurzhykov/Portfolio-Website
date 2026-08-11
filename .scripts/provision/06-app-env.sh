@@ -23,6 +23,15 @@
 # be a deliberate act (delete the file yourself first), never an accidental
 # side effect of re-running this script.
 #
+# This means MEDIA_DIR below only ever reaches a BRAND-NEW shared/.env —
+# a target provisioned before this line existed never gets it from here.
+# That gap doesn't need an upgrade path in THIS script: deploy-target.yml's
+# "Sync MEDIA_DIR" step keeps it in sync on every deploy instead (the same
+# additive set-app-env-finish.sh mechanism the Upstash/PlantUML sync
+# already uses), since it's a derived, always-correct, non-secret value —
+# unlike DATABASE_URL/JWT_ACCESS_SECRET, there's no reason it should ever
+# require the same "deliberate, manual" gate those two get.
+#
 # Secrets are read from environment variables at run time — never
 # hardcoded, never committed. Generate them with:
 #   PORTFOLIO_DB_PASSWORD: the role password from 02-postgres-db.sh
@@ -61,6 +70,7 @@ fi
 sudo tee "${ENV_FILE}" > /dev/null <<EOF
 DATABASE_URL="postgresql://portfolio:${PORTFOLIO_DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}"
 JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET}"
+MEDIA_DIR="${BASE_DIR}/shared/media"
 EOF
 
 sudo chown "${APP_USER}:${APP_USER}" "${ENV_FILE}"

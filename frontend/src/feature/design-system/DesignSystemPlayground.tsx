@@ -20,6 +20,7 @@ import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/code-block";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { PlaceholderCover } from "@/shared/ui/placeholder-cover";
+import { CoverImage } from "@/shared/ui/cover-image";
 import { Markdown } from "@/shared/ui/markdown";
 import { Diagram } from "@/shared/ui/diagram";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
@@ -624,6 +625,27 @@ export function DesignSystemPlayground() {
                 <PlaceholderCover
                     label="No cover yet"
                     className="h-40 w-full max-w-sm rounded-lg border border-border-subtle"
+                />
+            </section>
+
+            {/* SECTION: COVERIMAGE */}
+            <section className="space-y-md" data-component-id="cover-image">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    CoverImage
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Procedurally generated post cover: blur-up from an inline placeholder, explicit
+                    width/height, a two-width srcset, alt=&quot;&quot; (decorative). A fixed, checked-in
+                    sample asset — see <code>public/demo/</code> — so this demo never depends on a real
+                    generated cover existing.
+                </Text>
+                <CoverImage
+                    src="/demo/cover-sample-1200.webp"
+                    srcNarrow="/demo/cover-sample-640.webp"
+                    placeholder="data:image/webp;base64,UklGRqoAAABXRUJQVlA4WAoAAAAQAAAAFwAADAAAQUxQSDwAAAABfyAmTfqHlp1WiIiUAZoGQEIFaMBowIyAEZgJNAMNzOKMYgWNYAUjeEf0P6Nkr32ss++DL8xobpaEkBVWUDggSAAAAHADAJ0BKhgADQA+7WSpTamlpCIwCAEwHYliALsAHjbGOAWHAAD+gxbiBMjCM/UubyO360y5EatexlBmsgA3EYn1TD1H+AAAAA=="
+                    width={1200}
+                    height={630}
+                    className="w-full max-w-lg rounded-lg border border-border-subtle"
                 />
             </section>
 

@@ -12,6 +12,31 @@ import type { NextConfig } from "next";
 // for every request handler/Server Component afterwards.
 loadEnv({ path: path.resolve(__dirname, "../backend/.env") });
 
+// `MEDIA_DIR` (backend/src/media/media-store.ts's `resolveMediaRootDir()`)
+// defaults to a path built from ITS OWN `__dirname` — which works correctly
+// when that file runs unbundled (a `tsx` script, a Vitest test), but not
+// here: `transpilePackages` compiles `@portfolio/backend` into this Next.js
+// server's own bundle under `.next/server/...`, so `__dirname` inside that
+// bundled copy no longer points at `backend/src/media` at all. Found LIVE —
+// `frontend/src/app/media/[...path]/route.ts` 404ing on a file that
+// genuinely existed on disk at the path the BACKEND process (running the
+// seed script directly) had written it to — not by reasoning about
+// Turbopack's bundling ahead of time. Same root cause this repo has already
+// hit once before with `instanceof` across a transpiled-package boundary
+// (see backend/src/errors.ts's own comment) — a bundled copy of a package
+// cannot trust anything computed relative to ITS OWN module location.
+//
+// Fixed by computing the value here instead, in `next.config.ts` — this
+// file is loaded directly by Node at process startup, never bundled by
+// Turbopack, so `__dirname` here reliably means "the real frontend/
+// directory" in every execution context (`next dev`, `next build`, `next
+// start`). Only sets it if unset, so a real deployment's explicit
+// `MEDIA_DIR` (a different absolute path per provisioned target — see
+// backend/src/media/README.md's "Хранилище" entry) is never overridden.
+if (!process.env.MEDIA_DIR) {
+  process.env.MEDIA_DIR = path.resolve(__dirname, "../backend/media");
+}
+
 const nextConfig: NextConfig = {
   // @portfolio/backend (npm workspace package, see /backend and frontend/README.md)
   // ships its own TypeScript source with no build step of its own — Next.js
@@ -26,7 +51,14 @@ const nextConfig: NextConfig = {
   // runtime instead); it was never going to be in the CLIENT bundle in the
   // first place, since every import of it lives behind the server-only
   // boundary documented in `tech-icons/registry.ts`'s top comment.
-  serverExternalPackages: ["simple-icons"],
+  //
+  // `sharp` (backend/src/media/image-processing.ts) is a native binary
+  // (prebuilt .node addon per platform) — bundling it would either fail
+  // outright or duplicate a multi-MB native binary into the server bundle
+  // for no benefit; like simple-icons, it's server-only by construction
+  // (never imported from client code) and gains nothing from being
+  // transpiled/bundled.
+  serverExternalPackages: ["simple-icons", "sharp"],
   // Next.js sends "X-Powered-By: Next.js" on every response by default —
   // a free hint to an attacker about which framework-specific CVEs to try.
   poweredByHeader: false,

@@ -45,6 +45,7 @@ export const componentGalleryManifest: ComponentGalleryEntry[] = [
     { id: "eyebrow", label: "Eyebrow" },
     { id: "status-badge", label: "StatusBadge" },
     { id: "placeholder-cover", label: "PlaceholderCover" },
+    { id: "cover-image", label: "CoverImage" },
     { id: "markdown", label: "Markdown" },
     { id: "diagram", label: "Diagram (mermaid)" },
     { id: "content-blocks", label: "ContentBlocks" },

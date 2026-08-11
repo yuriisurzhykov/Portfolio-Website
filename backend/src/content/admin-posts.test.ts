@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { isSlugAlreadyExistsError } from "../errors";
 import { isInvalidLifecycleTransitionError } from "./lifecycle";
+import { FailingImageGenerator, setImageGeneratorForTesting } from "../media/image-generator";
 import { getJournalEntries, getPostBySlug } from "./posts";
 import { findCurrentSlug } from "./slug-history";
 import {
@@ -239,6 +240,133 @@ describe("savePostDraft", () => {
 
         const translation = await getPostTranslationForAdmin("test-post");
         expect(translation?.title.ru).toBe("Тестовый пост");
+    });
+
+    it("does NOT touch the live cover — same draft/publish rule as every other field, verified for coverAssetId specifically", async () => {
+        // `createPost`'s very first autosave fires the moment `title` stops
+        // being empty, almost always BEFORE the admin has typed a category
+        // — see media/covers.ts's `ensureCoverMatchesCategory`. Reproduced
+        // here exactly: create with an empty category first.
+        const created = await createPost({ ...basePostInput, category: "" });
+        const uncategorizedCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: created.slug } })).coverAssetId;
+        expect(uncategorizedCoverId).not.toBeNull();
+
+        // The admin now types the real category — the very next autosave
+        // MUST NOT change the live cover (that would leak an unconfirmed
+        // change to a real reader the instant the post is already
+        // published — the exact bug class the draft/publish split exists
+        // to prevent, now verified for this field too).
+        await savePostDraft("test-post", { ...basePostInput, category: "Architecture" });
+
+        const afterDraft = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
+        expect(afterDraft.coverAssetId).toBe(uncategorizedCoverId);
+    });
+
+    it("does not create any new MediaAsset rows — savePostDraft never triggers cover generation at all", async () => {
+        await createPost(basePostInput);
+        await savePostDraft("test-post", { ...basePostInput, category: "A Brand New Category" });
+        await savePostDraft("test-post", { ...basePostInput, category: "Yet Another Category" });
+
+        expect(await prisma.mediaAsset.count()).toBe(1);
+    });
+});
+
+describe("publishPost — cover follows the category", () => {
+    it("corrects the cover to match the FINAL category at publish time, after the post was created with none — the actual admin workflow (title first, category later)", async () => {
+        const created = await createPost({ ...basePostInput, category: "" });
+        const uncategorizedCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: created.slug } })).coverAssetId;
+
+        await savePostDraft("test-post", { ...basePostInput, category: "Architecture" });
+        await publishPost("test-post");
+
+        const published = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
+        expect(published.coverAssetId).not.toBe(uncategorizedCoverId);
+
+        const coverAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: published.coverAssetId! } });
+        const categoryRow = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "architecture" } });
+        expect((coverAsset.generation as { hue: number }).hue).toBeCloseTo(categoryRow.hue);
+    });
+
+    it("updates the cover of an ALREADY-PUBLISHED post once its category is changed and the change is actually published — never before", async () => {
+        await createPost(basePostInput); // category: "Notes"
+        await publishPost("test-post");
+        const originalCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId;
+
+        await savePostDraft("test-post", { ...basePostInput, category: "Architecture" });
+        // Still the OLD cover — a real reader must never see the new one
+        // before the admin actually confirms the change.
+        expect((await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId).toBe(originalCoverId);
+
+        await publishPost("test-post");
+
+        const updated = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
+        expect(updated.coverAssetId).not.toBe(originalCoverId);
+        const categoryRow = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "architecture" } });
+        const coverAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: updated.coverAssetId! } });
+        expect((coverAsset.generation as { hue: number }).hue).toBeCloseTo(categoryRow.hue);
+    });
+
+    it("discarding a category change leaves the cover untouched — nothing needs reverting, because nothing was ever changed", async () => {
+        await createPost(basePostInput);
+        await publishPost("test-post");
+        const originalCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId;
+
+        await savePostDraft("test-post", { ...basePostInput, category: "Architecture" });
+        await discardPostDraft("test-post");
+
+        expect((await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId).toBe(originalCoverId);
+    });
+
+    it("is idempotent — republishing with no category change reuses the same cover, no wasted MediaAsset rows", async () => {
+        await createPost(basePostInput);
+        await publishPost("test-post");
+        const originalCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId;
+
+        await savePostDraft("test-post", { ...basePostInput, excerpt: "Just editing the excerpt." });
+        await publishPost("test-post");
+
+        const after = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
+        expect(after.coverAssetId).toBe(originalCoverId);
+        expect(await prisma.mediaAsset.count()).toBe(1);
+    });
+});
+
+describe("publishPost — cover generation failure keeps the publish atomic", () => {
+    afterEach(() => {
+        setImageGeneratorForTesting(undefined);
+    });
+
+    it("rejects and leaves the live body/title/cover completely untouched when cover regeneration fails", async () => {
+        await createPost(basePostInput); // category: "Notes"
+        await publishPost("test-post");
+        const before = await getPostBySlug("test-post");
+        const originalCoverId = (await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId;
+
+        // A category change forces `ensureCoverMatchesCategory` to attempt a
+        // real regeneration (see the "cover follows the category" suite
+        // above) — paired here with a body/title edit, so a bug that lets
+        // the live document through BEFORE the (now failing) cover step
+        // would be caught: `before.body`/`before.title` would differ from
+        // what's actually live after the rejected publish.
+        await savePostDraft("test-post", {
+            ...basePostInput,
+            title: "Half-Finished Rewrite",
+            category: "Architecture",
+            blocks: [{ type: "lead", text: "This must never reach real readers." }],
+        });
+
+        setImageGeneratorForTesting(new FailingImageGenerator());
+        await expect(publishPost("test-post")).rejects.toThrow();
+
+        const after = await getPostBySlug("test-post");
+        expect(after?.title.en).toBe(before?.title.en);
+        expect(after?.body).toEqual(before?.body);
+        expect((await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } })).coverAssetId).toBe(originalCoverId);
+
+        // The failed publish must not have discarded the pending draft —
+        // the admin's edit is still there to retry once generation works.
+        const admin = await getPostForAdmin("test-post");
+        expect(admin?.hasUnpublishedChanges).toBe(true);
     });
 });
 
