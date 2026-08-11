@@ -220,3 +220,48 @@ test("the sitemap declares the Russian alternate only for translated content", a
     expect(xml).toContain("/ru/journal/flowbus");
     expect(xml).not.toContain("/ru/journal/testing-culture");
 });
+
+/**
+ * Phase 0 audit finding: `/`, `/journal` and `/work` had NO `og:image`/
+ * `twitter:image` at all — `openGraph.images` was simply never set, so the
+ * file-convention `app/opengraph-image.tsx` route never got pulled in
+ * (Next.js doesn't do that automatically). Checked against every URL the
+ * sitemap actually lists, not a hand-picked few, so a future page added to
+ * the sitemap without an image is caught the same way a missing manifest
+ * entry is caught elsewhere in this suite.
+ */
+test("every page in the sitemap carries an absolute og:image and twitter:image", async ({ request, page }) => {
+    const xml = await (await request.get("/sitemap.xml")).text();
+    const paths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1]).pathname);
+
+    for (const pathname of paths) {
+        await page.goto(pathname);
+        const ogImage = await head(page, 'meta[property="og:image"]', "content");
+        const twitterImage = await head(page, 'meta[name="twitter:image"]', "content");
+
+        expect(ogImage, pathname).toBeTruthy();
+        expect(ogImage, pathname).toMatch(/^https?:\/\//);
+        expect(twitterImage, pathname).toBeTruthy();
+        expect(twitterImage, pathname).toMatch(/^https?:\/\//);
+    }
+});
+
+/**
+ * The homepage's description was 194 characters, comfortably over what a
+ * search snippet shows — `clampMetaDescription` (meta-description.ts) exists
+ * to cap this without shortening what a visitor actually reads on the page.
+ * Threshold matches that helper's own default; some slack is given for
+ * locales/pages whose copy legitimately sits right at the boundary.
+ */
+test("every page in the sitemap keeps its meta description within a search-snippet-friendly length", async ({ request, page }) => {
+    const xml = await (await request.get("/sitemap.xml")).text();
+    const paths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1]).pathname);
+
+    for (const pathname of paths) {
+        await page.goto(pathname);
+        const description = await head(page, 'meta[name="description"]', "content");
+
+        expect(description, pathname).toBeTruthy();
+        expect((description ?? "").length, pathname).toBeLessThanOrEqual(160);
+    }
+});

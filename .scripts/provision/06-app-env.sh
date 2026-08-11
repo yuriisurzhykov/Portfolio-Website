@@ -61,6 +61,7 @@ fi
 sudo tee "${ENV_FILE}" > /dev/null <<EOF
 DATABASE_URL="postgresql://portfolio:${PORTFOLIO_DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}"
 JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET}"
+MEDIA_DIR="${BASE_DIR}/shared/media"
 EOF
 
 sudo chown "${APP_USER}:${APP_USER}" "${ENV_FILE}"

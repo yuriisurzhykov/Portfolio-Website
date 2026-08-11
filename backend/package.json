@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev && prisma generate",
     "create-admin": "tsx scripts/create-admin.ts",
     "seed-site-content": "tsx scripts/seed-site-content.ts",
+    "backfill-post-covers": "tsx scripts/backfill-post-covers.ts",
     "seed-e2e-fixtures": "dotenv -e .env.test -- tsx scripts/seed-e2e-fixtures.ts",
     "cleanup-expired-sessions": "tsx scripts/cleanup-expired-sessions.ts",
     "test": "npm run test:migrate && vitest run",
@@ -40,6 +41,7 @@
     "argon2": "^0.45.0",
     "jose": "^6.2.3",
     "pg": "^8.22.0",
+    "sharp": "^0.35.3",
     "zod": "^4.4.3"
   }
 }

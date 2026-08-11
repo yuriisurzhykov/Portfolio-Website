@@ -2,6 +2,7 @@ import type { Post as PostRow } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db/client";
 import { SlugAlreadyExistsError } from "../errors";
+import { ensureCoverMatchesCategory, generateCoverForPost } from "../media/covers";
 import { blockInputSchema, type Block } from "./blocks";
 import {
     discardAllDraftHistory,
@@ -344,7 +345,7 @@ export async function getPostForAdmin(slug: string): Promise<AdminPostDetail | n
  * that's the whole point of a preview.
  */
 export async function getPostPreview(slug: string, locale: ContentLocale = "en"): Promise<PostDetail | null> {
-    const row = await prisma.post.findUnique({ where: { slug } });
+    const row = await prisma.post.findUnique({ where: { slug }, include: { cover: true } });
     if (!row) {
         return null;
     }
@@ -392,12 +393,27 @@ async function assertSlugAvailable(slug: string, excludingCurrentSlug?: string):
  * regardless of `input.status` (a public-facing concept, see
  * schema.prisma's comment) — `publishPost()` is the only path that ever
  * moves it to PUBLISHED.
+ *
+ * A cover is generated and attached in the SAME insert (`coverAssetId` set
+ * directly on `prisma.post.create`, not a second `update` afterwards) — see
+ * `backend/src/media/README.md`: no post is ever observably created
+ * without one, so no reader of `Post` ever has to branch on "does this post
+ * have a cover yet." Cover generation happening before the row exists is
+ * safe: `generateCoverForPost` never reads or writes anything keyed by the
+ * post's row id, only its slug/title/category/excerpt, all of which are
+ * already known here.
  */
 export async function createPost(input: PostInput): Promise<PostSummary> {
     const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
 
     const bodyDocumentId = await replaceDocumentContent(null, input.blocks);
+    const cover = await generateCoverForPost({
+        slug,
+        titleEn: input.title,
+        excerptEn: input.excerpt,
+        categoryEn: input.category,
+    });
     const row = await prisma.post.create({
         data: {
             slug,
@@ -409,7 +425,9 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
             status: input.status,
             relatedWorkSlug: input.relatedWorkSlug ?? null,
             bodyDocumentId,
+            coverAssetId: cover.id,
         },
+        include: { cover: true },
     });
     // `assertSlugAvailable` only looked at live posts, so this slug may
     // still be some OTHER post's former address — claimed only NOW, after
@@ -440,6 +458,20 @@ async function isSlugTaken(slug: string): Promise<boolean> {
  * finished state to real readers before the admin ever confirmed
  * anything. Now nothing reaches the live row until an explicit
  * Publish/Update click (`publishPost`).
+ *
+ * `Post.coverAssetId` is deliberately covered by this SAME rule, not
+ * exempted from it — an earlier version of this function DID update the
+ * live cover eagerly here (see media/README.md's dated entry for the bug
+ * that motivated wanting that), and that was a real regression of the
+ * exact bug this whole function exists to prevent: editing an
+ * ALREADY-PUBLISHED post's category would have changed what real readers
+ * see (the live cover) the moment autosave fired, before Publish/Update
+ * was ever clicked — and "Discard changes" had no way to undo it, since
+ * discarding only deletes the `ContentDraft` row, never touches
+ * `Post.coverAssetId`. `applyPostDraftToRow` (called only from
+ * `publishPost`) is the one place a category change is allowed to reach
+ * the live cover, for the same reason it's the one place any other
+ * content change is allowed to.
  */
 export async function savePostDraft(slug: string, input: PostInput): Promise<PostSummary | null> {
     const existing = await prisma.post.findUnique({ where: { slug } });
@@ -473,6 +505,19 @@ async function applyPostDraftToRow(
     await assertSlugAvailable(newSlug, existing.slug);
 
     const bodyDocumentId = await replaceDocumentContent(existing.bodyDocumentId, data.blocks);
+    // The ONE place a category change is allowed to reach the live cover
+    // — same rule as every other field this function writes: nothing
+    // reaches `Post` until Publish/Update, INCLUDING the cover (see
+    // `savePostDraft`'s own comment for the real bug that existed before
+    // this rule applied to `coverAssetId` too). A no-op read-then-compare
+    // when the category didn't actually change — see
+    // `ensureCoverMatchesCategory`'s own comment for why that's cheap.
+    const coverAssetId = await ensureCoverMatchesCategory(existing.coverAssetId, {
+        slug: newSlug,
+        titleEn: data.title,
+        excerptEn: data.excerpt,
+        categoryEn: data.category,
+    });
 
     const existingTitle = localizedTextSchema.parse(existing.title);
     const existingCategory = localizedTextSchema.parse(existing.category);
@@ -504,6 +549,7 @@ async function applyPostDraftToRow(
             relatedWorkSlug: data.relatedWorkSlug ?? null,
             bodyDocumentId,
             bodyDocumentIdRu,
+            coverAssetId,
             // Explicit, not `@updatedAt` — this (and `unpublishPost`'s deliberate
             // omission of it) is what keeps this column meaning "the content
             // changed," not "the row was touched." See `Post.contentUpdatedAt`

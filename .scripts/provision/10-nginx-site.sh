@@ -6,9 +6,11 @@
 # an existing Certbot-managed certificate for DOMAIN.
 #
 # Parameterized: SITE_NAME (sites-available filename), DOMAIN (primary —
-# also the cert path and default server_name), PORT. EXTRA_SERVER_NAMES
-# (optional) appends more server_name values, e.g. "www.yuriisoft.me" for
-# the eventual production site.
+# also the cert path and default server_name), PORT, APP_BASE_DIR (this
+# target's release directory — see 05-app-dirs.sh; used ONLY to locate
+# ${APP_BASE_DIR}/shared/media for the `location /media/` block below).
+# EXTRA_SERVER_NAMES (optional) appends more server_name values, e.g.
+# "www.yuriisoft.me" for the eventual production site.
 #
 # Deliberately does NOT run `nginx -t`/reload itself — verifying config
 # syntax before touching a live nginx is a separate, explicit step every
@@ -23,6 +25,7 @@ set -euo pipefail
 : "${SITE_NAME:?Set SITE_NAME, e.g. yuriisoft-dev}"
 : "${DOMAIN:?Set DOMAIN, e.g. dev.yuriisoft.me}"
 : "${PORT:?Set PORT, e.g. 3001}"
+: "${APP_BASE_DIR:?Set APP_BASE_DIR, e.g. /srv/apps/yuriisoft-frontend-dev}"
 SERVER_NAMES="${DOMAIN}${EXTRA_SERVER_NAMES:+ $EXTRA_SERVER_NAMES}"
 
 sudo tee "/etc/nginx/sites-available/${SITE_NAME}" > /dev/null <<EOF
@@ -76,6 +79,19 @@ server {
         proxy_set_header    X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header    X-Forwarded-Proto \$scheme;
         proxy_read_timeout  60s;
+    }
+
+    # Generated post covers (backend/src/media/) — served straight off disk,
+    # Node never in the loop. Safe to cache forever: every filename is
+    # content-addressed (a sha256 hash, see MediaAsset.contentHash), so this
+    # exact URL can never later resolve to different bytes.
+    # frontend/src/app/media/[...path]/route.ts serves the SAME directory
+    # for local dev (no nginx there) — this block is what makes production
+    # skip Node for these requests entirely; see media/README.md's
+    # "Хранилище" entry.
+    location /media/ {
+        alias ${APP_BASE_DIR}/shared/media/;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
     }
 
     location / {

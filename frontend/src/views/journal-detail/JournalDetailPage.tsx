@@ -10,6 +10,7 @@ import { LinkButton } from "@/shared/ui/button";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
 import { useTranslation } from "@/shared/i18n";
 import { formatMonthYear } from "@/shared/lib/date-format";
+import { CoverImage } from "@/shared/ui/cover-image";
 
 export interface JournalDetailPageProps {
     post: PostDetail;
@@ -54,6 +55,18 @@ export function JournalDetailPage({ post, relatedWork, isPreview = false }: Jour
                 <h1 className="m-0 mb-5 font-extrabold text-[clamp(30px,4.2vw,44px)] leading-[1.15] tracking-tight text-text-primary">
                     { pick(post.title) }
                 </h1>
+
+                { post.cover && (
+                    // This is the page's LCP element — `fetchPriority="high"`
+                    // plus `loading="eager"` (never lazy, unlike the cards
+                    // below the fold on JournalListPage/JournalPreview).
+                    <CoverImage
+                        { ...post.cover }
+                        fetchPriority="high"
+                        loading="eager"
+                        className="w-full h-auto mb-8 rounded-xl border border-border-subtle"
+                    />
+                ) }
 
                 <ContentBlocks blocks={ post.body }/>
 

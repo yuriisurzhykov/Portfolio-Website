@@ -1,4 +1,4 @@
-import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
+import { resolveCategoryHue, SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
 import { pickFor } from "@/shared/i18n";
 import { cachedPostBySlug, cachedSiteContent } from "@/shared/lib/cached-content";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
@@ -28,10 +28,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         orDatabaseOutageFallback(() => cachedSiteContent("config"), SITE_CONTENT_DEFAULTS.config, "OG image site config"),
     ]);
 
+    // Always the ENGLISH category (never the locale-picked one) — same rule
+    // `covers.ts`'s `resolveCategoryHue` documents: a hue must not depend on
+    // the reader's language, since the two locale cards for one post are
+    // meant to look like the same post. A database outage degrades this to
+    // `undefined` (the site's default hue, via `renderOgImage`'s own
+    // fallback) rather than failing the whole card.
+    const hue = post
+        ? await orDatabaseOutageFallback(() => resolveCategoryHue(post.category.en), undefined, `OG hue for /journal/${ slug }`)
+        : undefined;
+
     return renderOgImage({
         eyebrow: post ? pickFor(post.category, contentLocale) : "Journal",
         title: truncate(post ? pickFor(post.title, contentLocale) : config.name, 72),
         subtitle: truncate(post ? pickFor(post.excerpt, contentLocale) : "", 130),
         footer: config.name,
+        hue,
     });
 }

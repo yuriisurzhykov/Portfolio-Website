@@ -4,3 +4,9 @@
 *.tsbuildinfo
 .stryker-tmp/
 /reports
+
+# Local-dev cover/media output (media-store.ts's DiskMediaStore default) —
+# generated, content-addressed, and machine-specific (see media/README.md's
+# "Хранилище" entry); each provisioned target (dev/prod VPS, CI) has its own
+# MEDIA_DIR, never this checked-out one.
+/media

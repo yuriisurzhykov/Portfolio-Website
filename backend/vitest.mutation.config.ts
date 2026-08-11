@@ -40,6 +40,11 @@ export default defineConfig({
             "src/content/slugify.test.ts",
             "src/content/tech-slug.test.ts",
             "src/errors.test.ts",
+            "src/media/cover-seed.test.ts",
+            "src/media/cover-hue.test.ts",
+            "src/media/cover-palette.test.ts",
+            "src/media/cover-composition.test.ts",
+            "src/media/content-hash.test.ts",
         ],
     },
 });
