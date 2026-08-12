@@ -5,7 +5,7 @@ import { proxy } from "./proxy";
 
 function makeRequest(
     path: string,
-    options: { ip?: string; prefetch?: boolean; accept?: string; rsc?: boolean } = {},
+    options: { ip?: string; prefetch?: boolean; accept?: string; rsc?: boolean; forwardedProto?: string } = {},
 ): NextRequest {
     const headers = new Headers();
     headers.set("x-forwarded-for", options.ip ?? "203.0.113.1");
@@ -18,7 +18,20 @@ function makeRequest(
     if (options.rsc) {
         headers.set("rsc", "1");
     }
-    return new NextRequest(new URL(path, "http://localhost:3000"), { headers });
+    // Real deployments (behind nginx) run over `X-Forwarded-Proto: https`,
+    // and by the time a request reaches middleware, Next.js's own server
+    // has ALREADY folded that into `request.nextUrl.protocol` itself (see
+    // the "forces the rewrite target's protocol to http" regression test
+    // below) — setting the header alone on a `NextRequest` built here does
+    // NOT reproduce that, since this constructor doesn't re-derive
+    // `nextUrl` from headers the way the real server pipeline does. The
+    // base URL's own scheme is what actually stands in for "the protocol
+    // middleware sees on `request.nextUrl`" in this test harness.
+    if (options.forwardedProto) {
+        headers.set("x-forwarded-proto", options.forwardedProto);
+    }
+    const scheme = options.forwardedProto === "https" ? "https" : "http";
+    return new NextRequest(new URL(path, `${ scheme }://localhost:3000`), { headers });
 }
 
 const HTML_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
@@ -379,6 +392,30 @@ describe("proxy — locale resolution", () => {
 
     it("resolves \"en\" for an ordinary unprefixed URL", async () => {
         expect(resolvedLocale(await proxy(makeRequest("/journal/my-post")))).toBe("en");
+    });
+
+    /**
+     * Regression test for a real production outage (vercel/next.js#94745):
+     * behind nginx, an incoming request carries `X-Forwarded-Proto: https`
+     * even though this app's own server only ever speaks plain HTTP (TLS
+     * terminates at nginx) — `request.nextUrl.clone()` copies that "https"
+     * straight into the rewrite target, and Next.js's own loopback-hostname
+     * normalization bug then treats the rewrite as external and self-proxies
+     * it, attempting a real TLS handshake against the plain-HTTP port
+     * ("EPROTO ... wrong version number") and 500ing every single /ru
+     * request. Reproduced live against a real `next build && next start -H
+     * 127.0.0.1` with this exact spoofed header before being fixed by
+     * forcing the rewrite's own protocol to "http:" — see `handleLocale`'s
+     * comment. Every other test in this file constructs requests without
+     * `x-forwarded-proto`, so none of them would have caught this.
+     */
+    it("forces the rewrite target's protocol to http, even when the original request arrived over a forwarded https connection", async () => {
+        const target = rewriteTarget(
+            await proxy(makeRequest("/ru/journal/my-post", { forwardedProto: "https" })),
+        );
+
+        expect(target?.protocol).toBe("http:");
+        expect(target?.pathname).toBe("/journal/my-post");
     });
 
     it("IGNORES a client-supplied x-locale header — it is an output of this function, never an input", async () => {
