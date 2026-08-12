@@ -23,6 +23,30 @@ afterEach(() => {
     setMediaStoreForTesting(undefined);
 });
 
+describe("computeContentHash", () => {
+    it("hashes title+excerpt the same way regardless of extra being omitted — Post's 2-arg call never changes", () => {
+        expect(computeContentHash("Title", "Excerpt")).toBe(computeContentHash("Title", "Excerpt"));
+    });
+
+    it("a third `extra` argument changes the hash — added 2026-08-11 so Work's cover freshness check can fold in its editable date", () => {
+        const withoutExtra = computeContentHash("Title", "Excerpt");
+        const withExtra = computeContentHash("Title", "Excerpt", "2026-01-01");
+        expect(withExtra).not.toBe(withoutExtra);
+    });
+
+    it("two different `extra` values produce two different hashes, same title/excerpt", () => {
+        const first = computeContentHash("Title", "Excerpt", "2024-01-01");
+        const second = computeContentHash("Title", "Excerpt", "2026-01-01");
+        expect(first).not.toBe(second);
+    });
+
+    it("never collides `extra` with an equivalent concatenation of title/excerpt — the \\0 separator applies to all three parts, not just the first two", () => {
+        const asExtra = computeContentHash("ab", "c", "d");
+        const asExcerpt = computeContentHash("ab", "cd");
+        expect(asExtra).not.toBe(asExcerpt);
+    });
+});
+
 describe("resolveCategoryHue", () => {
     it("assigns ordinal 0 (hue 0°) to the first category ever seen", async () => {
         expect(await resolveCategoryHue("Kotlin")).toBeCloseTo(hueForOrdinal(0));

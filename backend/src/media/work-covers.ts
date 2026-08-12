@@ -88,7 +88,11 @@ export async function generateCoverForWork(work: CoverSourceWork): Promise<Media
                 variant: brief.variant,
                 seed: brief.seed,
                 hue: brief.hue,
-                contentHash: computeContentHash(work.titleEn, work.summaryEn),
+                // `work.date` feeds the hash too, unlike Post's — see
+                // `computeContentHash`'s own comment for why: the stamp
+                // literally renders it, and it's the one field that stays
+                // admin-editable after creation.
+                contentHash: computeContentHash(work.titleEn, work.summaryEn, work.date),
                 svgSource: generated.source ?? null,
             },
         },
@@ -118,13 +122,18 @@ function readStyleVersion(generation: unknown): number | null {
 }
 
 /**
- * Keeps a Work item's cover in sync with its CURRENT title/summary and
- * rendering algorithm version — exact mirror of `ensureCoverIsCurrent`'s
- * own comment. `hue` itself basically never changes for an existing Work
- * (its identity IS its slug — `resolveWorkHue` only assigns a genuinely new
- * ordinal the first time a slug is seen), but the comparison still checks it
- * for the same reason `ensureCoverIsCurrent` does: cheap, and correct if a
- * future admin action ever lets a Work's hue be reassigned.
+ * Keeps a Work item's cover in sync with its CURRENT title/summary/date
+ * and rendering algorithm version — mirrors `ensureCoverIsCurrent`'s own
+ * comment, plus `date` (folded into `targetContentHash`, see
+ * `computeContentHash`'s own comment for why Work needs this and Post
+ * doesn't): unlike `Post.date`, `Work.date` stays admin-editable after
+ * creation, and the stamp layer renders it, so a date-only edit has to
+ * regenerate the cover too, not just a title/excerpt edit. `hue` itself
+ * basically never changes for an existing Work (its identity IS its slug
+ * — `resolveWorkHue` only assigns a genuinely new ordinal the first time a
+ * slug is seen), but the comparison still checks it for the same reason
+ * `ensureCoverIsCurrent` does: cheap, and correct if a future admin action
+ * ever lets a Work's hue be reassigned.
  *
  * Called ONLY from `applyWorkDraftToRow` (via `publishWork`) — deliberately
  * NOT from `saveWorkDraft`, same draft/publish-boundary rule as `Post`'s
@@ -133,7 +142,7 @@ function readStyleVersion(generation: unknown): number | null {
  */
 export async function ensureWorkCoverIsCurrent(currentCoverAssetId: string | null, work: CoverSourceWork): Promise<string> {
     const targetHue = await resolveWorkHue(work.slug);
-    const targetContentHash = computeContentHash(work.titleEn, work.summaryEn);
+    const targetContentHash = computeContentHash(work.titleEn, work.summaryEn, work.date);
 
     if (currentCoverAssetId) {
         const current = await prisma.mediaAsset.findUnique({

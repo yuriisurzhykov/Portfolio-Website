@@ -135,15 +135,27 @@ export interface CoverSourcePost {
 
 /**
  * A short hash of the text that actually shapes the v3 composition (flow
- * curves, waveform, letterform-fill, readable title) — used by
- * `ensureCoverIsCurrent` to detect "the title or excerpt changed" the same
- * way it already detects "the category changed" via hue. Both title AND
- * excerpt feed in (a `\0`-joined pair, not a naive concatenation, so
+ * curves, waveform, letterform-fill, readable title, and — for Work only
+ * — the stamp's date) — used by `ensureCoverIsCurrent`/
+ * `ensureWorkCoverIsCurrent` to detect "the title/excerpt/date changed"
+ * the same way both already detect "the hue changed". Every part feeds
+ * in as a `\0`-joined sequence, not a naive concatenation, so
  * `("ab", "c")` and `("a", "bc")` never accidentally collide on the same
- * hash) — reuses `content-hash.ts`'s `sha256Hex`, no new hashing primitive.
+ * hash — reuses `content-hash.ts`'s `sha256Hex`, no new hashing primitive.
+ *
+ * `extra` is optional and Post never passes it — `Post.date` is set once
+ * at creation and frozen forever (see schema.prisma's comment), so it can
+ * never change without title/excerpt also changing, and folding it in
+ * would just be a no-op that costs a rehash on every existing post's
+ * cover for nothing. `Work.date` is the opposite: admin-editable on its
+ * own, and it's what the stamp layer actually renders — added 2026-08-11
+ * after a PR review caught that `ensureWorkCoverIsCurrent` would
+ * otherwise treat a date-only edit as "nothing relevant changed" and
+ * keep serving a cover whose stamp shows the OLD date forever.
  */
-export function computeContentHash(titleEn: string, excerptEn: string): string {
-    return sha256Hex(Buffer.from(`${ titleEn }\0${ excerptEn }`, "utf-8"));
+export function computeContentHash(titleEn: string, excerptEn: string, extra?: string): string {
+    const parts = extra === undefined ? [titleEn, excerptEn] : [titleEn, excerptEn, extra];
+    return sha256Hex(Buffer.from(parts.join("\0"), "utf-8"));
 }
 
 /** Shared with `work-covers.ts` — same `MediaAsset` shape, one Post-cover generator and one Work-cover generator producing rows of it. */

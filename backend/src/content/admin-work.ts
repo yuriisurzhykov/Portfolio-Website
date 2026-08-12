@@ -132,14 +132,75 @@ export const translateWorkInputSchema = z.object({
 export type TranslateWorkInput = z.infer<typeof translateWorkInputSchema>;
 
 /**
+ * Upgrades a persisted `ContentDraft`/`ContentRevision` JSON blob that
+ * predates 2026-08-11 (Work Item Covers & Unified Identity Hue) to the
+ * current shape — added after a PR review caught the real gap: the
+ * schema migration that introduced `Work.date`/localized `Work.title`
+ * only touched the LIVE `Work` table's own columns, never the separately
+ * stored `ContentDraft.data`/`ContentRevision.data` JSON for `kind =
+ * "work"`. Without this, an old row's `year: number` would silently be
+ * DISCARDED (not even an error — `date`'s own `.default()` quietly
+ * replaces it with today's date) the first time it's read, and an old
+ * `translation` object with no `title` key would throw a `ZodError` out
+ * of `readWorkDraft`/`getWorkForAdmin`, breaking the admin list/detail/
+ * publish and "restore this old revision" flows outright for any
+ * environment that had a real pending draft or revision history at
+ * deploy time.
+ *
+ * Deliberately a `z.preprocess` step BEFORE the strict schema runs, not a
+ * one-off SQL data migration on `ContentDraft`/`ContentRevision` — those
+ * two tables store arbitrary opaque `Json`, and by the time this ships
+ * the schema migration that changed `Work`'s own shape has very likely
+ * already run (checksummed, applied) against real data, so rewriting
+ * that SQL file now would just reproduce the checksum-mismatch class of
+ * bug this repo has already hit once (see `media/README.md`'s dated
+ * entry). A read-time upgrade fixes every already-applied environment
+ * without touching a single already-applied migration.
+ */
+function upgradeLegacyWorkDraftData(raw: unknown): unknown {
+    if (typeof raw !== "object" || raw === null) {
+        return raw;
+    }
+    const data = { ...raw } as Record<string, unknown>;
+
+    // Old shape: `year: number`, no `date` at all. Same "start of year"
+    // neutral default the schema migration itself backfilled `Work.date`
+    // with — an admin can correct it by hand afterward if the extra
+    // precision actually matters, same as every already-live row got.
+    if (typeof data.date !== "string" && typeof data.year === "number") {
+        data.date = `${ data.year }-01-01`;
+    }
+    delete data.year;
+
+    // Old shape: a `translation` object with no `title` key at all
+    // (`WorkTranslatePage` never exposed one before this change) —
+    // `translateWorkInputSchema.title` has no `.default()` (unlike every
+    // OTHER field here, which already tolerated a translator not having
+    // gotten to them yet), so an old translation reads back as "not yet
+    // translated" for its title specifically, exactly like every other
+    // untouched field already does.
+    if (typeof data.translation === "object" && data.translation !== null) {
+        const translation = data.translation as Record<string, unknown>;
+        if (typeof translation.title !== "string") {
+            data.translation = { ...translation, title: "" };
+        }
+    }
+
+    return data;
+}
+
+/**
  * The whole pending-edit payload persisted in `ContentDraft.data` for a
  * work item — `WorkInput` plus an optional pending Russian translation.
  * See admin-posts.ts's `postDraftDataSchema` for the full reasoning (same
  * move, same date, same "translation moved off the live row").
  */
-export const workDraftDataSchema = workDraftInputSchema.extend({
-    translation: translateWorkInputSchema.nullish(),
-});
+export const workDraftDataSchema = z.preprocess(
+    upgradeLegacyWorkDraftData,
+    workDraftInputSchema.extend({
+        translation: translateWorkInputSchema.nullish(),
+    }),
+);
 export type WorkDraftData = z.infer<typeof workDraftDataSchema>;
 
 /** What `/admin/work/[slug]/translate` reads before rendering its form. */

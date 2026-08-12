@@ -176,6 +176,26 @@ describe("ensureWorkCoverIsCurrent", () => {
         expect(await prisma.mediaAsset.count()).toBe(2);
     });
 
+    it("regenerates when ONLY the date changed, title and summary unchanged — added after a PR review caught this: the stamp renders the date, so a date-only edit must not be treated as \"nothing relevant changed\"", async () => {
+        await createTestWork("redated-project");
+        const first = await generateCoverForWork({
+            slug: "redated-project",
+            titleEn: "Redated Project",
+            summaryEn: "Unchanging summary.",
+            date: "2024-01-01",
+        });
+
+        const second = await ensureWorkCoverIsCurrent(first.id, {
+            slug: "redated-project",
+            titleEn: "Redated Project",
+            summaryEn: "Unchanging summary.",
+            date: "2026-06-15",
+        });
+
+        expect(second).not.toBe(first.id);
+        expect(await prisma.mediaAsset.count()).toBe(2);
+    });
+
     it("regenerates a cover whose stored styleVersion is older than CURRENT_COVER_STYLE_VERSION, even with matching hue AND contentHash", async () => {
         await createTestWork("stale-style-version");
         const workHue = await resolveWorkHue("stale-style-version");
