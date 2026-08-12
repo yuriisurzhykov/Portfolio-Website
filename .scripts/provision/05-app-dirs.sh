@@ -28,6 +28,17 @@
 #       not inside a release, is what makes a generated cover survive the
 #       NEXT deploy instead of vanishing with the release directory that
 #       created it.
+#     - .cache/fontconfig/ — found live: "nextapp" has no home directory
+#       (04-app-user.sh), so `sharp`/librsvg's underlying fontconfig has
+#       nowhere to write its font cache (/var/cache/fontconfig needs root;
+#       ~/.cache/fontconfig and ~/.fontconfig need a real $HOME) and prints
+#       "Fontconfig error: No writable cache directories" on every cover
+#       render — not fatal (the render still succeeds, just uncached and
+#       noisy), but real log noise that can mask an actual error. Sets
+#       XDG_CACHE_HOME here for the same reason MEDIA_DIR isn't inside a
+#       release: fontconfig only reads $XDG_CACHE_HOME/fontconfig, never
+#       creates $XDG_CACHE_HOME itself, and a fresh dir per release would
+#       mean rebuilding the cache from scratch on every deploy.
 #
 # `shared/media` being mode 755 is NOT enough on its own for nginx to reach
 # it — found in review, not live: Unix path traversal requires execute
@@ -57,6 +68,7 @@ NGINX_USER="www-data"
 sudo mkdir -p "${BASE_DIR}/releases"
 sudo mkdir -p "${BASE_DIR}/shared"
 sudo mkdir -p "${BASE_DIR}/shared/media"
+sudo mkdir -p "${BASE_DIR}/shared/.cache/fontconfig"
 
 sudo chown "${DEPLOY_USER}:${DEPLOY_USER}" "${BASE_DIR}/releases"
 
@@ -68,6 +80,11 @@ sudo chmod 700 "${BASE_DIR}/shared"
 # without needing group membership in "nextapp".
 sudo chown "${APP_USER}:${APP_USER}" "${BASE_DIR}/shared/media"
 sudo chmod 755 "${BASE_DIR}/shared/media"
+
+# nextapp-only (700) — nothing outside the app ever needs to read a font
+# cache, unlike shared/media above.
+sudo chown -R "${APP_USER}:${APP_USER}" "${BASE_DIR}/shared/.cache"
+sudo chmod 700 "${BASE_DIR}/shared/.cache"
 
 if ! command -v setfacl &>/dev/null; then
   echo "Installing acl package (setfacl/getfacl)..."

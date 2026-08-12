@@ -16,13 +16,16 @@
 # Hardening directives (NoNewPrivileges, PrivateTmp, ProtectHome,
 # ProtectSystem=strict) were added and verified INCREMENTALLY against the
 # real dev service, one directive group at a time, before being baked in
-# together here. ProtectSystem=strict (whole filesystem read-only except a
-# few systemd-managed paths) is safe for this specific app because it never
-# uses next/image (verified via grep — no server-side runtime disk writes)
-# and NEXT_TELEMETRY_DISABLED=1 avoids Next.js trying to write a telemetry
-# config file to a home directory nextapp doesn't have. If a future change
-# genuinely needs runtime disk writes, add a narrow `ReadWritePaths=`
-# rather than relaxing ProtectSystem.
+# together here. NEXT_TELEMETRY_DISABLED=1 avoids Next.js trying to write a
+# telemetry config file to a home directory nextapp doesn't have.
+#
+# ReadWritePaths below is NOT optional decoration: ProtectSystem=strict
+# refuses ALL writes outside it (EROFS, not a permissions error — chown/
+# chmod on the target don't help). Caught by code review (see
+# .scripts/provision/README.md's dated entry) as stale the moment
+# generateCoverForWork/Post started writing new covers to shared/media at
+# runtime — the original comment here ("never uses next/image, no
+# server-side runtime disk writes") was true when written, not anymore.
 #
 # Idempotent: overwrites the unit file with the same content and reloads;
 # never restarts a currently running service itself.
@@ -67,6 +70,13 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+# Only exception to ProtectSystem=strict: shared/media (persisted cover
+# images, written by generateCoverForWork/Post on publish) and
+# shared/.cache (fontconfig's cache — see deploy-frontend-finish.sh's
+# dated comment). Scoped to shared/ as a whole, not each subdirectory
+# individually, so a future addition under shared/ doesn't silently need
+# a matching edit here too.
+ReadWritePaths=${APP_BASE_DIR}/shared
 # The four directives below were added and verified the same way as the
 # ones above (see this file's header comment) — incrementally, against
 # the real yuriisoft-web-dev service, one group at a time, confirming
