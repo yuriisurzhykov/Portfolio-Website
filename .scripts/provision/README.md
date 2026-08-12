@@ -126,6 +126,19 @@ time you need it (disaster recovery, new server). See the repo's
   (`next start -H 127.0.0.1`) instead — see that file and `14-ufw.sh`
   below for the firewall half of the same fix.
 
+  **2026-08-11 — caught by code review:** `ProtectSystem=strict` with no
+  `ReadWritePaths=` refuses every write outside the sandbox (`EROFS`), and
+  this unit had none, even though `generateCoverForWork`/`generateCoverForPost`
+  write new covers to `shared/media` at runtime by the time this was
+  flagged — the original comment justifying `strict` ("never uses
+  next/image, no server-side runtime disk writes") had gone stale.
+  Added `ReadWritePaths=${APP_BASE_DIR}/shared`, covering both
+  `shared/media` and the newer `shared/.cache` (fontconfig). A target
+  provisioned before this fix needs `08-systemd-service.sh` re-run AND an
+  explicit `sudo systemctl restart <service>` — sandboxing directives only
+  take effect from the process's next start, `daemon-reload` alone does
+  not retroactively apply them to an already-running process.
+
 - `09-nginx-rate-limit-zone.sh` — installs the shared `login_limit`
   `limit_req_zone` (10r/m per IP) in `/etc/nginx/conf.d/`, protecting
   `/api/auth/login` — a second, independent layer in front of the
