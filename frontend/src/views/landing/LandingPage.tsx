@@ -23,7 +23,6 @@ export function LandingPage({ featuredWork, latestPost, hero, contact, principle
         <main>
             <Hero hero={hero} role={config.role} />
             <TechStack techStack={techStack} />
-            <Principles principles={principles} />
             <SelectedWork items={featuredWork} />
             <JournalPreview post={latestPost} />
             <ContactCta contact={contact} email={config.email} />
