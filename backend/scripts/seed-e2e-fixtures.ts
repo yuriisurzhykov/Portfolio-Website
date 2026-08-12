@@ -73,7 +73,7 @@ const FIXTURES = {
         withCaseStudy: {
             slug: "navigation-engine",
             title: "Navigation Engine (E2E fixture)",
-            year: 2025,
+            date: "2025-06-01",
             status: "shipped" as const,
             summary: "A fixture case study covering the hero-image + approach-steps-grid template variant.",
             stack: ["Kotlin", "Jetpack Compose"],
@@ -111,7 +111,7 @@ const FIXTURES = {
         secondCaseStudy: {
             slug: "onboarding-flow",
             title: "Onboarding Flow Redesign (E2E fixture)",
-            year: 2024,
+            date: "2024-05-01",
             status: "shipped" as const,
             summary: "A fixture case study covering the no-hero-image template variant.",
             stack: ["TypeScript", "React"],
@@ -137,7 +137,7 @@ const FIXTURES = {
         withoutCaseStudy: {
             slug: "internal-tooling",
             title: "Internal Tooling (E2E fixture)",
-            year: 2023,
+            date: "2023-01-01",
             status: "in-progress" as const,
             summary: "A fixture work item with no case study — exercises the hasCaseStudy: false filter.",
             stack: ["Python"],
@@ -228,6 +228,7 @@ const TRANSLATIONS = {
     },
     work: {
         "navigation-engine": {
+            title: "Навигационный движок (E2E-фикстура)",
             summary: "Фикстурный кейс: hero-изображение и сетка шагов подхода.",
             startedLabel: "Янв 2025",
             shippedLabel: "Июн 2025",

@@ -8,7 +8,11 @@ import { LinkButton } from "@/shared/ui/button/LinkButton";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { AdminListItem } from "@/shared/ui/admin-list-item";
+import { TagList } from "@/shared/ui/tag-list";
+import { WorkCoverImage } from "@/shared/ui/work-cover-image";
+import { CompactRelatedLink } from "@/shared/ui/related-content-callout";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
+import { formatAdminDate } from "@/shared/lib/date-format";
 
 export interface AdminWorkListPageProps {
     items: AdminWorkListItem[];
@@ -66,6 +70,15 @@ export function AdminWorkListPage({ items }: AdminWorkListPageProps) {
                     {visibleItems.map((item) => (
                         <AdminListItem
                             key={item.slug}
+                            thumbnail={(
+                                <WorkCoverImage
+                                    override={item.coverImage}
+                                    cover={item.cover}
+                                    alt={item.title.en}
+                                    label={item.title.en.toLowerCase()}
+                                    className="h-14 w-24 rounded-md border border-border-subtle"
+                                />
+                            )}
                             badges={(
                                 <>
                                     <StatusBadge tone={item.status === "shipped" ? "success" : "warning"}>{item.status}</StatusBadge>
@@ -73,11 +86,15 @@ export function AdminWorkListPage({ items }: AdminWorkListPageProps) {
                                     {item.lifecycleState === "PUBLISHED" && item.hasUnpublishedChanges && (
                                         <StatusBadge tone="warning">Unpublished changes</StatusBadge>
                                     )}
+                                    <TagList items={item.stack} maxVisible={3} size="sm" variant="neutral" />
                                 </>
                             )}
-                            meta={item.year}
-                            title={item.title}
+                            meta={formatAdminDate(item.date)}
+                            title={item.title.en}
                             slug={item.slug}
+                            related={item.relatedPostSlug && (
+                                <CompactRelatedLink href={`/admin/journal/${ item.relatedPostSlug }/edit`} label={`Linked to: ${ item.relatedPostSlug }`} />
+                            )}
                             editHref={`/admin/work/${ item.slug }/edit`}
                             onDelete={() => handleDelete(item.slug)}
                             deleting={deletingSlug === item.slug}

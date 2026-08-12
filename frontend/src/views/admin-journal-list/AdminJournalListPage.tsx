@@ -8,6 +8,9 @@ import { LinkButton } from "@/shared/ui/button/LinkButton";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { AdminListItem } from "@/shared/ui/admin-list-item";
+import { Tag } from "@/shared/ui/tag";
+import { CoverImage } from "@/shared/ui/cover-image";
+import { CompactRelatedLink } from "@/shared/ui/related-content-callout";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { formatAdminDate } from "@/shared/lib/date-format";
 
@@ -76,6 +79,9 @@ export function AdminJournalListPage({ entries }: AdminJournalListPageProps) {
                     {visibleEntries.map((post) => (
                         <AdminListItem
                             key={post.slug}
+                            thumbnail={post.cover && (
+                                <CoverImage {...post.cover} className="h-14 w-24 rounded-md border border-border-subtle" />
+                            )}
                             badges={(
                                 <>
                                     <StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>
@@ -83,11 +89,15 @@ export function AdminJournalListPage({ entries }: AdminJournalListPageProps) {
                                     {post.lifecycleState === "PUBLISHED" && post.hasUnpublishedChanges && (
                                         <StatusBadge tone="warning">Unpublished changes</StatusBadge>
                                     )}
+                                    {post.category.en && <Tag variant="neutral" size="sm">{post.category.en}</Tag>}
                                 </>
                             )}
                             meta={formatAdminDate(post.date)}
                             title={post.title.en}
                             slug={post.slug}
+                            related={post.relatedWorkSlug && (
+                                <CompactRelatedLink href={`/admin/work/${ post.relatedWorkSlug }/edit`} label={`Linked to: ${ post.relatedWorkSlug }`} />
+                            )}
                             editHref={`/admin/journal/${ post.slug }/edit`}
                             onDelete={() => handleDelete(post.slug)}
                             deleting={deletingSlug === post.slug}

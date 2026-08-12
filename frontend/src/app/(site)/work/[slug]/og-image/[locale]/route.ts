@@ -1,4 +1,4 @@
-import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
+import { resolveWorkHue, SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
 import { pickFor } from "@/shared/i18n";
 import { cachedSiteContent, cachedWorkBySlug } from "@/shared/lib/cached-content";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
@@ -17,12 +17,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         orDatabaseOutageFallback(() => cachedSiteContent("config"), SITE_CONTENT_DEFAULTS.config, "OG image site config"),
     ]);
 
+    // `resolveWorkHue`, not the site-default hue `renderOgImage` falls
+    // back to without this — added 2026-08-11 (Work Item Covers & Unified
+    // Identity Hue) once `Work` got its own guaranteed-unique identity, so
+    // the OG card matches the real generated cover's/detail-page's own
+    // hue instead of every project sharing the same default orange. A
+    // database outage degrades this to `undefined` (the site's default),
+    // same reasoning as the journal route's identical fallback.
+    const hue = item
+        ? await orDatabaseOutageFallback(() => resolveWorkHue(item.slug), undefined, `OG hue for /work/${ slug }`)
+        : undefined;
+
     return renderOgImage({
-        // `Work.title` is a plain string, not LocalizedText — a project
-        // name is the same in both languages by design (see work.ts).
         eyebrow: contentLocale === "ru" ? "Кейс" : "Case study",
-        title: truncate(item?.title ?? config.name, 72),
+        title: truncate(item ? pickFor(item.title, contentLocale) : config.name, 72),
         subtitle: truncate(item ? pickFor(item.summary, contentLocale) : "", 130),
         footer: config.name,
+        hue,
     });
 }

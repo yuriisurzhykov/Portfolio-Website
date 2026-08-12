@@ -1509,3 +1509,77 @@ category` проверяют только финальное состояние,
 исправлением. Порядок восстановлен теми же двумя строками, что и в первый
 раз; сам тест и предыдущее объяснение выше остаются верными без изменений
 — баг и его механизм не изменились, изменилось только имя функции обложки.
+
+## 2026-08-11 — `Work.title` локализован, `Work.year` → `Work.date`
+
+Часть "Work Item Covers & Unified Identity Hue" (полная история — `media/README.md`'s
+одноимённая запись, там же — миграция схемы/`IdentityHue`/обложки). Этот
+раздел — только контент-модельная половина, что изменилось в `work.ts`/
+`admin-work.ts`.
+
+- **`Work.title` `String` → `Json` `{en, ru}`** — точное зеркало
+  `Post.title`. `WorkSummary.title`/`RawWorkRow.title` меняют тип,
+  `toWorkSummary` парсит через уже существующий `localizedTextSchema` — ни
+  одной новой схемы. `createWork`: `title: {en: input.title, ru: ""}`, тот
+  же паттерн, что уже был у `createPost`. `applyWorkDraftToRow`: `title:
+  {en: data.title, ru: data.translation?.title ?? existingTitle.ru}` —
+  то же самое "не потерять уже переведённое, если сейчас переводят не
+  его" правило, что и у Post.
+- **`translateWorkInputSchema`/`AdminWorkTranslation` получили `title`** —
+  `WorkTranslatePage.tsx` до этого НЕ переводил заголовок вообще (только
+  summary/startedLabel/shippedLabel/role/тело кейс-стади); теперь новое
+  поле "Title" там же, по образцу уже существующих `ReferenceField`.
+- **`Work.year: Int` → `Work.date: String`** (`"YYYY-MM-DD"`, тот же
+  формат, что и `Post.date`) — но, в отличие от `Post.date` (ставится один
+  раз при создании, дальше замороженный), это поле остаётся
+  **редактируемым админом** — та же роль, что была у `year`
+  ("used to sort the ledger, newest first"), просто точнее. Ledger
+  (`/work`, `/admin/work`) в узкой колонке продолжает показывать только
+  год — извлечённый строковым срезом (`formatYear`, frontend), не через
+  `new Date().getFullYear()`, чтобы не наткнуться на ту же
+  таймзоновую ловушку, что уже задокументирована для `formatAdminDate`
+  (frontend's `date-format.ts`).
+- **Миграция данных** (в одной SQL-миграции со схемой `IdentityHue`, не
+  отдельно): `title: "..."` → `{en: "<старое значение>", ru: ""}`;
+  `year: N` → `date: "N-01-01"` (день/месяц не восстановить из старых
+  данных — начало года как нейтральный дефолт, админ поправит руками
+  при следующем редактировании, если важно точнее). Применено к обеим
+  базам (`portfolio`, `portfolio_test`), проверено вживую прямым запросом
+  на всех 15 реальных строках `Work`.
+- **Новый тест** (`admin-work.test.ts`): "writes the pending Russian title
+  alongside the summary" — тот же pending/publish паттерн, что уже
+  проверяют существующие тесты для `summary`/`startedLabel` и т.д.,
+  применённый к новому полю.
+
+**Найденный ревью на PR пропуск, не самостоятельно.** Миграция схемы выше
+трогает только собственные колонки таблицы `Work` — она НЕ трогает уже
+сохранённые `ContentDraft.data`/`ContentRevision.data` (непрозрачный
+`Json`) для `kind = "work"`. Строка, сохранённая ДО этого изменения, всё
+ещё содержит `year: number` (без `date`) и, если есть перевод — объект без
+`title`. Без исправления: `date`'s собственный `.default()` молча
+подставляет "сегодня" вместо реального `year` (не ошибка — тихая потеря
+данных), а `translateWorkInputSchema.title` (без `.default()`) бросает
+`ZodError` прямо из `readWorkDraft`, ломая список/детальную/публикацию/
+восстановление ревизии в админке целиком для любой среды, где на момент
+деплоя уже был реальный черновик или история публикаций.
+
+Исправлено НЕ переписыванием уже применённой SQL-миграции (её чексум уже
+проверен Prisma против реальных БД — тот же класс проблемы, что уже
+задокументирован в этом файле выше для `_prisma_migrations`), а
+`z.preprocess`-шагом перед строгой схемой:
+`upgradeLegacyWorkDraftData` (`admin-work.ts`) — `year` без `date`
+превращается в `"<year>-01-01"` (тот же нейтральный дефолт, что и сама
+миграция для `Work.date`), `translation` без `title` получает `title: ""`
+(та же "ещё не переведено" семантика, что уже есть у каждого другого поля
+перевода). Один preprocessing-шаг покрывает и `ContentDraft` (прямое
+чтение), и `ContentRevision` (`restoreRevisionToDraft` копирует сырые
+данные В `ContentDraft` без валидации — валидация происходит только при
+следующем чтении, той же самой функцией).
+
+5 новых тестов (`admin-work.test.ts`, describe "legacy draft/revision
+data"): напрямую вставляют старую форму через `prisma.contentDraft.create`/
+`prisma.contentRevision.create` (минуя `saveWorkDraft`, который умеет
+писать только текущую форму) — читают через `getWorkDetailForAdmin`,
+`getWorkForAdmin` (список), `publishWork` (полный цикл записи) и
+`restoreWorkRevision`, проверяя, что старый `year` возвращается как
+`"<year>-01-01"`, а старый перевод без `title` не бросает исключение.

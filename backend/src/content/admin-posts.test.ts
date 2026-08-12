@@ -283,7 +283,7 @@ describe("publishPost — cover follows the category", () => {
         expect(published.coverAssetId).not.toBe(uncategorizedCoverId);
 
         const coverAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: published.coverAssetId! } });
-        const categoryRow = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "architecture" } });
+        const categoryRow = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "architecture" } } });
         expect((coverAsset.generation as { hue: number }).hue).toBeCloseTo(categoryRow.hue);
     });
 
@@ -301,7 +301,7 @@ describe("publishPost — cover follows the category", () => {
 
         const updated = await prisma.post.findUniqueOrThrow({ where: { slug: "test-post" } });
         expect(updated.coverAssetId).not.toBe(originalCoverId);
-        const categoryRow = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "architecture" } });
+        const categoryRow = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "architecture" } } });
         const coverAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: updated.coverAssetId! } });
         expect((coverAsset.generation as { hue: number }).hue).toBeCloseTo(categoryRow.hue);
     });

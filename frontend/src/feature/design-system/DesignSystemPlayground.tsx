@@ -24,6 +24,9 @@ import { CoverImage } from "@/shared/ui/cover-image";
 import { Markdown } from "@/shared/ui/markdown";
 import { Diagram } from "@/shared/ui/diagram";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
+import { TagList } from "@/shared/ui/tag-list";
+import { RelatedContentCallout, CompactRelatedLink } from "@/shared/ui/related-content-callout";
+import { WorkCoverImage } from "@/shared/ui/work-cover-image";
 import { useTranslation } from "@/shared/i18n";
 
 /**
@@ -761,6 +764,119 @@ const unfold = (f, seed) => {
 }`}
                     </CodeBlock>
                 </Surface>
+            </section>
+
+            {/* SECTION: TAGLIST */}
+            <section className="space-y-md" data-component-id="tag-list">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    TagList
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Список текстовых тегов в двух состояниях: полный список (без
+                    <code>maxVisible</code>) и свёрнутый (с индикатором «+N» для остатка).
+                </Text>
+
+                <div className="space-y-md">
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            full
+                        </Text>
+                        <TagList items={["Kotlin", "Jetpack Compose", "Coroutines", "Room"]} />
+                    </div>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            collapsed (maxVisible=2)
+                        </Text>
+                        <TagList items={["Kotlin", "Jetpack Compose", "Coroutines", "Room"]} maxVisible={2} />
+                    </div>
+                </div>
+            </section>
+
+            {/* SECTION: RELATED CONTENT CALLOUT */}
+            <section className="space-y-md" data-component-id="related-content-callout">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    RelatedContentCallout
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Блок «связанный пост» / «связанный проект» — общий для
+                    JournalDetailPage и WorkDetailPage, вместо двух независимо
+                    выросших, но идентичных по разметке блоков.
+                </Text>
+                <RelatedContentCallout
+                    eyebrow="Related project"
+                    title="Dynamic Design System"
+                    body="A token-driven, multi-brand component library shipped across three products."
+                    href="#"
+                    buttonLabel="View case study"
+                />
+            </section>
+
+            {/* SECTION: COMPACT RELATED LINK */}
+            <section className="space-y-md" data-component-id="related-link">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    CompactRelatedLink
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Компактная ссылка с видимой подписью — для списков/ledger, где
+                    полноразмерный <code>RelatedContentCallout</code> был бы слишком тяжёлым.
+                </Text>
+                <CompactRelatedLink href="#" label="Related post" />
+            </section>
+
+            {/* SECTION: WORK COVER IMAGE */}
+            <section className="space-y-md" data-component-id="work-cover-image">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    WorkCoverImage
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Приоритет обложки Work-проекта: ручной override, иначе
+                    сгенерированная обложка, иначе декоративный плейсхолдер.
+                </Text>
+
+                <div className="grid gap-md" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            manual override (wins over a generated cover)
+                        </Text>
+                        <WorkCoverImage
+                            override="/demo/cover-sample-1200.webp"
+                            cover={null}
+                            alt="Sample project"
+                            label="sample project"
+                            className="h-[120px] rounded-lg border border-border-subtle"
+                        />
+                    </div>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            generated cover
+                        </Text>
+                        <WorkCoverImage
+                            override={null}
+                            cover={{
+                                src: "/demo/cover-sample-1200.webp",
+                                srcNarrow: "/demo/cover-sample-640.webp",
+                                placeholder: "data:image/webp;base64,UklGRqoAAABXRUJQVlA4WAoAAAAQAAAAFwAADAAAQUxQSDwAAAABfyAmTfqHlp1WiIiUAZoGQEIFaMBowIyAEZgJNAMNzOKMYgWNYAUjeEf0P6Nkr32ss++DL8xobpaEkBVWUDggSAAAAHADAJ0BKhgADQA+7WSpTamlpCIwCAEwHYliALsAHjbGOAWHAAD+gxbiBMjCM/UubyO360y5EatexlBmsgA3EYn1TD1H+AAAAA==",
+                                width: 1200,
+                                height: 630,
+                            }}
+                            alt="Sample project"
+                            label="sample project"
+                            className="h-[120px] rounded-lg border border-border-subtle"
+                        />
+                    </div>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            no cover at all
+                        </Text>
+                        <WorkCoverImage
+                            override={null}
+                            cover={null}
+                            alt="Sample project"
+                            label="sample project — cover image"
+                            className="h-[120px] rounded-lg border border-border-subtle"
+                        />
+                    </div>
+                </div>
             </section>
         </div>
     );

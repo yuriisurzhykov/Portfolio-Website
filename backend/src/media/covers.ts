@@ -36,45 +36,42 @@ const UNCATEGORIZED_KEY = "(uncategorized)";
 const UNCATEGORIZED_HUE = 250;
 
 /**
- * Resolves the hue for `categoryEn`, assigning one (and persisting the
- * assignment) the first time a category is ever seen — see
+ * Resolves the hue for `(kind, key)`, assigning one (and persisting the
+ * assignment) the first time this identity is ever seen — see
  * `backend/src/media/README.md`'s "Назначение тона категории" entry for why
  * this has to be a stored, ordinal-based assignment and cannot be a pure
- * hash of the category string.
+ * hash of the key string. The single entry point behind `resolveCategoryHue`
+ * (`kind: "category"`) and `resolveWorkHue` (`kind: "work"`) — the ordinal
+ * counter (`IdentityHue.ordinal`, `@unique` across ALL kinds, not scoped per
+ * kind) is what guarantees a Work project and a post category can never
+ * collide on the same hue, added 2026-08-11 (Work Item Covers & Unified
+ * Identity Hue) when this replaced the Post-only `CategoryHue` table.
  *
- * Race-safe: `CategoryHue.category` is `@unique` (schema.prisma), and a
- * lost race on the INSERT (two concurrent first-sight requests for the same
- * brand-new category) re-reads the winning row rather than retrying —
+ * Race-safe: `IdentityHue`'s `(kind, key)` pair is `@unique` (schema.prisma),
+ * and a lost race on the INSERT (two concurrent first-sight requests for the
+ * same brand-new identity) re-reads the winning row rather than retrying —
  * whichever ordinal actually landed is authoritative, not whichever request
  * computed one first. This app has a single admin (no concurrent-write load
  * to optimize for — same reasoning `admin-posts.ts`'s `assertSlugAvailable`
  * gives for its own check-then-act gap), so this is defense in depth, not a
  * load-bearing guarantee.
  */
-export async function resolveCategoryHue(categoryEn: string): Promise<number> {
-    const key = normalizeCategoryKey(categoryEn);
-    if (key === "") {
-        // Doesn't spend an ordinal — an empty category isn't a real,
-        // nameable category some future post might want to visually match;
-        // see schema.prisma's comment on `CategoryHue`.
-        return UNCATEGORIZED_HUE;
-    }
-
-    const existing = await prisma.categoryHue.findUnique({ where: { category: key } });
+export async function resolveIdentityHue(kind: string, key: string): Promise<number> {
+    const existing = await prisma.identityHue.findUnique({ where: { kind_key: { kind, key } } });
     if (existing) {
         return existing.hue;
     }
 
-    const highest = await prisma.categoryHue.aggregate({ _max: { ordinal: true } });
+    const highest = await prisma.identityHue.aggregate({ _max: { ordinal: true } });
     const ordinal = (highest._max.ordinal ?? -1) + 1;
     const hue = hueForOrdinal(ordinal);
 
     try {
-        const created = await prisma.categoryHue.create({ data: { category: key, hue, ordinal } });
+        const created = await prisma.identityHue.create({ data: { kind, key, hue, ordinal } });
         return created.hue;
     } catch (error) {
         if (isUniqueConstraintError(error)) {
-            const winner = await prisma.categoryHue.findUnique({ where: { category: key } });
+            const winner = await prisma.identityHue.findUnique({ where: { kind_key: { kind, key } } });
             if (winner) {
                 return winner.hue;
             }
@@ -83,12 +80,52 @@ export async function resolveCategoryHue(categoryEn: string): Promise<number> {
     }
 }
 
+/** Post-category half of `resolveIdentityHue` — behavior unchanged from before the 2026-08-11 `CategoryHue` → `IdentityHue` rename (same empty-category short-circuit, same normalization), now delegating its actual find-or-assign logic to the shared function. */
+export async function resolveCategoryHue(categoryEn: string): Promise<number> {
+    const key = normalizeCategoryKey(categoryEn);
+    if (key === "") {
+        // Doesn't spend an ordinal — an empty category isn't a real,
+        // nameable category some future post might want to visually match;
+        // see schema.prisma's comment on `IdentityHue`.
+        return UNCATEGORIZED_HUE;
+    }
+    return resolveIdentityHue("category", key);
+}
+
+/** Work's own guaranteed-unique identity — `slug` IS the key, unlike a category there's no normalization step: a Work item's identity is the item itself, not a free-text label two different projects could coincidentally share. */
+export async function resolveWorkHue(workSlug: string): Promise<number> {
+    return resolveIdentityHue("work", workSlug);
+}
+
+/**
+ * The single hue entry point `generateCoverForPost`/`ensureCoverIsCurrent`
+ * call — added 2026-08-11 alongside `resolveWorkHue` so a post linked to a
+ * project (`Post.relatedWorkSlug`) visually matches that project's own
+ * cover instead of computing an unrelated hue from its own category. Falls
+ * back to the unchanged `resolveCategoryHue` when there's no link, or when
+ * `relatedWorkSlug` points at a Work that doesn't actually exist (e.g. a
+ * stale manually-typed slug from before `RelatedItemPicker` validated it) —
+ * a dangling reference must degrade gracefully, not throw and block the
+ * post's own cover generation.
+ */
+export async function resolvePostHue(post: { categoryEn: string; relatedWorkSlug?: string | null }): Promise<number> {
+    if (post.relatedWorkSlug) {
+        const work = await prisma.work.findUnique({ where: { slug: post.relatedWorkSlug }, select: { slug: true } });
+        if (work) {
+            return resolveWorkHue(work.slug);
+        }
+    }
+    return resolveCategoryHue(post.categoryEn);
+}
+
 export interface CoverSourcePost {
     slug: string;
     /** English title/excerpt/category only — see `cover-brief.ts`'s own comment on why a cover is derived from the canonical English content, one asset shared by both locales. */
     titleEn: string;
     excerptEn: string;
     categoryEn: string;
+    /** Feeds `resolvePostHue` — when set (and the referenced Work still exists), the cover's hue is inherited from that project instead of computed from `categoryEn`. Optional (defaults to no link) so callers/tests with no relevant Work don't need to spell out `null` every time. */
+    relatedWorkSlug?: string | null;
     /** `Post.date` verbatim — see `cover-brief.ts`'s own comment on `CoverBrief.date`. */
     date: string;
     locale?: ContentLocale;
@@ -98,18 +135,31 @@ export interface CoverSourcePost {
 
 /**
  * A short hash of the text that actually shapes the v3 composition (flow
- * curves, waveform, letterform-fill, readable title) — used by
- * `ensureCoverIsCurrent` to detect "the title or excerpt changed" the same
- * way it already detects "the category changed" via hue. Both title AND
- * excerpt feed in (a `\0`-joined pair, not a naive concatenation, so
+ * curves, waveform, letterform-fill, readable title, and — for Work only
+ * — the stamp's date) — used by `ensureCoverIsCurrent`/
+ * `ensureWorkCoverIsCurrent` to detect "the title/excerpt/date changed"
+ * the same way both already detect "the hue changed". Every part feeds
+ * in as a `\0`-joined sequence, not a naive concatenation, so
  * `("ab", "c")` and `("a", "bc")` never accidentally collide on the same
- * hash) — reuses `content-hash.ts`'s `sha256Hex`, no new hashing primitive.
+ * hash — reuses `content-hash.ts`'s `sha256Hex`, no new hashing primitive.
+ *
+ * `extra` is optional and Post never passes it — `Post.date` is set once
+ * at creation and frozen forever (see schema.prisma's comment), so it can
+ * never change without title/excerpt also changing, and folding it in
+ * would just be a no-op that costs a rehash on every existing post's
+ * cover for nothing. `Work.date` is the opposite: admin-editable on its
+ * own, and it's what the stamp layer actually renders — added 2026-08-11
+ * after a PR review caught that `ensureWorkCoverIsCurrent` would
+ * otherwise treat a date-only edit as "nothing relevant changed" and
+ * keep serving a cover whose stamp shows the OLD date forever.
  */
-export function computeContentHash(titleEn: string, excerptEn: string): string {
-    return sha256Hex(Buffer.from(`${ titleEn }\0${ excerptEn }`, "utf-8"));
+export function computeContentHash(titleEn: string, excerptEn: string, extra?: string): string {
+    const parts = extra === undefined ? [titleEn, excerptEn] : [titleEn, excerptEn, extra];
+    return sha256Hex(Buffer.from(parts.join("\0"), "utf-8"));
 }
 
-interface MediaAssetRow {
+/** Shared with `work-covers.ts` — same `MediaAsset` shape, one Post-cover generator and one Work-cover generator producing rows of it. */
+export interface MediaAssetRow {
     id: string;
     contentHash: string;
     storageKey: string;
@@ -137,7 +187,7 @@ interface MediaAssetRow {
  * that happened to produce it.
  */
 export async function generateCoverForPost(post: CoverSourcePost): Promise<MediaAssetRow> {
-    const hue = await resolveCategoryHue(post.categoryEn);
+    const hue = await resolvePostHue(post);
     const brief = buildCoverBrief({
         slug: post.slug,
         title: post.titleEn,
@@ -248,14 +298,14 @@ function readStyleVersion(generation: unknown): number | null {
  * updating it on every autosave reintroduced the exact bug the whole
  * draft/publish split exists to prevent.
  *
- * Cheap when nothing changed: `resolveCategoryHue` is a single indexed
- * read for an already-known category, and comparing against the cover's
- * own stored `generation` fields avoids a wasted rasterization + a
- * pointless new `MediaAsset` row on every publish where nothing relevant
- * actually changed.
+ * Cheap when nothing changed: `resolvePostHue` is at most one or two
+ * indexed reads for an already-known category/Work, and comparing against
+ * the cover's own stored `generation` fields avoids a wasted rasterization
+ * + a pointless new `MediaAsset` row on every publish where nothing
+ * relevant actually changed.
  */
 export async function ensureCoverIsCurrent(currentCoverAssetId: string | null, post: CoverSourcePost): Promise<string> {
-    const targetHue = await resolveCategoryHue(post.categoryEn);
+    const targetHue = await resolvePostHue(post);
     const targetContentHash = computeContentHash(post.titleEn, post.excerptEn);
 
     if (currentCoverAssetId) {
@@ -308,6 +358,7 @@ export async function regenerateCoverForPost(slug: string): Promise<MediaAssetRo
         titleEn: title,
         excerptEn: excerpt,
         categoryEn: category,
+        relatedWorkSlug: post.relatedWorkSlug,
         date: post.date,
         variant: currentVariant + 1,
     });

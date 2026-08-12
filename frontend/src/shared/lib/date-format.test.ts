@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { formatAdminDate, formatAdminDateTime, formatMonthYear, todayIsoDate } from "./date-format";
+import { formatAdminDate, formatAdminDateTime, formatMonthYear, formatYear, todayIsoDate } from "./date-format";
 
 describe("formatMonthYear", () => {
     it("formats an ISO date as \"Month Year\"", () => {
         expect(formatMonthYear("2026-02-11")).toBe("February 2026");
+    });
+});
+
+describe("formatYear", () => {
+    it("extracts just the year from an ISO date", () => {
+        expect(formatYear("2026-02-11")).toBe("2026");
+    });
+
+    it("never shifts to the previous year in a UTC-behind timezone (kills a mutant that routes this through Date/.getFullYear() instead of a string slice)", () => {
+        // The same class of bug `formatAdminDate`'s own test above guards
+        // against — `new Date("2026-01-01").getFullYear()` would read
+        // "2025" in any timezone behind UTC. A pure string slice never
+        // constructs a `Date` at all, so this must hold everywhere.
+        expect(formatYear("2026-01-01")).toBe("2026");
+    });
+
+    it("does not include the month or day", () => {
+        expect(formatYear("2026-12-31")).not.toContain("12");
+        expect(formatYear("2026-12-31")).not.toContain("31");
     });
 });
 

@@ -16,7 +16,16 @@ import { ogFonts } from "./fonts";
 const ACCENT_LIGHTNESS = 0.72;
 const ACCENT_CHROMA = 0.17;
 
-/** The hue every caller without a real category falls back to (the site-default card, work items — `Work` has no category) — picked to land close to the original hardcoded `#e8743a` accent this replaced. */
+/**
+ * The hue every caller with no real item to resolve one from falls back
+ * to — today, only the site-default card (no post/work item at all, e.g.
+ * a database outage degraded `journal/[slug]/og-image`'s own item lookup
+ * to `null`). Picked to land close to the original hardcoded `#e8743a`
+ * accent this replaced. `Work` items used to fall back to this too,
+ * before `resolveWorkHue` (2026-08-11, Work Item Covers & Unified
+ * Identity Hue) gave every project its own real, guaranteed-unique hue —
+ * see this file's own `OgCardProps.hue` comment.
+ */
 const DEFAULT_HUE = 45;
 
 /**
@@ -76,12 +85,16 @@ export interface OgCardProps {
     /**
      * Degrees, 0-360 — drives BOTH the eyebrow's accent colour and the
      * background mesh gradient, via the same gamut-clipping OKLCH-to-sRGB
-     * conversion the procedural post cover uses. `journal/[slug]/og-image/[locale]/route.ts`
-     * passes the post's own category hue (`resolveCategoryHue`), so a
-     * reader who has seen a post's card and then its cover — or another
-     * post in the same category — sees the same colour family tie them
-     * together. Every other caller (the site-default card, work items —
-     * `Work` has no category) falls back to `DEFAULT_HUE`.
+     * conversion the procedural post cover uses.
+     * `journal/[slug]/og-image/[locale]/route.ts` passes the post's own
+     * resolved hue (`resolvePostHue` — the linked Work's hue when one
+     * exists, the category's hue otherwise); `work/[slug]/og-image/[locale]/route.ts`
+     * passes the project's own guaranteed-unique hue (`resolveWorkHue`,
+     * added 2026-08-11, Work Item Covers & Unified Identity Hue). Either
+     * way, a reader who has seen an item's card/cover and then its OG
+     * preview sees the same colour family tie them together. Only the
+     * site-default card (no real item resolved at all) falls back to
+     * `DEFAULT_HUE`.
      */
     hue?: number;
 }

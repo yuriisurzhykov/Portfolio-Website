@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetTestDatabase } from "../test-utils/db";
 import { prisma } from "../db/client";
 import { CURRENT_COVER_STYLE_VERSION } from "./cover-brief";
-import { computeContentHash, coverUrlFor, ensureCoverIsCurrent, generateCoverForPost, resolveCategoryHue } from "./covers";
+import { computeContentHash, coverUrlFor, ensureCoverIsCurrent, generateCoverForPost, resolveCategoryHue, resolvePostHue, resolveWorkHue } from "./covers";
 import { hueForOrdinal } from "./cover-hue";
 import { DiskMediaStore, setMediaStoreForTesting } from "./media-store";
 
@@ -21,6 +21,30 @@ beforeEach(async () => {
 
 afterEach(() => {
     setMediaStoreForTesting(undefined);
+});
+
+describe("computeContentHash", () => {
+    it("hashes title+excerpt the same way regardless of extra being omitted — Post's 2-arg call never changes", () => {
+        expect(computeContentHash("Title", "Excerpt")).toBe(computeContentHash("Title", "Excerpt"));
+    });
+
+    it("a third `extra` argument changes the hash — added 2026-08-11 so Work's cover freshness check can fold in its editable date", () => {
+        const withoutExtra = computeContentHash("Title", "Excerpt");
+        const withExtra = computeContentHash("Title", "Excerpt", "2026-01-01");
+        expect(withExtra).not.toBe(withoutExtra);
+    });
+
+    it("two different `extra` values produce two different hashes, same title/excerpt", () => {
+        const first = computeContentHash("Title", "Excerpt", "2024-01-01");
+        const second = computeContentHash("Title", "Excerpt", "2026-01-01");
+        expect(first).not.toBe(second);
+    });
+
+    it("never collides `extra` with an equivalent concatenation of title/excerpt — the \\0 separator applies to all three parts, not just the first two", () => {
+        const asExtra = computeContentHash("ab", "c", "d");
+        const asExcerpt = computeContentHash("ab", "cd");
+        expect(asExtra).not.toBe(asExcerpt);
+    });
 });
 
 describe("resolveCategoryHue", () => {
@@ -44,7 +68,7 @@ describe("resolveCategoryHue", () => {
         const kotlinAgain = await resolveCategoryHue("Kotlin");
 
         expect(kotlinAgain).toBe(first);
-        expect(await prisma.categoryHue.count()).toBe(2);
+        expect(await prisma.identityHue.count({ where: { kind: "category" } })).toBe(2);
     });
 
     it("normalizes case and surrounding whitespace to the SAME category row", async () => {
@@ -52,7 +76,7 @@ describe("resolveCategoryHue", () => {
         const second = await resolveCategoryHue("  kotlin  ");
 
         expect(second).toBe(first);
-        expect(await prisma.categoryHue.count()).toBe(1);
+        expect(await prisma.identityHue.count({ where: { kind: "category" } })).toBe(1);
     });
 
     it("gives an empty category a fixed hue without spending an ordinal", async () => {
@@ -60,14 +84,92 @@ describe("resolveCategoryHue", () => {
         await resolveCategoryHue("Kotlin");
 
         expect(empty).toBe(await resolveCategoryHue(""));
-        expect(await prisma.categoryHue.count()).toBe(1); // only "Kotlin" persisted
+        expect(await prisma.identityHue.count({ where: { kind: "category" } })).toBe(1); // only "Kotlin" persisted
     });
 
     it("persists the ordinal explicitly, not re-derivable from row count alone", async () => {
         await resolveCategoryHue("Kotlin");
-        const row = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "kotlin" } });
+        const row = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "kotlin" } } });
         expect(row.ordinal).toBe(0);
         expect(row.hue).toBeCloseTo(hueForOrdinal(0));
+    });
+});
+
+/** Minimal, published `Work` row — just enough non-null columns to satisfy the schema; the fields `resolveWorkHue`/`resolvePostHue` actually care about (`slug`) are passed explicitly at each call site instead of baked in here. */
+async function createTestWork(slug: string) {
+    return prisma.work.create({
+        data: {
+            slug,
+            title: { en: slug, ru: "" },
+            date: DATE,
+            status: "shipped",
+            summary: { en: "s", ru: "s" },
+            stack: [],
+            lifecycleState: "PUBLISHED",
+        },
+    });
+}
+
+describe("resolveWorkHue", () => {
+    it("shares the SAME ordinal sequence as resolveCategoryHue — the whole point of the unified identity pool", async () => {
+        await resolveCategoryHue("Kotlin"); // ordinal 0
+        await resolveCategoryHue("Architecture"); // ordinal 1
+        await createTestWork("my-project");
+
+        const workHue = await resolveWorkHue("my-project");
+        expect(workHue).toBeCloseTo(hueForOrdinal(2));
+    });
+
+    it("returns the SAME hue for the same slug on a later call, without spending another ordinal", async () => {
+        await createTestWork("my-project");
+        const first = await resolveWorkHue("my-project");
+        const second = await resolveWorkHue("my-project");
+
+        expect(second).toBe(first);
+        expect(await prisma.identityHue.count({ where: { kind: "work" } })).toBe(1);
+    });
+
+    it("gives two different Work slugs two different hues, never colliding with a category's own hue", async () => {
+        const categoryHue = await resolveCategoryHue("Kotlin"); // ordinal 0
+        await createTestWork("project-a");
+        await createTestWork("project-b");
+
+        const hueA = await resolveWorkHue("project-a"); // ordinal 1
+        const hueB = await resolveWorkHue("project-b"); // ordinal 2
+
+        expect(hueA).not.toBeCloseTo(categoryHue);
+        expect(hueB).not.toBeCloseTo(categoryHue);
+        expect(hueA).not.toBeCloseTo(hueB);
+    });
+});
+
+describe("resolvePostHue", () => {
+    it("falls back to resolveCategoryHue when relatedWorkSlug is absent", async () => {
+        const categoryHue = await resolveCategoryHue("Kotlin");
+        const postHue = await resolvePostHue({ categoryEn: "Kotlin", relatedWorkSlug: null });
+
+        expect(postHue).toBe(categoryHue);
+    });
+
+    it("inherits the linked Work's hue INSTEAD of the category's, even when the two would otherwise differ", async () => {
+        await createTestWork("flowbus");
+        const workHue = await resolveWorkHue("flowbus");
+        // Deliberately a DIFFERENT category than the Work would ever
+        // resolve to — proves the post's own category is ignored entirely
+        // once a real link exists, not just used as a tie-breaker.
+        const categoryHue = await resolveCategoryHue("Some Unrelated Category");
+
+        const postHue = await resolvePostHue({ categoryEn: "Some Unrelated Category", relatedWorkSlug: "flowbus" });
+
+        expect(postHue).toBe(workHue);
+        expect(postHue).not.toBe(categoryHue);
+    });
+
+    it("degrades gracefully to resolveCategoryHue for a dangling relatedWorkSlug that doesn't exist", async () => {
+        const categoryHue = await resolveCategoryHue("Kotlin");
+        const postHue = await resolvePostHue({ categoryEn: "Kotlin", relatedWorkSlug: "does-not-exist" });
+
+        expect(postHue).toBe(categoryHue);
     });
 });
 
@@ -168,7 +270,7 @@ describe("generateCoverForPost", () => {
         });
 
         expect(second.contentHash).not.toBe(first.contentHash);
-        const category = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "kotlin" } });
+        const category = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "kotlin" } } });
         expect((first.generation as { hue: number }).hue).toBeCloseTo(category.hue);
         expect((second.generation as { hue: number }).hue).toBeCloseTo(category.hue);
     });
@@ -185,7 +287,7 @@ describe("ensureCoverIsCurrent", () => {
         });
 
         const asset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: assetId } });
-        const category = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "kotlin" } });
+        const category = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "kotlin" } } });
         expect((asset.generation as { hue: number }).hue).toBeCloseTo(category.hue);
     });
 
@@ -235,7 +337,7 @@ describe("ensureCoverIsCurrent", () => {
 
         expect(corrected).not.toBe(uncategorized.id);
         const correctedAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: corrected } });
-        const category = await prisma.categoryHue.findUniqueOrThrow({ where: { category: "architecture" } });
+        const category = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "architecture" } } });
         expect((correctedAsset.generation as { hue: number }).hue).toBeCloseTo(category.hue);
     });
 
@@ -282,6 +384,35 @@ describe("ensureCoverIsCurrent", () => {
         });
 
         expect(second).not.toBe(first.id);
+    });
+
+    it("generateCoverForPost/ensureCoverIsCurrent use the LINKED WORK'S hue when relatedWorkSlug is set, not the post's own category", async () => {
+        await createTestWork("flowbus-app");
+        const workHue = await resolveWorkHue("flowbus-app");
+
+        const linked = await generateCoverForPost({
+            slug: "post-about-flowbus",
+            titleEn: "Building FlowBus",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            relatedWorkSlug: "flowbus-app",
+            date: DATE,
+        });
+
+        expect((linked.generation as { hue: number }).hue).toBeCloseTo(workHue);
+
+        // Publishing again with the SAME link must not spuriously
+        // regenerate — the whole point of `ensureCoverIsCurrent`'s
+        // no-op-when-nothing-changed check now also covers the link.
+        const stillCurrent = await ensureCoverIsCurrent(linked.id, {
+            slug: "post-about-flowbus",
+            titleEn: "Building FlowBus",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            relatedWorkSlug: "flowbus-app",
+            date: DATE,
+        });
+        expect(stillCurrent).toBe(linked.id);
     });
 
     it("regenerates a cover whose stored styleVersion is older than CURRENT_COVER_STYLE_VERSION, even with matching hue AND contentHash", async () => {

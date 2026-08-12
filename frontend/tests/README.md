@@ -931,6 +931,35 @@ The `gh-pages` branch only ever gets written to under `reports/<dest>/` — noth
 `peaceiris/actions-gh-pages` step to the workflow that publishes a one-page static landing page
 straight to the branch root, with `keep_files: true` so it doesn't wipe the `reports/` folder.
 
+### [RESOLVED, 2026-08-11] A seeding-script bug cascaded into a SECOND, unrelated-looking CI failure
+
+Real CI run: `test:e2e:seed-fixtures` failed on a Prisma validation error (a `Work` fixture's
+required `date` field never reached `createWork()` — see `backend/scripts/README.md`'s own dated
+entry for that bug's root cause). Because `test:e2e:prepare` failed BEFORE Playwright ever started,
+no `frontend/playwright-report/` directory existed by the time the "Publish report to GitHub
+Pages" step ran (`if: always()`, by design — see this section's own intro). `peaceiris/actions-gh-pages`
+does not degrade gracefully when its `publish_dir` doesn't exist: it logged an `ENOENT`, concluded
+this must be a "first deployment," and unconditionally ran `git checkout --orphan gh-pages` — which
+then failed outright ("a branch named 'gh-pages' already exists," since a prior successful run had
+already created it). One real, attributable failure became two confusing ones in the same job,
+with the second one's error message pointing nowhere near the actual cause.
+
+Fixed by adding a "Check report was produced" step (`if: always()`, a plain `[ -d ... ] && [ -n
+"$(ls -A ...)" ]` check into `$GITHUB_OUTPUT`) immediately before the publish step, and gating that
+publish step on its result. `format-summary.mjs` already had the equivalent guard for the OTHER
+half of this same failure mode (a missing `test-results/summary.json` — see its own `fs.existsSync`
+check) — this closes the one spot that didn't.
+
+**Corrected first draft, caught by a direct question, not found independently.** The very first
+version of this check only wrote `exists=false` to `$GITHUB_OUTPUT` and let the publish step's own
+`if:` quietly skip — no failed/red step anywhere explained WHY the report never got published, the
+exact "verification silently skips instead of failing loudly" pattern this repo's rules explicitly
+warn against. The job as a whole still failed either way (the real "Run tests" step is unconditional
+and already red), but a silently-skipped step is still a worse signal than an explicit one. Fixed by
+having the check step itself `exit 1` with an `::error::` annotation pointing back at "Run tests"
+when the report is missing, so the skip is accompanied by its own loud, attributable failure instead
+of a quiet gap.
+
 ### [RESOLVED, from frontend/tests/] `/update-snapshots` had a "pwn request" vulnerability — trusted commenter, untrusted code
 
 Flagged by an automated code-review comment — `github.event.comment.author_association` (who
@@ -1323,3 +1352,13 @@ on a fresh checkout, which is expected — same as the page-level suite's very f
 initial baselines existed, per this section's 2026-07-17 entry). Real baselines get generated the
 same way the original ones were: CI or Docker (Linux), never a raw local Windows run — see section
 2's font-rendering explanation, unchanged and equally true for component screenshots.
+
+### 2026-08-11 — Three new components added to the gallery, one deliberately excluded
+
+Part of the Work Item Covers & Unified Identity Hue UI unification: `TagList`,
+`RelatedContentCallout`, and `CompactRelatedLink` (`related-content-callout`'s second export) each
+got a demo section (`tag-list`, `related-content-callout`, `related-link`) with fixed, deterministic
+props — 18 components total now. `RelatedItemPicker` was deliberately NOT added — same reasoning as
+the existing `token-combobox` exclusion (see the manifest's own doc comment, updated to name it
+explicitly): it's admin-auth-only and its entire value is in interaction a static screenshot can't
+exercise, covered instead by its own `RelatedItemPicker.test.tsx`.
