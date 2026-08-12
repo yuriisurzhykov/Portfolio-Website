@@ -15,7 +15,7 @@ export interface SiteContentSectionMeta {
  * concern (label + one-line description for the index page).
  */
 export const SITE_CONTENT_SECTIONS: SiteContentSectionMeta[] = [
-    { key: "hero", label: "Hero", description: "Landing page headline, subhead, chips, and node-graph illustration." },
+    { key: "hero", label: "Hero", description: "Landing page headline, subhead, and chips." },
     { key: "contact", label: "Contact CTA", description: "Landing page's closing call-to-action panel." },
     { key: "principles", label: "Principles", description: "\"How I work\" cards on the landing page." },
     { key: "techStack", label: "Tech stack", description: "Stack row on the landing page." },

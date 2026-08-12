@@ -50,7 +50,7 @@ to settings sections, not a general-purpose admin editing pattern.
 `useSiteContentForm(key)` only owns submit/error/"saved" state — it
 deliberately does NOT hold each form's field state the way a single
 combined component would. Each settings form has a genuinely different
-shape (`hero.graphNodes` is an array; `config` is flat scalars), and
+shape (`hero.chips` is an array; `config` is flat scalars), and
 several fields need a derived, editing-only representation that isn't the
 storage shape at all — `hero.headline`/`hero.chips` are edited as
 comma-joined strings, `workPage.heading` as newline-joined lines,
@@ -67,8 +67,8 @@ is the pitfall that pattern avoids.
 > below for why that one section outgrew it, and why `ListEditor` itself
 > was deliberately left alone rather than generalized over both shapes.
 
-Shared by `principles`, `techStack`, and `hero.graphNodes` — the same
-add/remove/move-up/move-down implementation instead of three near-copies.
+Shared by `principles` and `techStack` — the same add/remove/move-up/
+move-down implementation instead of near-copies per section.
 Matches the reasoning the admin block editor's predecessor
 (`BlockListEditor`, deleted when BlockNote replaced it — see
 `shared/ui/block-editor/README.md`) used: no drag-and-drop dependency,
@@ -174,14 +174,14 @@ GET, ничего не пишет; сбой (например, БД недост
 по сути, набрать двадцать слов.
 
 **Почему это НЕ доработка `ListEditor`.** `ListEditor` не сломан — он ровно
-такой, каким должен быть для `principles` (четыре строки настоящего текста) и
-`hero.graphNodes`. Проблема не в его реализации, а в том, что `techStack` —
+такой, каким должен быть для `principles` (четыре строки настоящего текста).
+Проблема не в его реализации, а в том, что `techStack` —
 принципиально другой тип списка: длинный, из коротких однословных записей,
 где 95% строк не нуждаются ни в каком редактировании кроме имени. Растягивать
 `ListEditor` на оба сценария означало бы засунуть в него режимы
-(compact/expanded, quick-add, drag) ради одного из трёх потребителей — это
+(compact/expanded, quick-add, drag) ради одного из двух потребителей — это
 нарушение и SRP, и OCP сразу. Поэтому `tech-stack/` — отдельная реализация,
-а `ListEditor` остался нетронутым для двух своих остальных вызовов.
+а `ListEditor` остался нетронутым для своего остального вызова.
 
 **Как сделано.**
 

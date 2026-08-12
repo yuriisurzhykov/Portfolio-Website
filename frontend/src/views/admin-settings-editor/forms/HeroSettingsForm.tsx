@@ -3,19 +3,10 @@
 import * as React from "react";
 import type { HeroContent } from "@portfolio/backend";
 import { Card } from "@/shared/ui/card";
-import { Text } from "@/shared/ui/text";
-import { Checkbox, Field, Input } from "@/shared/ui/form";
+import { Field, Input } from "@/shared/ui/form";
 import { BilingualField } from "../fields/BilingualField";
-import { ListEditor } from "../fields/ListEditor";
 import { SettingsFormFooter } from "../fields/SettingsFormFooter";
 import { useSiteContentForm } from "../useSiteContentForm";
-
-interface GraphNodeFormState {
-    label: string;
-    sublabelEn: string;
-    sublabelRu: string;
-    highlighted: boolean;
-}
 
 interface HeroFormState {
     headline: string;
@@ -23,7 +14,6 @@ interface HeroFormState {
     subheadRu: string;
     chipsEn: string;
     chipsRu: string;
-    graphNodes: GraphNodeFormState[];
 }
 
 /** Comma-joined for editing, split back on submit — same convention as `WorkEditorPage`'s `stack` field (`frontend/src/views/admin-work-editor/WorkEditorPage.tsx`), reused here instead of invented fresh for `headline`/`chips`. */
@@ -45,12 +35,6 @@ function toFormState(hero: HeroContent): HeroFormState {
         subheadRu: hero.subhead.ru,
         chipsEn: joinList(hero.chips.en),
         chipsRu: joinList(hero.chips.ru),
-        graphNodes: hero.graphNodes.map((node) => ({
-            label: node.label,
-            sublabelEn: node.sublabel.en,
-            sublabelRu: node.sublabel.ru,
-            highlighted: node.highlighted ?? false,
-        })),
     };
 }
 
@@ -59,11 +43,6 @@ function toContent(form: HeroFormState): HeroContent {
         headline: splitList(form.headline),
         subhead: { en: form.subheadEn.trim(), ru: form.subheadRu.trim() },
         chips: { en: splitList(form.chipsEn), ru: splitList(form.chipsRu) },
-        graphNodes: form.graphNodes.map((node) => ({
-            label: node.label.trim(),
-            sublabel: { en: node.sublabelEn.trim(), ru: node.sublabelRu.trim() },
-            highlighted: node.highlighted,
-        })),
     };
 }
 
@@ -101,33 +80,6 @@ export function HeroSettingsForm({ initialData }: { initialData: HeroContent }) 
                     ru={form.chipsRu}
                     onEnChange={(value) => setForm((prev) => ({ ...prev, chipsEn: value }))}
                     onRuChange={(value) => setForm((prev) => ({ ...prev, chipsRu: value }))}
-                />
-            </Card>
-
-            <Card variant="filled" className="p-lg flex flex-col gap-md">
-                <Text as="h2" variant="h5">Graph nodes</Text>
-                <ListEditor
-                    label="Floating node-graph illustration next to the headline"
-                    items={form.graphNodes}
-                    onChange={(graphNodes) => setForm((prev) => ({ ...prev, graphNodes }))}
-                    createItem={() => ({ label: "", sublabelEn: "", sublabelRu: "", highlighted: false })}
-                    addLabel="Add node"
-                    renderItem={(node, index, update) => (
-                        <div className="flex flex-col gap-sm">
-                            <Field label="Label" htmlFor={`node-label-${index}`} hint="Not localized — a proper noun (e.g. Client, FlowBus).">
-                                <Input id={`node-label-${index}`} value={node.label} onChange={(e) => update({ label: e.target.value })} />
-                            </Field>
-                            <BilingualField
-                                label="Sublabel"
-                                idPrefix={`node-sublabel-${index}`}
-                                en={node.sublabelEn}
-                                ru={node.sublabelRu}
-                                onEnChange={(value) => update({ sublabelEn: value })}
-                                onRuChange={(value) => update({ sublabelRu: value })}
-                            />
-                            <Checkbox label="Highlighted" checked={node.highlighted} onChange={(e) => update({ highlighted: e.target.checked })} />
-                        </div>
-                    )}
                 />
             </Card>
 
