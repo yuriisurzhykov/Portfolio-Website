@@ -10,6 +10,8 @@ import { NOINDEX } from "@/shared/lib/seo/noindex";
 import { pickFor } from "@/shared/i18n";
 import { alternatesFor } from "@/shared/lib/seo/alternates";
 import { ogAlternateLocales, ogLocale, TWITTER_CARD } from "@/shared/lib/seo/open-graph";
+import { DEFAULT_OG_IMAGE_PATH } from "@/shared/lib/seo/og/paths";
+import { clampMetaDescription } from "@/shared/lib/seo/meta-description";
 import { SITE_URL } from "@/shared/lib/seo/site-url";
 import { jsonLdGraph, personJsonLd, serializeJsonLd } from "@/shared/lib/seo/json-ld";
 import { JsonLd } from "@/shared/lib/seo/JsonLd";
@@ -39,7 +41,14 @@ export async function generateMetadata(): Promise<Metadata> {
     return orDatabaseOutageFallback<Metadata>(async () => {
         const [config, hero] = await Promise.all([cachedSiteContent("config"), cachedSiteContent("hero")]);
         const title = `${ config.name } — ${ pickFor(config.role, locale) }`;
-        const description = pickFor(hero.subhead, locale);
+        // Clamped for the METADATA only — hero.subhead itself still renders
+        // in full on the page (LandingPage reads `hero` directly, never this
+        // variable). At 194 characters unclamped, this was overflowing a
+        // search snippet; shortening the source copy to fit would have also
+        // shrunk what a real visitor reads, which is the wrong fix for a
+        // metadata-only concern. See meta-description.ts.
+        const description = clampMetaDescription(pickFor(hero.subhead, locale));
+        const path = alternatesFor("/", locale, ALL_LOCALES).canonical;
 
         return {
             title,
@@ -52,6 +61,15 @@ export async function generateMetadata(): Promise<Metadata> {
                 siteName: config.name,
                 locale: ogLocale(locale),
                 alternateLocale: ogAlternateLocales(locale),
+                url: `${ SITE_URL }${ path }`,
+                // Found on the live site (Phase 0 audit): with no `images`
+                // here, Next.js never falls back to the file-convention
+                // `app/opengraph-image.tsx` route — `og:image` (and, since
+                // Twitter inherits it, `twitter:image` too) was simply
+                // absent from every response. `DEFAULT_OG_IMAGE_PATH` is the
+                // one existing constant that already named that route and
+                // had never been wired to anything (seo/og/paths.ts).
+                images: [{ url: DEFAULT_OG_IMAGE_PATH, width: 1200, height: 630, alt: title }],
             },
             twitter: { card: TWITTER_CARD, title, description },
         };

@@ -8,6 +8,7 @@ import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
+import { CoverImage } from "@/shared/ui/cover-image";
 
 export interface JournalPreviewProps {
     post: PostSummary | null;
@@ -36,18 +37,30 @@ export function JournalPreview({ post }: JournalPreviewProps) {
                         "group-hover:scale-y-100 group-focus-visible:scale-y-100",
                     )}
                 />
-                <div className="flex gap-sm items-center mb-[14px] flex-wrap">
-                    <StatusBadge tone="accent">{pick(post.category)}</StatusBadge>
-                    <Text variant="caption" tone="faint" className="font-mono normal-case">
-                        {ln("journal.readMins", { count: post.readMins })}
-                    </Text>
+                <div className="flex gap-lg items-start">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex gap-sm items-center mb-[14px] flex-wrap">
+                            <StatusBadge tone="accent">{pick(post.category)}</StatusBadge>
+                            <Text variant="caption" tone="faint" className="font-mono normal-case">
+                                {ln("journal.readMins", { count: post.readMins })}
+                            </Text>
+                        </div>
+                        <Text as="h3" variant="h3" className="mb-[10px]">
+                            {pick(post.title)}
+                        </Text>
+                        <Text variant="body" tone="muted" className="max-w-[70ch] leading-[1.6]">
+                            {pick(post.excerpt)}
+                        </Text>
+                    </div>
+                    {post.cover && (
+                        <CoverImage
+                            {...post.cover}
+                            fetchPriority="high"
+                            loading="eager"
+                            className="hidden md:block w-[180px] h-[94px] shrink-0 rounded-lg border border-border-subtle"
+                        />
+                    )}
                 </div>
-                <Text as="h3" variant="h3" className="mb-[10px]">
-                    {pick(post.title)}
-                </Text>
-                <Text variant="body" tone="muted" className="max-w-[70ch] leading-[1.6]">
-                    {pick(post.excerpt)}
-                </Text>
             </Link>
         </section>
     );

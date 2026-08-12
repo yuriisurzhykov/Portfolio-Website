@@ -11,6 +11,7 @@ import { Tag } from "@/shared/ui/tag";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
+import { RelatedItemPicker, type RelatedItemOption } from "@/shared/ui/related-item-picker";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { slugify } from "@/shared/lib/slugify";
 import { formatAdminDate, todayIsoDate } from "@/shared/lib/date-format";
@@ -21,6 +22,8 @@ export interface PostEditorPageProps {
     initialPost?: AdminPostDetail;
     /** Every distinct English category already in use, for `CategoryPicker`'s chips — see `getDistinctPostCategories` (backend). */
     existingCategories: string[];
+    /** Every real Work item, for `RelatedItemPicker`'s "Related work" field — fetched server-side (`getWorkForAdmin`), same "hand the whole small list to the client" pattern as `existingCategories`, see `RelatedItemPicker`'s own README. */
+    workOptions: RelatedItemOption[];
 }
 
 interface FormState {
@@ -69,7 +72,7 @@ function toFormState(post?: AdminPostDetail): FormState {
     };
 }
 
-export function PostEditorPage({ initialPost, existingCategories }: PostEditorPageProps) {
+export function PostEditorPage({ initialPost, existingCategories, workOptions }: PostEditorPageProps) {
     const router = useRouter();
     const isEditing = Boolean(initialPost);
 
@@ -435,9 +438,15 @@ export function PostEditorPage({ initialPost, existingCategories }: PostEditorPa
                     <Input id="slug" required value={form.slug} onChange={(e) => updateSlugManually(e.target.value)} />
                 </Field>
 
-                <Field label="Related work slug" htmlFor="relatedWorkSlug" hint="Optional — links this post to a work item.">
-                    <Input id="relatedWorkSlug" value={form.relatedWorkSlug} onChange={(e) => update("relatedWorkSlug", e.target.value)} />
-                </Field>
+                <RelatedItemPicker
+                    id="relatedWorkSlug"
+                    label="Related work"
+                    hint="Optional — links this post to a work item, and inherits its hue for the cover/OG accent."
+                    value={form.relatedWorkSlug || null}
+                    onChange={(slug) => update("relatedWorkSlug", slug ?? "")}
+                    options={workOptions}
+                    placeholder="Search work items…"
+                />
 
                 <CategoryPicker
                     value={form.category}

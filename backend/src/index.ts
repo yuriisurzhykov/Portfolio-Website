@@ -87,3 +87,39 @@ export {
     isValidationError,
     SlugAlreadyExistsError,
 } from "./errors";
+
+export {
+    clearPostCover,
+    coverUrlFor,
+    ensureCoverIsCurrent,
+    generateCoverForPost,
+    regenerateCoverForPost,
+    resolveCategoryHue,
+    resolveIdentityHue,
+    resolvePostHue,
+    resolveWorkHue,
+    setPostCover,
+} from "./media/covers";
+export type { CoverImageData, CoverSourcePost } from "./media/covers";
+export { ensureWorkCoverIsCurrent, generateCoverForWork, regenerateCoverForWork } from "./media/work-covers";
+export type { CoverSourceWork } from "./media/work-covers";
+export { CURRENT_COVER_STYLE_VERSION, buildCoverBrief } from "./media/cover-brief";
+export type { CoverBrief, CoverBriefInput } from "./media/cover-brief";
+export {
+    FailingImageGenerator,
+    getImageGenerator,
+    ImageGenerationError,
+    isImageGenerationError,
+    ProceduralImageGenerator,
+    setImageGeneratorForTesting,
+} from "./media/image-generator";
+export type { GeneratedImage, ImageGenerator } from "./media/image-generator";
+export {
+    DiskMediaStore,
+    getMediaStore,
+    resolveMediaRootDir,
+    setMediaStoreForTesting,
+    UnsafeStorageKeyError,
+} from "./media/media-store";
+export type { MediaStore } from "./media/media-store";
+export { hueForOrdinal, oklchToSrgbHex } from "./media/cover-hue";

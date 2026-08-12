@@ -15,12 +15,17 @@
  *
  * Deliberately excluded (see frontend/tests/README.md, section 4, for the full reasoning):
  * - Admin-only/interactive components (`admin-list-item`, `icon-picker`, `block-editor`, `drawer`,
- *   `back-to-top`, `status-toggle`, `status-page`, `form/*`, `token-combobox`) — need auth context
- *   or real interaction to show anything, or are better covered by page-level tests.
+ *   `back-to-top`, `status-toggle`, `status-page`, `form/*`, `token-combobox`, `related-item-picker`)
+ *   — need auth context or real interaction to show anything, or are better covered by page-level
+ *   tests.
  *   `token-combobox`'s only real caller (`WorkEditorPage`'s Stack field) is behind admin auth, and
  *   its actual value (fuzzy dropdown, keyboard nav, "did you mean" hints) only shows up through
  *   interaction a static screenshot can't exercise — its own `TokenCombobox.test.tsx` covers that
  *   behavior directly instead.
+ *   `related-item-picker` (added 2026-08-11) is the exact same case, for the exact same reason —
+ *   its only callers (`PostEditorPage`'s/`WorkEditorPage`'s related-item fields) are behind admin
+ *   auth, and its value is entirely in interaction (fuzzy search, keyboard nav, commit-only-a-real-
+ *   option). Covered directly by `RelatedItemPicker.test.tsx` instead.
  * - `Diagram`'s PlantUML engine — depends on a self-hosted `plantuml-server` that Playwright's
  *   `webServer` never starts; only the fully client-side Mermaid engine is demoed.
  * - `Section` — already exercised as the outer wrapper of this very page and of every page-level
@@ -45,8 +50,13 @@ export const componentGalleryManifest: ComponentGalleryEntry[] = [
     { id: "eyebrow", label: "Eyebrow" },
     { id: "status-badge", label: "StatusBadge" },
     { id: "placeholder-cover", label: "PlaceholderCover" },
+    { id: "cover-image", label: "CoverImage" },
     { id: "markdown", label: "Markdown" },
     { id: "diagram", label: "Diagram (mermaid)" },
     { id: "content-blocks", label: "ContentBlocks" },
     { id: "skill-card", label: "SkillCard" },
+    { id: "tag-list", label: "TagList" },
+    { id: "related-content-callout", label: "RelatedContentCallout" },
+    { id: "related-link", label: "CompactRelatedLink" },
+    { id: "work-cover-image", label: "WorkCoverImage" },
 ];

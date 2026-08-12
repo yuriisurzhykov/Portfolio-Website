@@ -30,7 +30,7 @@ const postInput: PostInput = {
 const workInput: WorkInput = {
     slug: "a-project",
     title: "A Project",
-    year: 2026,
+    date: "2026-01-01",
     status: "shipped",
     summary: "A summary.",
     stack: ["Kotlin"],
@@ -211,6 +211,7 @@ describe("work lifecycle events", () => {
         captured.length = 0;
 
         await translateWork("a-project", {
+            title: "Проект А",
             summary: "Сводка.",
             startedLabel: "Янв 2026",
             shippedLabel: "Мар 2026",

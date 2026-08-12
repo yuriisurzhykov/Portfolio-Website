@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import { findCurrentSlug, getPostBySlug, getWorkPreview, type WorkDetail } from "@portfolio/backend";
+import { findCurrentSlug, getPostBySlug, getWorkPreview, resolveWorkHue, type WorkDetail } from "@portfolio/backend";
 import { WorkDetailPage } from "@/views/work-detail";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
@@ -11,6 +11,7 @@ import { NOINDEX } from "@/shared/lib/seo/noindex";
 import { pickFor } from "@/shared/i18n";
 import { alternatesFor, localizedPath } from "@/shared/lib/seo/alternates";
 import { ogAlternateLocales, ogLocale, TWITTER_CARD } from "@/shared/lib/seo/open-graph";
+import { clampMetaDescription } from "@/shared/lib/seo/meta-description";
 import { SITE_URL } from "@/shared/lib/seo/site-url";
 import { breadcrumbJsonLd, jsonLdGraph, personJsonLd, serializeJsonLd } from "@/shared/lib/seo/json-ld";
 import { JsonLd } from "@/shared/lib/seo/JsonLd";
@@ -46,8 +47,9 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             return NOINDEX;
         }
 
-        const title = item.title;
-        const description = pickFor(item.summary, locale);
+        const title = pickFor(item.title, locale);
+        const description = clampMetaDescription(pickFor(item.summary, locale));
+        const path = alternatesFor(`/work/${ slug }`, locale, item.availableLocales).canonical;
 
         return {
             title,
@@ -60,6 +62,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 siteName: config.name,
                 locale: ogLocale(locale),
                 alternateLocale: ogAlternateLocales(locale),
+                url: `${ SITE_URL }${ path }`,
                 publishedTime: item.publishedAt ?? undefined,
                 modifiedTime: item.contentUpdatedAt ?? item.publishedAt ?? undefined,
                 // See `journal/[slug]/page.tsx`'s comment on the same line.
@@ -100,9 +103,10 @@ export default async function Page({ params, searchParams }: PageProps) {
             // excerpt, so its body-document locale doesn't matter.
             const relatedPost = item.relatedPostSlug ? await getPostBySlug(item.relatedPostSlug) : null;
             const config = await cachedSiteContent("config");
-            return { item, relatedPost, config, isPreview };
+            const hue = await resolveWorkHue(item.slug);
+            return { item, relatedPost, config, hue, isPreview };
         },
-        ({ item, relatedPost, config, isPreview }) => (
+        ({ item, relatedPost, config, hue, isPreview }) => (
             <>
                 {/* No `BlogPosting` here — a case study is not an article, and
                     the plan's structured-data rule is that markup describes
@@ -119,12 +123,12 @@ export default async function Page({ params, searchParams }: PageProps) {
                             breadcrumbJsonLd(SITE_URL, [
                                 { name: config.name, path: "/" },
                                 { name: "Work", path: "/work" },
-                                { name: item.title, path: `/work/${ item.slug }` },
+                                { name: pickFor(item.title, locale), path: `/work/${ item.slug }` },
                             ]),
                         ]),
                     )}
                 />
-                <WorkDetailPage item={item} relatedPost={relatedPost} isPreview={isPreview} />
+                <WorkDetailPage item={item} relatedPost={relatedPost} hue={hue} isPreview={isPreview} />
             </>
         ),
     );

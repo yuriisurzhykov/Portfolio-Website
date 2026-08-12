@@ -41,6 +41,7 @@
   "work.ledger.system": "СИСТЕМА",
   "work.ledger.stack": "СТЕК",
   "work.ledger.status": "СТАТУС",
+  "work.ledger.relatedPost": "Связанная статья",
   "work.caseStudy.stackHeading": "Стек",
   "work.caseStudy.started": "Начато: {date}",
   "work.caseStudy.shipped": "Готово: {date}",

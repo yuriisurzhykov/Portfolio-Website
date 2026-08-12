@@ -9,6 +9,7 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import { formatMonthYear } from "@/shared/lib/date-format";
+import { CoverImage } from "@/shared/ui/cover-image";
 
 export interface JournalListPageProps {
     entries: PostSummary[];
@@ -27,24 +28,37 @@ function LogEntry({ post }: { post: PostSummary }) {
                     isPublished ? "bg-accent-solid" : "bg-text-faint",
                 ) }
             />
-            <div className="flex gap-sm items-baseline mb-2 flex-wrap">
-                <Text variant="caption" tone="faint" className="font-mono">
-                    { isPublished ? formatMonthYear(post.date) : ln("status.upcoming", { date: formatMonthYear(post.date) }) }
-                </Text>
-                { isPublished && <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge> }
-                { isPublished && (
-                    <Text variant="caption" tone="faint" className="font-mono">
-                        { ln("journal.readMins", { count: post.readMins }) }
+            <div className="flex gap-lg items-start">
+                <div className="min-w-0 flex-1">
+                    <div className="flex gap-sm items-baseline mb-2 flex-wrap">
+                        <Text variant="caption" tone="faint" className="font-mono">
+                            { isPublished ? formatMonthYear(post.date) : ln("status.upcoming", { date: formatMonthYear(post.date) }) }
+                        </Text>
+                        { isPublished && <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge> }
+                        { isPublished && (
+                            <Text variant="caption" tone="faint" className="font-mono">
+                                { ln("journal.readMins", { count: post.readMins }) }
+                            </Text>
+                        ) }
+                    </div>
+                    <Text as="div" variant="h3" tone={ isPublished ? "primary" : "muted" } className="mb-1.5 text-[21px]!">
+                        { pick(post.title) }
                     </Text>
+                    <Text as="div" variant="caption" tone={ isPublished ? "muted" : "faint" }
+                          className="max-w-[60ch] leading-[1.6]">
+                        { pick(post.excerpt) }
+                    </Text>
+                </div>
+                { isPublished && post.cover && (
+                    // Hidden below `sm` — a thumbnail this small adds
+                    // nothing on a narrow viewport but does cost layout
+                    // width the wrapping text badly needs there instead.
+                    <CoverImage
+                        { ...post.cover }
+                        className="hidden sm:block w-[120px] h-[63px] shrink-0 rounded-md border border-border-subtle"
+                    />
                 ) }
             </div>
-            <Text as="div" variant="h3" tone={ isPublished ? "primary" : "muted" } className="mb-1.5 text-[21px]!">
-                { pick(post.title) }
-            </Text>
-            <Text as="div" variant="caption" tone={ isPublished ? "muted" : "faint" }
-                  className="max-w-[60ch] leading-[1.6]">
-                { pick(post.excerpt) }
-            </Text>
         </>
     );
 

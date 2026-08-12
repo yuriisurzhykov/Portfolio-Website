@@ -27,7 +27,7 @@ import { findCurrentSlug } from "./slug-history";
 const baseWorkInput: WorkInput = {
     slug: "test-project",
     title: "Test Project",
-    year: 2026,
+    date: "2026-01-01",
     status: "shipped",
     summary: "A summary.",
     stack: ["Kotlin"],
@@ -46,6 +46,7 @@ const caseStudyInput = {
 };
 
 const baseTranslationInput: TranslateWorkInput = {
+    title: "Тестовый проект",
     summary: "Сводка.",
     startedLabel: "Янв 2026",
     shippedLabel: "Мар 2026",
@@ -124,6 +125,51 @@ describe("createWork", () => {
         expect(created.stack).toEqual([]);
         expect(created.featured).toBe(false);
     });
+
+    it("generates and attaches a cover in the SAME insert — added 2026-08-11, mirrors createPost", async () => {
+        await createWork(baseWorkInput);
+
+        const row = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" }, include: { cover: true } });
+        expect(row.coverAssetId).not.toBeNull();
+        expect(row.cover?.kind).toBe("work-cover");
+    });
+
+    it("gives two different Work items two visibly different hues", async () => {
+        await createWork(baseWorkInput);
+        await createWork({ ...baseWorkInput, slug: "another-project", title: "Another Project" });
+
+        const first = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" }, include: { cover: true } });
+        const second = await prisma.work.findUniqueOrThrow({ where: { slug: "another-project" }, include: { cover: true } });
+        expect((first.cover?.generation as { hue: number }).hue).not.toBeCloseTo((second.cover?.generation as { hue: number }).hue);
+    });
+});
+
+describe("publishWork — cover follows the LIVE title/summary", () => {
+    it("regenerates the cover once a title edit is actually published — never before", async () => {
+        await createWork(baseWorkInput);
+        await publishWork("test-project");
+        const originalCoverId = (await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } })).coverAssetId;
+
+        await saveWorkDraft("test-project", { ...baseWorkInput, title: "A Completely Different Title" });
+        // Still the OLD cover — a real reader must never see the new one
+        // before the admin actually confirms the change.
+        expect((await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } })).coverAssetId).toBe(originalCoverId);
+
+        await publishWork("test-project");
+
+        const updated = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+        expect(updated.coverAssetId).not.toBe(originalCoverId);
+    });
+
+    it("does not regenerate the cover when nothing relevant changed — no wasted work on every Update click", async () => {
+        await createWork(baseWorkInput);
+        const created = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+
+        await publishWork("test-project");
+
+        const afterPublish = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+        expect(afterPublish.coverAssetId).toBe(created.coverAssetId);
+    });
 });
 
 describe("saveWorkDraft", () => {
@@ -144,7 +190,7 @@ describe("saveWorkDraft", () => {
         const after = await prisma.work.findUnique({ where: { slug: "test-project" } });
         expect(after).toEqual(before);
         const detail = await getWorkDetailForAdmin("test-project");
-        expect(detail?.title).toBe("A Whole New Title"); // draft-priority for admin reads
+        expect(detail?.title.en).toBe("A Whole New Title"); // draft-priority for admin reads
         expect(detail?.caseStudy?.blocks.map((b) => b.type)).toEqual(["paragraph"]);
     });
 
@@ -216,7 +262,7 @@ describe("getWorkForAdmin", () => {
         const all = await getWorkForAdmin();
         const row = all.find((w) => w.slug === "test-project");
         expect(row?.hasUnpublishedChanges).toBe(true);
-        expect(row?.title).toBe("Pending Title");
+        expect(row?.title.en).toBe("Pending Title");
     });
 });
 
@@ -239,6 +285,113 @@ describe("getWorkDetailForAdmin", () => {
         const detail = await getWorkDetailForAdmin("test-project");
         expect(detail?.draftSlug).toBe("test-project");
         expect(detail?.hasUnpublishedChanges).toBe(false);
+    });
+});
+
+/**
+ * Legacy `ContentDraft`/`ContentRevision` rows saved BEFORE 2026-08-11
+ * (Work Item Covers & Unified Identity Hue) — real `year`/no-`title`
+ * shaped JSON, written directly (bypassing `saveWorkDraft`, which would
+ * only ever produce the CURRENT shape) to simulate a row that actually
+ * predates this change, exactly the gap a PR review caught: the schema
+ * migration only touched `Work`'s own columns, never these two tables'
+ * opaque `Json` payloads.
+ */
+describe("legacy draft/revision data (pre-2026-08-11 shape) — added after a PR review caught this gap", () => {
+    async function createLegacyDraft(entityId: string, overrides: Record<string, unknown> = {}) {
+        await prisma.contentDraft.create({
+            data: {
+                kind: "work",
+                entityId,
+                data: {
+                    slug: "test-project",
+                    title: "Legacy Title",
+                    year: 2019,
+                    status: "shipped",
+                    summary: "Legacy summary.",
+                    stack: [],
+                    coverImage: null,
+                    featured: false,
+                    relatedPostSlug: null,
+                    caseStudy: null,
+                    ...overrides,
+                },
+            },
+        });
+    }
+
+    it("upgrades a legacy year to that year's Jan 1 — never silently replaced by date's own \"today\" default", async () => {
+        await createWork(baseWorkInput);
+        const row = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+        await createLegacyDraft(row.id);
+
+        const detail = await getWorkDetailForAdmin("test-project");
+        expect(detail?.date).toBe("2019-01-01");
+    });
+
+    it("the SAME upgrade applies through the list read (getWorkForAdmin), not just the single-item read", async () => {
+        await createWork(baseWorkInput);
+        const row = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+        await createLegacyDraft(row.id);
+
+        const all = await getWorkForAdmin();
+        expect(all.find((w) => w.slug === "test-project")?.date).toBe("2019-01-01");
+    });
+
+    it("upgrades a legacy translation object with no title key to an untranslated (empty-string) title, instead of throwing a ZodError", async () => {
+        await createWork(baseWorkInput);
+        const row = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+        await createLegacyDraft(row.id, {
+            translation: { summary: "Резюме.", startedLabel: "", shippedLabel: "", role: "", blocks: [] },
+        });
+
+        const detail = await getWorkDetailForAdmin("test-project");
+        expect(detail?.title).toEqual({ en: "Legacy Title", ru: "" });
+        expect(detail?.summary).toEqual({ en: "Legacy summary.", ru: "Резюме." });
+    });
+
+    it("publishWork can apply a legacy-shaped pending draft — the write path is never blocked by old data", async () => {
+        await createWork(baseWorkInput);
+        await publishWork("test-project");
+        const row = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+        await createLegacyDraft(row.id);
+
+        await publishWork("test-project");
+
+        const published = await prisma.work.findUnique({ where: { slug: "test-project" } });
+        expect(published?.date).toBe("2019-01-01");
+        expect(published?.title).toEqual({ en: "Legacy Title", ru: "" });
+    });
+
+    it("restoring a legacy-shaped ContentRevision (\"Load into draft\") succeeds and reads back upgraded", async () => {
+        await createWork(baseWorkInput);
+        await publishWork("test-project");
+        const row = await prisma.work.findUniqueOrThrow({ where: { slug: "test-project" } });
+        await prisma.contentRevision.create({
+            data: {
+                kind: "work",
+                entityId: row.id,
+                publishedAt: new Date(),
+                data: {
+                    slug: "test-project",
+                    title: "Old Revision Title",
+                    year: 2018,
+                    status: "shipped",
+                    summary: "Old revision summary.",
+                    stack: [],
+                    coverImage: null,
+                    featured: false,
+                    relatedPostSlug: null,
+                    caseStudy: null,
+                },
+            },
+        });
+        const [revision] = (await listWorkRevisions("test-project"))!;
+
+        const restored = await restoreWorkRevision("test-project", revision.id);
+
+        expect(restored?.date).toBe("2018-01-01");
+        expect(restored?.title.en).toBe("Old Revision Title");
     });
 });
 
@@ -273,7 +426,7 @@ describe("publishWork", () => {
         await publishWork("test-project");
 
         const item = await getWorkBySlug("test-project");
-        expect(item?.title).toBe("New Title");
+        expect(item?.title.en).toBe("New Title");
         expect(item?.caseStudy?.blocks.map((b) => b.type)).toEqual(["lead"]);
     });
 
@@ -380,7 +533,7 @@ describe("discardWorkDraft", () => {
 
         const reverted = await discardWorkDraft("test-project");
 
-        expect(reverted?.title).toBe("Test Project");
+        expect(reverted?.title.en).toBe("Test Project");
         expect(reverted?.hasUnpublishedChanges).toBe(false);
         expect(await prisma.contentDraft.count()).toBe(0);
     });
@@ -464,7 +617,7 @@ describe("claiming a reused slug — see admin-posts.test.ts for the full reason
 
         expect(await findCurrentSlug("work", "old-project")).toBeNull();
         const item = await getWorkBySlug("old-project");
-        expect(item?.title).toBe("Test Project");
+        expect(item?.title.en).toBe("Test Project");
     });
 });
 
@@ -587,6 +740,19 @@ describe("translateWork", () => {
         expect(row?.caseStudyDocumentIdRu).toBeNull();
     });
 
+    it("writes the pending Russian title alongside the summary — added 2026-08-11, same pending/publish rule", async () => {
+        await createWork(baseWorkInput);
+        await publishWork("test-project");
+
+        await translateWork("test-project", baseTranslationInput);
+        expect((await prisma.work.findUnique({ where: { slug: "test-project" } }))?.title).toEqual({ en: "Test Project", ru: "" });
+
+        await publishWork("test-project");
+
+        const row = await prisma.work.findUnique({ where: { slug: "test-project" } });
+        expect(row?.title).toEqual({ en: "Test Project", ru: "Тестовый проект" });
+    });
+
     it("writes the Russian case study (labels + independent Document) once published, when an English one exists", async () => {
         await createWork({ ...baseWorkInput, caseStudy: caseStudyInput });
         await publishWork("test-project");
@@ -684,7 +850,7 @@ describe("getWorkPreview", () => {
         await saveWorkDraft("test-project", { ...baseWorkInput, title: "Unpublished Rewrite" });
 
         const preview = await getWorkPreview("test-project");
-        expect(preview?.title).toBe("Unpublished Rewrite");
-        expect((await getWorkBySlug("test-project"))?.title).toBe("Test Project");
+        expect(preview?.title.en).toBe("Unpublished Rewrite");
+        expect((await getWorkBySlug("test-project"))?.title.en).toBe("Test Project");
     });
 });

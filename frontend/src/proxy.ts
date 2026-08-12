@@ -319,6 +319,21 @@ function handleLocale(request: NextRequest, pathname: string) {
     const url = request.nextUrl.clone();
     url.pathname = withoutLocale;
     url.searchParams.set(LOCALE_PARAM, "ru");
+    // Next.js bug (vercel/next.js#94745): behind nginx, this rewrite's URL
+    // inherits "https" from X-Forwarded-Proto, but this app's own server
+    // (next start -H 127.0.0.1, TLS terminated only at nginx) never speaks
+    // TLS itself. A loopback-hostname normalization mismatch inside
+    // Next.js (127.0.0.1 vs. the "localhost" it rewrites that to
+    // internally) makes it treat the rewrite as external and self-proxy it
+    // — carrying that inherited "https" into a real TLS handshake against
+    // its own plain-HTTP port, which fails outright ("EPROTO ... wrong
+    // version number") and 500s every single /ru request. Verified live:
+    // reproduced against a real `next build && next start -H 127.0.0.1`
+    // with a spoofed `X-Forwarded-Proto: https` header, fixed by the one
+    // line below, confirmed against the same repro. The rewrite target is
+    // always THIS SAME server, so its scheme must always be "http"
+    // regardless of what scheme the original request arrived over.
+    url.protocol = "http:";
 
     return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
 }

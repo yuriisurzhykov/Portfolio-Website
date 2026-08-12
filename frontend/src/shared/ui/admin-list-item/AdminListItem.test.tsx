@@ -51,4 +51,24 @@ describe("AdminListItem", () => {
         renderItem({ deleting: true });
         expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
     });
+
+    it("renders no thumbnail column at all when thumbnail is not provided", () => {
+        const { container } = renderItem();
+        expect(container.querySelector("img")).not.toBeInTheDocument();
+    });
+
+    it("renders the thumbnail when provided", () => {
+        const { container } = renderItem({ thumbnail: <img src="/cover.webp" alt="" /> });
+        expect(container.querySelector("img")).toHaveAttribute("src", "/cover.webp");
+    });
+
+    it("renders the related indicator when provided", () => {
+        renderItem({ related: <span>Linked to flowbus</span> });
+        expect(screen.getByText("Linked to flowbus")).toBeInTheDocument();
+    });
+
+    it("omits the related indicator entirely when not provided", () => {
+        renderItem();
+        expect(screen.queryByText(/Linked to/)).not.toBeInTheDocument();
+    });
 });

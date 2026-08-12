@@ -1,6 +1,9 @@
+import type { ContentChangeNotifier } from "@portfolio/backend";
 import { setContentChangeNotifier } from "@portfolio/backend";
 import { IS_INDEXABLE, SITE_URL } from "@/shared/lib/seo/site-url";
 import { indexNowNotifierFromEnv } from "@/shared/lib/seo/index-now";
+import { ogWarmupNotifierFromEnv } from "@/shared/lib/seo/og-warmup";
+import { combineContentChangeNotifiers } from "@/shared/lib/seo/combined-notifier";
 
 /**
  * Everything `register()` does on the Node.js runtime: validate the
@@ -37,10 +40,16 @@ export async function registerNodeInstrumentation(): Promise<void> {
 
     // Registered once, here. Without it the domain's `ContentChangeNotifier`
     // port stays a no-op, so tests, scripts and any other consumer behave
-    // exactly as they did before it existed.
-    const notifier = indexNowNotifierFromEnv();
-    if (notifier) {
-        setContentChangeNotifier(notifier);
+    // exactly as they did before it existed. Two independent adapters react
+    // to the same event (IndexNow submission, OG-image cache warm-up) —
+    // `combineContentChangeNotifiers` fans one event out to both rather than
+    // this file picking only one, or `setContentChangeNotifier` growing a
+    // second registration seam.
+    const notifiers: ContentChangeNotifier[] = [indexNowNotifierFromEnv(), ogWarmupNotifierFromEnv()].filter(
+        (candidate): candidate is ContentChangeNotifier => candidate !== null,
+    );
+    if (notifiers.length > 0) {
+        setContentChangeNotifier(combineContentChangeNotifiers(notifiers));
     }
 }
 

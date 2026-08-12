@@ -179,6 +179,27 @@ model Post {
   contentUpdatedAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  /// Set automatically by `createPost` — see `media/covers.ts`'s
+  /// `generateCoverForPost`. Nullable only because Prisma requires it for
+  /// an optional relation column, never actually null in practice once
+  /// `createPost` has run; there is no admin flow that removes a cover
+  /// without immediately generating a replacement (see `media/README.md`).
+  ///
+  /// Deliberately NOT `@unique` — a first design draft made it one-to-one
+  /// and immediately broke `MediaAsset.contentHash`'s own dedup guarantee
+  /// (found by a real, failing integration test, not by reasoning about
+  /// it up front): two posts whose title/category/slug happen to produce
+  /// byte-identical rasterized covers are supposed to share ONE
+  /// `MediaAsset` row for free, and a unique constraint here would reject
+  /// the second post's insert outright the moment that happened. A
+  /// content-addressed asset is inherently many-to-one from the referring
+  /// side, the same way two files with identical bytes share one blob in
+  /// any content-addressed store.
+  coverAssetId String?
+  cover        MediaAsset? @relation(fields: [coverAssetId], references: [id])
+
+  @@index([coverAssetId])
 }
 
 /// Project/work item. `startedLabel`/`shippedLabel`/`role` are case-study
@@ -187,8 +208,23 @@ model Post {
 model Work {
   id                    String    @id @default(cuid())
   slug                  String    @unique
-  title                 String
-  year                  Int
+  /// `{en, ru}`, same shape as `Post.title` — added 2026-08-11 (Work
+  /// Item Covers & Unified Identity Hue). Was a plain `String` (English
+  /// only) until then; `WorkTranslatePage` never exposed it, so every
+  /// existing row's Russian value is backfilled to `""`, same as any
+  /// other field a translator hasn't gotten to yet.
+  title                 Json
+  /// `"YYYY-MM-DD"`, same string shape as `Post.date` — but, UNLIKE
+  /// `Post.date` (set once at creation, frozen forever), this one stays
+  /// admin-EDITABLE (same as the `year: Int` it replaced 2026-08-11: the
+  /// hint was always "used to sort the /work ledger, newest first," and a
+  /// work item's meaningful date is "when the project happened," not
+  /// "when I got around to entering it in the CMS" — those two dates can
+  /// legitimately differ for a portfolio, unlike a blog post). Existing
+  /// rows backfilled to `"<old year>-01-01"` — day/month aren't
+  /// recoverable from the old `Int`, so the admin corrects them by hand
+  /// only if the extra precision actually matters for that project.
+  date                  String
   status                String
   summary               Json
   stack                 String[]
@@ -226,6 +262,14 @@ model Work {
   contentUpdatedAt      DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+
+  /// Same field, same reasoning as `Post.coverAssetId` above (added
+  /// 2026-08-11, same migration as `title`/`date` above) — procedural
+  /// cover, NOT `@unique` for the identical content-hash-dedup reason.
+  coverAssetId String?
+  cover        MediaAsset? @relation(fields: [coverAssetId], references: [id])
+
+  @@index([coverAssetId])
 }
 
 /// One row per slug a `Post`/`Work` USED to live at, pointing at where it
@@ -345,4 +389,97 @@ model SiteContent {
   key       String   @id
   data      Json
   updatedAt DateTime @updatedAt
+}
+
+/// One row per generated file on disk — a journal post's cover today, any
+/// future image (work covers, AI-generated art) tomorrow, without a new
+/// table per image kind. See `backend/src/media/README.md` for the full
+/// design; this comment only covers the columns.
+///
+/// `contentHash` is the sha256 of the FINAL rasterized bytes (the 1200x630
+/// WebP, see `image-processing.ts`) — `@unique` gives byte-for-byte
+/// deduplication for free: regenerating an identical cover (same slug, same
+/// hue, same styleVersion, same variant — see `content-hash.ts`) reuses the
+/// existing row and file instead of writing a second copy that differs only
+/// in `id`.
+///
+/// `storageKey`, never an absolute URL — `media-store.ts`'s `MediaStore`
+/// port is what turns a `storageKey` into a servable URL, so switching
+/// storage backends later (disk → R2/S3, see media/README.md) is a
+/// migration of the FILES, not of this column's meaning.
+///
+/// `generation` is untyped `Json` — same "typed at the application
+/// boundary, not the database" split as `Block.text`/`Block.data`/
+/// `SiteContent.data` above. Today it holds `{ generator: "procedural",
+/// styleVersion, variant, seed, hue, svgSource }`; Phase 3's AI generator
+/// adds `model`/`prompt` keys to the SAME column, no migration required —
+/// that's the reason this is Json and not N separate nullable columns one
+/// per generator's own fields.
+model MediaAsset {
+  id          String   @id @default(cuid())
+  contentHash String   @unique
+  storageKey  String
+  mimeType    String
+  width       Int
+  height      Int
+  byteSize    Int
+  /// Inline low-quality placeholder (a tiny base64 data URI) — read
+  /// straight off this row for `CoverImage`'s blur-up, no second disk read
+  /// or extra network request just to show a placeholder while the real
+  /// image loads.
+  placeholder String
+  /// What this asset is FOR — `"post-cover"` today, future kinds (a work
+  /// cover, an inline body image) add a new string value here, never a new
+  /// table. Plain `String`, not a Prisma enum, same reasoning as
+  /// `Block.type`/`SlugHistory.kind` above: this set is expected to grow.
+  kind        String
+  generation  Json?
+  createdAt   DateTime @default(now())
+
+  /// A list, not `Post?` — see `Post.coverAssetId`'s own comment: this is a
+  /// content-addressed row, and more than one `Post` sharing an identical
+  /// rendered cover is an intended outcome of that, not an edge case.
+  posts Post[]
+  /// Same reasoning as `posts` above, for `Work.coverAssetId` (added
+  /// 2026-08-11).
+  works Work[]
+
+  @@index([kind])
+}
+
+/// The persisted assignment of a hue (0-360°, OKLCH) to an "identity" —
+/// EITHER a post category OR a work item, sharing ONE ordinal sequence
+/// (see `media/README.md`'s "Назначение тона категории" entry for why this
+/// has to be a stored assignment and cannot be a pure hash of a string, and
+/// the "Work Item Covers & Unified Identity Hue" plan for why Work and
+/// category hues share a single sequence rather than two independent
+/// ones — a Work project and a post category must never accidentally get
+/// the same tone). Renamed from `CategoryHue` 2026-08-11, when `kind`
+/// (`"category"` for the pre-existing rows, `"work"` for new ones) and the
+/// generic `key` column (was `category`) were introduced; every row that
+/// existed before that migration keeps its `hue`/`ordinal` unchanged.
+///
+/// One row per (kind, key) ever seen; never deleted by a rename (a renamed
+/// category, or a Work slug change, is a NEW key and gets its own new
+/// row/ordinal/hue — see the README entry above).
+model IdentityHue {
+  id         String   @id @default(cuid())
+  /// `"category"` (Post.category.en, normalized) | `"work"` (Work.slug).
+  kind       String
+  /// Post: `normalizeCategoryKey(category.en)` (see `content/localized-text.ts`
+  /// — the hue must not depend on the reader's locale, and a post's cover
+  /// is the same asset in both languages). Work: the slug itself.
+  key        String
+  hue        Float
+  /// Assignment order, SHARED across every `kind` — `hueForOrdinal(ordinal)`
+  /// (cover-hue.ts) is a pure function of this number, van der Corput
+  /// sequence base 2. Stored explicitly rather than derived from `count()`
+  /// at read time: deleting a row (a category renamed away from, or a
+  /// deleted Work item) must never cause a LATER identity to silently
+  /// inherit an earlier ordinal's hue. `@unique` (not scoped per `kind`) is
+  /// exactly what makes category hues and Work hues share one sequence.
+  ordinal    Int      @unique
+  assignedAt DateTime @default(now())
+
+  @@unique([kind, key])
 }

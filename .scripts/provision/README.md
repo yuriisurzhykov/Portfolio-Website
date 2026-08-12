@@ -126,6 +126,19 @@ time you need it (disaster recovery, new server). See the repo's
   (`next start -H 127.0.0.1`) instead — see that file and `14-ufw.sh`
   below for the firewall half of the same fix.
 
+  **2026-08-11 — caught by code review:** `ProtectSystem=strict` with no
+  `ReadWritePaths=` refuses every write outside the sandbox (`EROFS`), and
+  this unit had none, even though `generateCoverForWork`/`generateCoverForPost`
+  write new covers to `shared/media` at runtime by the time this was
+  flagged — the original comment justifying `strict` ("never uses
+  next/image, no server-side runtime disk writes") had gone stale.
+  Added `ReadWritePaths=${APP_BASE_DIR}/shared`, covering both
+  `shared/media` and the newer `shared/.cache` (fontconfig). A target
+  provisioned before this fix needs `08-systemd-service.sh` re-run AND an
+  explicit `sudo systemctl restart <service>` — sandboxing directives only
+  take effect from the process's next start, `daemon-reload` alone does
+  not retroactively apply them to an already-running process.
+
 - `09-nginx-rate-limit-zone.sh` — installs the shared `login_limit`
   `limit_req_zone` (10r/m per IP) in `/etc/nginx/conf.d/`, protecting
   `/api/auth/login` — a second, independent layer in front of the
@@ -169,6 +182,29 @@ time you need it (disaster recovery, new server). See the repo's
   that CREATES the narrow grant, so the narrow grant can't bootstrap it.
   One-time step per box; every `../set-app-env.sh` call afterwards goes
   through this grant instead of needing a human with real sudo each time.
+
+  Run it as `bash 12-set-app-env-helper.sh` — **not** `sudo bash
+  12-set-app-env-helper.sh`. The script calls `sudo` itself for the
+  specific lines that need it; wrapping the whole invocation in `sudo`
+  additionally resets the shell's environment (`env_reset`, sudo's
+  default), which silently drops any `VAR=value` the caller set for a
+  script that reads it (see `16-deploy-finish-helper.sh`'s sibling
+  scripts, e.g. `08-systemd-service.sh`, which read `SERVICE_NAME`/
+  `APP_BASE_DIR`/`PORT` straight from the environment).
+
+  **2026-08-11 — found live, real VPS:** the sudoers-rule temp file used
+  to be `TMP_SUDOERS=$(mktemp)` (created as the calling user) followed by
+  `sudo tee "$TMP_SUDOERS"` (opened as root) — the kernel's
+  `fs.protected_regular` hardening (on by default since ~Ubuntu 22.04)
+  refuses exactly this: opening a file for writing, in a sticky
+  world-writable directory like `/tmp`, when its owner is neither the
+  directory owner nor the opening process's own UID. Symptom was `tee:
+  /tmp/tmp.XXXX: Permission denied` — easy to misread as "I forgot
+  `sudo`" (it wasn't; `sudo` had already succeeded once, on `tee` itself)
+  and instead re-run the WHOLE script under `sudo bash`, which papers
+  over this one thing but causes the `env_reset` problem above. Real fix:
+  `TMP_SUDOERS=$(sudo mktemp)`, so the same UID (root) both creates and
+  writes the file. Applied here and in `16-deploy-finish-helper.sh`.
   Validates the generated sudoers file with `visudo -c` before it ever
   touches `/etc/sudoers.d/` — a syntax error dropped straight into that
   directory can break `sudo` for every user on the box, including root's
@@ -217,6 +253,28 @@ time you need it (disaster recovery, new server). See the repo's
   two. Ordering inside the script is deliberate (SSH allowed before the
   default-deny policy is set, which is set before `ufw enable`) so a
   mistake can't lock out the very SSH session running it.
+
+- `16-deploy-finish-helper.sh` — installs `/usr/local/bin/deploy-frontend-finish.sh`
+  (root-owned, from `../deploy-frontend-finish.sh`) and a narrow sudoers
+  NOPASSWD rule (`/etc/sudoers.d/deploy-frontend-finish`) letting
+  `yuriisoft` run exactly that one binary — same reasoning, same pattern
+  as `12-set-app-env-helper.sh`. **Written after finding, live, that this
+  script had no installer at all**: its first install (then named
+  `deploy-web-finish.sh`) was done by hand during the original Phase 6
+  bring-up and never got backfilled into a script, so every later edit to
+  it silently stayed on the VPS's own copy until someone remembered to
+  manually `sudo cp` the new version over — found when a real edit to
+  `deploy-frontend-finish.sh` (the `shared/.cache/fontconfig` self-heal,
+  see `../deploy-frontend-finish.sh`'s own dated comment) had no way to
+  reach the VPS at all. One-time step per box; every future edit to
+  `deploy-frontend-finish.sh` after this is a single re-run of this
+  script, no sudoers work needed again.
+
+  Getting THIS script (and the rest of `provision/`) onto the VPS in the
+  first place never requires a git checkout there: `deploy-target.yml`'s
+  "Sync deploy/provisioning scripts" step scp's this whole directory to
+  `~/deploy-scripts/.scripts/provision/` on every deploy, so it's always
+  present and current — just SSH in and run it from there.
 
 - `15-session-cleanup-cron.sh` — installs a nightly cron job (2am, one
   hour offset from `11-pg-backup.sh`'s 3am) that runs `backend/scripts/
