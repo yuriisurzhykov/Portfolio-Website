@@ -25,6 +25,21 @@ export function formatMonthYear(isoDate: string): string {
     return monthYearFormatter.format(new Date(isoDate));
 }
 
+/**
+ * "2026" — the `/work` ledger's compact year-only column (`WorkListPage`),
+ * added 2026-08-11 when `Work.year: Int` became `Work.date: String`. A
+ * plain string slice, not `new Date(isoDate).getFullYear()` — deliberately:
+ * `.getFullYear()` reads the LOCAL timezone, and `new Date("2026-01-01")`
+ * parses as UTC midnight, so any timezone behind UTC would read back
+ * "2025" for a date literally named "2026-01-01" — the exact bug class
+ * `formatAdminDate`'s own comment above already documents (found there via
+ * a failing test, not by inspection). Slicing the string never touches a
+ * `Date` object at all, so there's no timezone to get wrong.
+ */
+export function formatYear(isoDate: string): string {
+    return isoDate.slice(0, 4);
+}
+
 /** "Jul 19, 2026" — precise enough for the admin editor's read-only "created on" display (`PostEditorPage`), where the visitor-facing "Month Year" above would be too vague for the person who actually needs to tell two same-month posts apart. */
 const adminDateFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 

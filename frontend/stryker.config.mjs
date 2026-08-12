@@ -29,6 +29,9 @@ const config = {
         "src/shared/lib/slugify.ts",
         "src/shared/lib/sanitize-svg.ts",
         "src/shared/lib/db-outage-fallback.ts",
+        // 2026-08-11, Work Item Covers & Unified Identity Hue: zero DOM/backend
+        // imports, its own dedicated DB-free test file.
+        "src/shared/lib/hue-accent.ts",
         "src/shared/i18n/engine/LocaleRegistry.ts",
         "src/shared/i18n/engine/index.ts",
         "src/shared/i18n/pick.ts",

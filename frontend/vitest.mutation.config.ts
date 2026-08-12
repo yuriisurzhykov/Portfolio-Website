@@ -23,6 +23,7 @@ export default defineConfig({
             "src/shared/lib/slugify.test.ts",
             "src/shared/lib/sanitize-svg.test.ts",
             "src/shared/lib/db-outage-fallback.test.ts",
+            "src/shared/lib/hue-accent.test.ts",
             "src/shared/i18n/engine/LocaleRegistry.test.ts",
             "src/shared/i18n/engine/index.test.ts",
             "src/shared/i18n/pick.test.ts",

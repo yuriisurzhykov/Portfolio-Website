@@ -1,4 +1,4 @@
-import { getSiteContent } from "@portfolio/backend";
+import { getPostsForAdmin, getSiteContent } from "@portfolio/backend";
 import { WorkEditorPage } from "@/views/admin-work-editor";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { requirePage } from "@/shared/lib/auth/guard";
@@ -20,7 +20,15 @@ export default async function Page() {
     // shows the normal service-unavailable fallback rather than silently
     // rendering the editor with no suggestions at all.
     return renderOrServiceUnavailable(
-        () => getSiteContent("techStack"),
-        (techStack) => <WorkEditorPage techStackSuggestions={techStack.map((item) => item.name)} />,
+        async () => {
+            const [techStack, posts] = await Promise.all([getSiteContent("techStack"), getPostsForAdmin()]);
+            return { techStack, posts };
+        },
+        ({ techStack, posts }) => (
+            <WorkEditorPage
+                techStackSuggestions={techStack.map((item) => item.name)}
+                postOptions={posts.map((post) => ({ slug: post.slug, label: post.title.en }))}
+            />
+        ),
     );
 }

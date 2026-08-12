@@ -31,7 +31,7 @@ export async function resetTestDatabase(): Promise<void> {
     // stated ordering rule ("children before parents") true for every row
     // here, not just most of them.
     await prisma.mediaAsset.deleteMany();
-    await prisma.categoryHue.deleteMany();
+    await prisma.identityHue.deleteMany();
     await prisma.siteContent.deleteMany();
     // No foreign key ties this to `Post`/`Work` (see schema.prisma's own
     // comment on why), so nothing cascades it away — leaving it out meant

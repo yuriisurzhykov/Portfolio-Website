@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getDistinctPostCategories, getPostForAdmin } from "@portfolio/backend";
+import { getDistinctPostCategories, getPostForAdmin, getWorkForAdmin } from "@portfolio/backend";
 import { PostEditorPage } from "@/views/admin-post-editor";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { requirePage } from "@/shared/lib/auth/guard";
@@ -29,9 +29,10 @@ export default async function Page({ params }: PageProps) {
             if (!post) {
                 notFound();
             }
-            const existingCategories = await getDistinctPostCategories();
-            return { post, existingCategories };
+            const [existingCategories, work] = await Promise.all([getDistinctPostCategories(), getWorkForAdmin()]);
+            const workOptions = work.map((item) => ({ slug: item.slug, label: item.title.en }));
+            return { post, existingCategories, workOptions };
         },
-        ({ post, existingCategories }) => <PostEditorPage initialPost={post} existingCategories={existingCategories} />,
+        ({ post, existingCategories, workOptions }) => <PostEditorPage initialPost={post} existingCategories={existingCategories} workOptions={workOptions} />,
     );
 }

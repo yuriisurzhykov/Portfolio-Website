@@ -7,7 +7,8 @@ import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
-import { PlaceholderCover } from "@/shared/ui/placeholder-cover";
+import { WorkCoverImage } from "@/shared/ui/work-cover-image";
+import { TagList } from "@/shared/ui/tag-list";
 import { useTranslation } from "@/shared/i18n";
 
 export interface SelectedWorkProps {
@@ -22,11 +23,17 @@ function WorkCard({ item }: { item: WorkSummary }) {
 
     return (
         <Card className="overflow-hidden p-0">
-            <PlaceholderCover className="h-[160px]" label={`${item.title.toLowerCase()} — cover image`} src={item.coverImage ?? undefined} alt={item.title} />
+            <WorkCoverImage
+                className="h-[160px]"
+                override={item.coverImage}
+                cover={item.cover}
+                label={`${pick(item.title).toLowerCase()} — cover image`}
+                alt={pick(item.title)}
+            />
             <div className="p-[24px]">
                 <div className="flex justify-between items-center gap-sm mb-[10px]">
                     <Text as="h3" variant="h3">
-                        {item.title}
+                        {pick(item.title)}
                     </Text>
                     <StatusBadge tone={isShipped ? "success" : "warning"} className="whitespace-nowrap">
                         {ln(isShipped ? "status.shipped" : "status.inProgress")}
@@ -36,14 +43,7 @@ function WorkCard({ item }: { item: WorkSummary }) {
                     {pick(item.summary)}
                 </Text>
                 <div className="flex justify-between items-center gap-sm flex-wrap">
-                    <div className="flex flex-wrap items-center gap-xs font-mono text-[11px] text-text-muted">
-                        {item.stack.slice(0, 3).map((tech, index) => (
-                            <React.Fragment key={tech}>
-                                {index > 0 && <span className="text-text-faint">·</span>}
-                                <span>{tech}</span>
-                            </React.Fragment>
-                        ))}
-                    </div>
+                    <TagList items={item.stack} maxVisible={3} size="sm" variant="neutral" />
                     {detailHref && (
                         <Link href={detailHref} className="font-semibold text-caption whitespace-nowrap">
                             {detailLabel} →

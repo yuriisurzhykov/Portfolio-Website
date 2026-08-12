@@ -25,6 +25,7 @@ import { generateUniqueSlug, slugSchema } from "./slug";
 import { toWorkSummary, type WorkDetail, type WorkStatus, type WorkSummary } from "./work";
 import { notifyContentChanged } from "./content-change-notifier";
 import { claimSlug, forgetSlugHistory, recordSlugChange } from "./slug-history";
+import { ensureWorkCoverIsCurrent, generateCoverForWork } from "../media/work-covers";
 
 /** Work's half of `admin-posts.ts`'s `KIND` — same reasoning, different `kind`. */
 const KIND = "work" as const;
@@ -71,10 +72,13 @@ const caseStudyPublishSchema = z.object({
  * (the pending draft, or the live row itself if there's no draft — see
  * `materializeDraft`).
  */
+/** `"YYYY-MM-DD"` — matches the shape the browser's `<Input type="date">` submits, and `Post.date`'s own format (see `Work.date`'s comment in schema.prisma for why this one stays editable while Post's doesn't). */
+const workDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+
 export const workPublishSchema = z.object({
     slug: slugSchema,
     title: z.string().min(1),
-    year: z.number().int(),
+    date: workDateSchema,
     status: z.enum(["shipped", "in-progress"] satisfies WorkStatus[]),
     summary: z.string().min(1),
     stack: z.array(z.string()),
@@ -97,7 +101,7 @@ export const workPublishSchema = z.object({
 export const workDraftInputSchema = z.object({
     slug: slugSchema.optional(),
     title: z.string().min(1),
-    year: z.number().int().default(() => new Date().getFullYear()),
+    date: workDateSchema.default(() => new Date().toISOString().slice(0, 10)),
     status: z.enum(["shipped", "in-progress"] satisfies WorkStatus[]).default("shipped"),
     summary: z.string().default(""),
     stack: z.array(z.string()).default([]),
@@ -118,6 +122,7 @@ export type WorkInput = z.infer<typeof workDraftInputSchema>;
  * hides that section and these fields go unused rather than rejected.
  */
 export const translateWorkInputSchema = z.object({
+    title: z.string(),
     summary: z.string(),
     startedLabel: z.string(),
     shippedLabel: z.string(),
@@ -140,6 +145,8 @@ export type WorkDraftData = z.infer<typeof workDraftDataSchema>;
 /** What `/admin/work/[slug]/translate` reads before rendering its form. */
 export interface AdminWorkTranslation {
     slug: string;
+    /** Localized 2026-08-11 (Work Item Covers & Unified Identity Hue) — see schema.prisma's comment on `Work.title`. */
+    title: LocalizedText;
     summary: LocalizedText;
     /** Whether the EFFECTIVE content has an English case study at all to translate — drives whether the translate page shows the case-study section. */
     hasCaseStudy: boolean;
@@ -177,6 +184,7 @@ export interface AdminWorkListItem extends WorkSummary {
 
 /** Work's half of `admin-posts.ts`'s `materializeDraft` — same reasoning, same "turn what's live back into the draft shape" contract. */
 async function materializeDraft(row: WorkRow): Promise<WorkDraftData> {
+    const title = localizedTextSchema.parse(row.title);
     const summary = localizedTextSchema.parse(row.summary);
     const startedLabel = row.startedLabel ? localizedTextSchema.parse(row.startedLabel) : null;
     const shippedLabel = row.shippedLabel ? localizedTextSchema.parse(row.shippedLabel) : null;
@@ -192,13 +200,13 @@ async function materializeDraft(row: WorkRow): Promise<WorkDraftData> {
         }
         : null;
 
-    const hasTranslation = summary.ru !== "" || row.caseStudyDocumentIdRu !== null
+    const hasTranslation = title.ru !== "" || summary.ru !== "" || row.caseStudyDocumentIdRu !== null
         || Boolean(startedLabel?.ru) || Boolean(shippedLabel?.ru) || Boolean(role?.ru);
 
     return {
         slug: row.slug,
-        title: row.title,
-        year: row.year,
+        title: title.en,
+        date: row.date,
         status: row.status as WorkStatus,
         summary: summary.en,
         stack: row.stack,
@@ -208,6 +216,7 @@ async function materializeDraft(row: WorkRow): Promise<WorkDraftData> {
         caseStudy,
         translation: hasTranslation
             ? {
+                title: title.ru,
                 summary: summary.ru,
                 startedLabel: startedLabel?.ru ?? "",
                 shippedLabel: shippedLabel?.ru ?? "",
@@ -223,7 +232,7 @@ function mergeWorkDraftInput(base: WorkDraftData, input: WorkInput): WorkDraftDa
     return {
         slug: input.slug ?? base.slug,
         title: input.title,
-        year: input.year,
+        date: input.date,
         status: input.status,
         summary: input.summary,
         stack: input.stack,
@@ -240,8 +249,8 @@ function toEffectiveSummary(row: WorkRow, data: WorkDraftData): WorkSummary {
     const base = toWorkSummary(row);
     return {
         ...base,
-        title: data.title,
-        year: data.year,
+        title: { en: data.title, ru: data.translation?.title ?? base.title.ru },
+        date: data.date,
         status: data.status,
         summary: { en: data.summary, ru: data.translation?.summary ?? base.summary.ru },
         stack: data.stack,
@@ -264,7 +273,7 @@ async function readWorkDraft(entityId: string): Promise<WorkDraftData | null> {
  * reasoning as `admin-posts.ts`'s `getPostsForAdmin`.
  */
 export async function getWorkForAdmin(): Promise<AdminWorkListItem[]> {
-    const rows = await prisma.work.findMany({ orderBy: { year: "desc" } });
+    const rows = await prisma.work.findMany({ orderBy: { date: "desc" }, include: { cover: true } });
     const drafts = await readDraftsFor(KIND, rows.map((row) => row.id));
     return rows.map((row) => {
         const rawDraft = drafts.get(row.id);
@@ -356,17 +365,29 @@ async function isSlugTaken(slug: string): Promise<boolean> {
  * directly without going through `ContentDraft` — same reasoning as
  * `createPost`'s equivalent comment: the very first autosave has to
  * create something to attach a draft to.
+ *
+ * A cover is generated and attached in the SAME insert as `createPost`
+ * does for `Post` (`coverAssetId` set directly on `prisma.work.create`) —
+ * added 2026-08-11 (Work Item Covers & Unified Identity Hue). Safe to
+ * generate BEFORE the row exists: `generateCoverForWork`/`resolveWorkHue`
+ * only ever read/write by `slug`, never by row id.
  */
 export async function createWork(input: WorkInput): Promise<WorkSummary> {
     const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
 
+    const cover = await generateCoverForWork({
+        slug,
+        titleEn: input.title,
+        summaryEn: input.summary,
+        date: input.date,
+    });
     const caseStudyDocumentId = await replaceDocumentContent(null, input.caseStudy?.blocks ?? []);
     const row = await prisma.work.create({
         data: {
             slug,
-            title: input.title,
-            year: input.year,
+            title: { en: input.title, ru: "" },
+            date: input.date,
             status: input.status,
             summary: { en: input.summary, ru: "" },
             stack: input.stack,
@@ -378,6 +399,7 @@ export async function createWork(input: WorkInput): Promise<WorkSummary> {
             role: input.caseStudy ? { en: input.caseStudy.role, ru: "" } : undefined,
             heroImage: input.caseStudy?.heroImage ?? null,
             caseStudyDocumentId,
+            coverAssetId: cover.id,
         },
     });
     // See `createPost`'s comment on the same line — claimed only after
@@ -416,7 +438,22 @@ async function applyWorkDraftToRow(
     const newSlug = data.slug ?? existing.slug;
     await assertSlugAvailable(newSlug, existing.slug);
 
+    const existingTitle = localizedTextSchema.parse(existing.title);
     const existingSummary = localizedTextSchema.parse(existing.summary);
+
+    // Same ordering/reasoning as `applyPostDraftToRow`'s identical comment
+    // (admin-posts.ts) — runs BEFORE `replaceDocumentContent` so a fallible
+    // cover generation failing leaves nothing live half-changed. Also the
+    // ONE place a title/summary change is allowed to reach the live cover,
+    // same draft/publish-boundary rule as every other field this function
+    // writes (added 2026-08-11, Work Item Covers & Unified Identity Hue).
+    const coverAssetId = await ensureWorkCoverIsCurrent(existing.coverAssetId, {
+        slug: newSlug,
+        titleEn: data.title,
+        summaryEn: data.summary,
+        date: data.date,
+    });
+
     const caseStudyDocumentId = await replaceDocumentContent(existing.caseStudyDocumentId, data.caseStudy?.blocks ?? []);
 
     // Clearing the case study entirely drops its Russian translation too
@@ -446,8 +483,8 @@ async function applyWorkDraftToRow(
 
     const updateData: Prisma.WorkUncheckedUpdateInput = {
         slug: newSlug,
-        title: data.title,
-        year: data.year,
+        title: { en: data.title, ru: data.translation?.title ?? existingTitle.ru },
+        date: data.date,
         status: data.status,
         summary: { en: data.summary, ru: data.translation?.summary ?? existingSummary.ru },
         stack: data.stack,
@@ -460,6 +497,7 @@ async function applyWorkDraftToRow(
         heroImage: data.caseStudy?.heroImage ?? null,
         caseStudyDocumentId,
         caseStudyDocumentIdRu,
+        coverAssetId,
         // See `Work.contentUpdatedAt` in schema.prisma, and
         // `applyPostDraftToRow`'s identical comment (admin-posts.ts) for why
         // the caller decides this rather than always stamping "now".
@@ -507,7 +545,7 @@ export async function publishWork(slug: string): Promise<WorkSummary | null> {
     workPublishSchema.parse({
         slug: data.slug ?? existing.slug,
         title: data.title,
-        year: data.year,
+        date: data.date,
         status: data.status,
         summary: data.summary,
         stack: data.stack,
@@ -564,6 +602,7 @@ export async function getWorkTranslationForAdmin(slug: string): Promise<AdminWor
 
     return {
         slug: row.slug,
+        title: { en: data.title, ru: translation?.title ?? "" },
         summary: { en: data.summary, ru: translation?.summary ?? "" },
         hasCaseStudy: data.caseStudy !== null,
         startedLabel: data.caseStudy ? { en: data.caseStudy.startedLabel, ru: translation?.startedLabel ?? "" } : empty,

@@ -1323,3 +1323,13 @@ on a fresh checkout, which is expected — same as the page-level suite's very f
 initial baselines existed, per this section's 2026-07-17 entry). Real baselines get generated the
 same way the original ones were: CI or Docker (Linux), never a raw local Windows run — see section
 2's font-rendering explanation, unchanged and equally true for component screenshots.
+
+### 2026-08-11 — Three new components added to the gallery, one deliberately excluded
+
+Part of the Work Item Covers & Unified Identity Hue UI unification: `TagList`,
+`RelatedContentCallout`, and `CompactRelatedLink` (`related-content-callout`'s second export) each
+got a demo section (`tag-list`, `related-content-callout`, `related-link`) with fixed, deterministic
+props — 18 components total now. `RelatedItemPicker` was deliberately NOT added — same reasoning as
+the existing `token-combobox` exclusion (see the manifest's own doc comment, updated to name it
+explicitly): it's admin-auth-only and its entire value is in interaction a static screenshot can't
+exercise, covered instead by its own `RelatedItemPicker.test.tsx`.

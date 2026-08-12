@@ -11,8 +11,10 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { TokenCombobox } from "@/shared/ui/token-combobox";
+import { RelatedItemPicker, type RelatedItemOption } from "@/shared/ui/related-item-picker";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { slugify } from "@/shared/lib/slugify";
+import { todayIsoDate } from "@/shared/lib/date-format";
 import { type AutosaveStatus, useAutosaveDraft } from "@/shared/lib/use-autosave-draft";
 
 export interface WorkEditorPageProps {
@@ -20,6 +22,8 @@ export interface WorkEditorPageProps {
     initialWork?: AdminWorkDetail;
     /** `techStack[].name` from `SiteContent` — fuzzy-search suggestions for the Stack field's `TokenCombobox`, not a hard-enforced list (see `token-combobox/README.md` for why free text is still allowed). Defaults to `[]` so callers that don't have this yet (there are none today, but the type stays honest) don't crash. */
     techStackSuggestions?: string[];
+    /** Every real Post, for `RelatedItemPicker`'s "Related journal post" field — same "hand the whole small list to the client" pattern as `techStackSuggestions`. Defaults to `[]` for the same reason. */
+    postOptions?: RelatedItemOption[];
 }
 
 const STATUS_OPTIONS: StatusToggleOption<WorkStatus>[] = [
@@ -30,7 +34,7 @@ const STATUS_OPTIONS: StatusToggleOption<WorkStatus>[] = [
 interface FormState {
     slug: string;
     title: string;
-    year: string;
+    date: string;
     status: WorkStatus;
     summary: string;
     stack: string[];
@@ -59,9 +63,11 @@ function autosaveStatusLabel(status: AutosaveStatus): string | null {
 }
 
 /**
- * English-only — same reasoning as `PostEditorPage`'s `toFormState`.
- * `slug` reads `draftSlug` (the pending rename, if any), not `slug` —
- * same reasoning as `PostEditorPage`'s identical change, see
+ * English-only title (`.en` — `Work.title` was localized 2026-08-11, same
+ * shape as `Post.title`; translation happens on the separate "Add
+ * translation" page, same as Post) — same reasoning as `PostEditorPage`'s
+ * `toFormState`. `slug` reads `draftSlug` (the pending rename, if any), not
+ * `slug` — same reasoning as `PostEditorPage`'s identical change, see
  * `AdminWorkDetail.draftSlug`'s comment. `status` defaults to
  * `"in-progress"`, not `"shipped"` — a brand new item is a DRAFT
  * (`lifecycleState`) until explicitly published.
@@ -69,8 +75,8 @@ function autosaveStatusLabel(status: AutosaveStatus): string | null {
 function toFormState(work?: AdminWorkDetail): FormState {
     return {
         slug: work?.draftSlug ?? work?.slug ?? "",
-        title: work?.title ?? "",
-        year: work ? String(work.year) : String(new Date().getFullYear()),
+        title: work?.title.en ?? "",
+        date: work?.date ?? todayIsoDate(),
         status: work?.status ?? "in-progress",
         summary: work?.summary.en ?? "",
         stack: work?.stack ?? [],
@@ -85,7 +91,7 @@ function toFormState(work?: AdminWorkDetail): FormState {
     };
 }
 
-export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkEditorPageProps) {
+export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOptions = [] }: WorkEditorPageProps) {
     const router = useRouter();
     const isEditing = Boolean(initialWork);
 
@@ -121,7 +127,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         buildInput: () => ({
             slug: form.slug.trim() || undefined,
             title: form.title.trim(),
-            year: Number(form.year) || 0,
+            date: form.date,
             status: form.status,
             summary: form.summary.trim(),
             // Already an array of trimmed, deduped-by-TokenCombobox tokens —
@@ -381,7 +387,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                     </Text>
                 </div>
 
-                <Field label="Title" htmlFor="title" hint="Not localized — same value in both languages on the public site.">
+                <Field label="Title" htmlFor="title">
                     <Input id="title" required value={form.title} onChange={(e) => updateTitle(e.target.value)} />
                 </Field>
                 <Field
@@ -400,8 +406,8 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                 </Field>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                    <Field label="Year" htmlFor="year" hint="Used to sort the /work ledger, newest first.">
-                        <Input id="year" type="number" required value={form.year} onChange={(e) => update("year", e.target.value)} />
+                    <Field label="Date" htmlFor="date" hint="Used to sort the /work ledger, newest first — edit freely, unlike a journal post's date.">
+                        <Input id="date" type="date" required value={form.date} onChange={(e) => update("date", e.target.value)} />
                     </Field>
                     <TokenCombobox
                         id="work-stack"
@@ -429,13 +435,15 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                     </div>
                 </div>
 
-                <Field
+                <RelatedItemPicker
+                    id="relatedPostSlug"
                     label="Related journal post"
-                    htmlFor="relatedPostSlug"
-                    hint={"Optional — the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."}
-                >
-                    <Input id="relatedPostSlug" value={form.relatedPostSlug} onChange={(e) => update("relatedPostSlug", e.target.value)} placeholder="e.g. flowbus" />
-                </Field>
+                    hint="Optional — the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."
+                    value={form.relatedPostSlug || null}
+                    onChange={(slug) => update("relatedPostSlug", slug ?? "")}
+                    options={postOptions}
+                    placeholder="Search journal posts…"
+                />
             </Card>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">

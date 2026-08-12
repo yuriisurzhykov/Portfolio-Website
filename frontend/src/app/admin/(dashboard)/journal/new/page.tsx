@@ -1,4 +1,4 @@
-import { getDistinctPostCategories } from "@portfolio/backend";
+import { getDistinctPostCategories, getWorkForAdmin } from "@portfolio/backend";
 import { PostEditorPage } from "@/views/admin-post-editor";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { requirePage } from "@/shared/lib/auth/guard";
@@ -9,7 +9,10 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
     await requirePage();
     return renderOrServiceUnavailable(
-        () => getDistinctPostCategories(),
-        (existingCategories) => <PostEditorPage existingCategories={existingCategories} />,
+        async () => {
+            const [existingCategories, work] = await Promise.all([getDistinctPostCategories(), getWorkForAdmin()]);
+            return { existingCategories, workOptions: work.map((item) => ({ slug: item.slug, label: item.title.en })) };
+        },
+        ({ existingCategories, workOptions }) => <PostEditorPage existingCategories={existingCategories} workOptions={workOptions} />,
     );
 }

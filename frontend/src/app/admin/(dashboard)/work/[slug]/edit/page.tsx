@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getSiteContent, getWorkDetailForAdmin } from "@portfolio/backend";
+import { getPostsForAdmin, getSiteContent, getWorkDetailForAdmin } from "@portfolio/backend";
 import { WorkEditorPage } from "@/views/admin-work-editor";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { requirePage } from "@/shared/lib/auth/guard";
@@ -31,9 +31,15 @@ export default async function Page({ params }: PageProps) {
             if (!item) {
                 notFound();
             }
-            const techStack = await getSiteContent("techStack");
-            return { item, techStack };
+            const [techStack, posts] = await Promise.all([getSiteContent("techStack"), getPostsForAdmin()]);
+            return { item, techStack, posts };
         },
-        ({ item, techStack }) => <WorkEditorPage initialWork={item} techStackSuggestions={techStack.map((tech) => tech.name)} />,
+        ({ item, techStack, posts }) => (
+            <WorkEditorPage
+                initialWork={item}
+                techStackSuggestions={techStack.map((tech) => tech.name)}
+                postOptions={posts.map((post) => ({ slug: post.slug, label: post.title.en }))}
+            />
+        ),
     );
 }

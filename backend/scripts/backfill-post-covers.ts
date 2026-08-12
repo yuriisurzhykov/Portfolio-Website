@@ -48,6 +48,7 @@ async function main() {
             titleEn: title,
             excerptEn: excerpt,
             categoryEn: category,
+            relatedWorkSlug: post.relatedWorkSlug,
             date: post.date,
         });
 

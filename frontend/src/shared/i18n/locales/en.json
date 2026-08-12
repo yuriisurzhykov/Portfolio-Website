@@ -41,6 +41,7 @@
   "work.ledger.system": "SYSTEM",
   "work.ledger.stack": "STACK",
   "work.ledger.status": "STATUS",
+  "work.ledger.relatedPost": "Related post",
   "work.caseStudy.stackHeading": "Stack",
   "work.caseStudy.started": "Started: {date}",
   "work.caseStudy.shipped": "Shipped: {date}",

@@ -1509,3 +1509,44 @@ category` проверяют только финальное состояние,
 исправлением. Порядок восстановлен теми же двумя строками, что и в первый
 раз; сам тест и предыдущее объяснение выше остаются верными без изменений
 — баг и его механизм не изменились, изменилось только имя функции обложки.
+
+## 2026-08-11 — `Work.title` локализован, `Work.year` → `Work.date`
+
+Часть "Work Item Covers & Unified Identity Hue" (полная история — `media/README.md`'s
+одноимённая запись, там же — миграция схемы/`IdentityHue`/обложки). Этот
+раздел — только контент-модельная половина, что изменилось в `work.ts`/
+`admin-work.ts`.
+
+- **`Work.title` `String` → `Json` `{en, ru}`** — точное зеркало
+  `Post.title`. `WorkSummary.title`/`RawWorkRow.title` меняют тип,
+  `toWorkSummary` парсит через уже существующий `localizedTextSchema` — ни
+  одной новой схемы. `createWork`: `title: {en: input.title, ru: ""}`, тот
+  же паттерн, что уже был у `createPost`. `applyWorkDraftToRow`: `title:
+  {en: data.title, ru: data.translation?.title ?? existingTitle.ru}` —
+  то же самое "не потерять уже переведённое, если сейчас переводят не
+  его" правило, что и у Post.
+- **`translateWorkInputSchema`/`AdminWorkTranslation` получили `title`** —
+  `WorkTranslatePage.tsx` до этого НЕ переводил заголовок вообще (только
+  summary/startedLabel/shippedLabel/role/тело кейс-стади); теперь новое
+  поле "Title" там же, по образцу уже существующих `ReferenceField`.
+- **`Work.year: Int` → `Work.date: String`** (`"YYYY-MM-DD"`, тот же
+  формат, что и `Post.date`) — но, в отличие от `Post.date` (ставится один
+  раз при создании, дальше замороженный), это поле остаётся
+  **редактируемым админом** — та же роль, что была у `year`
+  ("used to sort the ledger, newest first"), просто точнее. Ledger
+  (`/work`, `/admin/work`) в узкой колонке продолжает показывать только
+  год — извлечённый строковым срезом (`formatYear`, frontend), не через
+  `new Date().getFullYear()`, чтобы не наткнуться на ту же
+  таймзоновую ловушку, что уже задокументирована для `formatAdminDate`
+  (frontend's `date-format.ts`).
+- **Миграция данных** (в одной SQL-миграции со схемой `IdentityHue`, не
+  отдельно): `title: "..."` → `{en: "<старое значение>", ru: ""}`;
+  `year: N` → `date: "N-01-01"` (день/месяц не восстановить из старых
+  данных — начало года как нейтральный дефолт, админ поправит руками
+  при следующем редактировании, если важно точнее). Применено к обеим
+  базам (`portfolio`, `portfolio_test`), проверено вживую прямым запросом
+  на всех 15 реальных строках `Work`.
+- **Новый тест** (`admin-work.test.ts`): "writes the pending Russian title
+  alongside the summary" — тот же pending/publish паттерн, что уже
+  проверяют существующие тесты для `summary`/`startedLabel` и т.д.,
+  применённый к новому полю.

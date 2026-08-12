@@ -4,8 +4,8 @@ import { prisma } from "../db/client";
 import { getAllWork, getFeaturedWork, getPublishedTechSlugs, getWorkBySlug } from "./work";
 
 const baseWorkData = {
-    title: "Test Project",
-    year: 2026,
+    title: { en: "Test Project", ru: "" },
+    date: "2026-01-01",
     status: "shipped",
     summary: { en: "s", ru: "s" },
     stack: ["Kotlin"],
@@ -20,9 +20,9 @@ beforeEach(async () => {
 });
 
 describe("getAllWork / getFeaturedWork", () => {
-    it("getAllWork returns everything, newest year first", async () => {
-        await prisma.work.create({ data: { ...baseWorkData, slug: "old", year: 2020 } });
-        await prisma.work.create({ data: { ...baseWorkData, slug: "new", year: 2025 } });
+    it("getAllWork returns everything, newest date first", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "old", date: "2020-01-01" } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "new", date: "2025-01-01" } });
 
         const all = await getAllWork();
         expect(all.map((w) => w.slug)).toEqual(["new", "old"]);
@@ -181,8 +181,8 @@ describe("getPublishedTechSlugs", () => {
 
 describe("lifecycleState filtering — content lifecycle state machine", () => {
     it("getAllWork excludes DRAFT items entirely, even though they'd otherwise sort first", async () => {
-        await prisma.work.create({ data: { ...baseWorkData, slug: "published", year: 2020 } });
-        await prisma.work.create({ data: { ...baseWorkData, slug: "draft", year: 2026, lifecycleState: "DRAFT" } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "published", date: "2020-01-01" } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "draft", date: "2026-01-01", lifecycleState: "DRAFT" } });
 
         const all = await getAllWork();
         expect(all.map((w) => w.slug)).toEqual(["published"]);

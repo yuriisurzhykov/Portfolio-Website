@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import { findCurrentSlug, getPostPreview, getWorkBySlug, type PostDetail } from "@portfolio/backend";
+import { findCurrentSlug, getPostPreview, getWorkBySlug, resolvePostHue, type PostDetail } from "@portfolio/backend";
 import { JournalDetailPage } from "@/views/journal-detail";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
@@ -139,9 +139,10 @@ export default async function Page({ params, searchParams }: PageProps) {
             // through here at all.
             const relatedWork = post.relatedWorkSlug ? await getWorkBySlug(post.relatedWorkSlug) : null;
             const config = await cachedSiteContent("config");
-            return { post, relatedWork, config, isPreview };
+            const hue = await resolvePostHue({ categoryEn: post.category.en, relatedWorkSlug: post.relatedWorkSlug });
+            return { post, relatedWork, config, hue, isPreview };
         },
-        ({ post, relatedWork, config, isPreview }) => (
+        ({ post, relatedWork, config, hue, isPreview }) => (
             <>
                 {/* Person and BlogPosting travel together in one @graph: Google
                     wants `author` to be a Person object with a `name`, and
@@ -173,7 +174,7 @@ export default async function Page({ params, searchParams }: PageProps) {
                         ]),
                     )}
                 />
-                <JournalDetailPage post={post} relatedWork={relatedWork} isPreview={isPreview} />
+                <JournalDetailPage post={post} relatedWork={relatedWork} hue={hue} isPreview={isPreview} />
             </>
         ),
     );

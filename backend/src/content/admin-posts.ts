@@ -297,7 +297,7 @@ async function readPostDraft(entityId: string): Promise<PostDraftData | null> {
  * small, but there's no reason to pay for N+1 anyway.
  */
 export async function getPostsForAdmin(): Promise<AdminPostListItem[]> {
-    const rows = await prisma.post.findMany({ orderBy: { date: "desc" } });
+    const rows = await prisma.post.findMany({ orderBy: { date: "desc" }, include: { cover: true } });
     const drafts = await readDraftsFor(KIND, rows.map((row) => row.id));
     return rows.map((row) => {
         const rawDraft = drafts.get(row.id);
@@ -414,6 +414,7 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
         titleEn: input.title,
         excerptEn: input.excerpt,
         categoryEn: input.category,
+        relatedWorkSlug: input.relatedWorkSlug ?? null,
         date,
     });
     const row = await prisma.post.create({
@@ -532,6 +533,7 @@ async function applyPostDraftToRow(
         titleEn: data.title,
         excerptEn: data.excerpt,
         categoryEn: data.category,
+        relatedWorkSlug: data.relatedWorkSlug ?? null,
         date: existing.date,
     });
 

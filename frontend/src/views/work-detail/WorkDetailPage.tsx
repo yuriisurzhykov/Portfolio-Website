@@ -5,17 +5,29 @@ import Link from "next/link";
 import type { PostSummary, WorkDetail } from "@portfolio/backend";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
-import { Tag } from "@/shared/ui/tag";
 import { StatusBadge } from "@/shared/ui/status-badge";
-import { PlaceholderCover } from "@/shared/ui/placeholder-cover";
-import { LinkButton } from "@/shared/ui/button";
+import { WorkCoverImage } from "@/shared/ui/work-cover-image";
+import { TagList } from "@/shared/ui/tag-list";
+import { RelatedContentCallout } from "@/shared/ui/related-content-callout";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
 import { useTranslation } from "@/shared/i18n";
+import { accentColorForHue } from "@/shared/lib/hue-accent";
 
 export interface WorkDetailPageProps {
     /** `caseStudy` is guaranteed non-null here — the route (app/(site)/work/[slug]/page.tsx) already 404s otherwise. */
     item: WorkDetail;
     relatedPost: PostSummary | null;
+    /**
+     * This project's own resolved hue (`resolveWorkHue`, backend) —
+     * resolved server-side by the route, not here: a client component
+     * importing anything from `@portfolio/backend` beyond plain data types
+     * would risk pulling backend-only code into the browser bundle. Drives
+     * the ONE hue accent this page shows (the "Case study" eyebrow) — see
+     * the plan's decision that hue accents only ever appear on detail
+     * pages, never on list/card views (the cover thumbnail already carries
+     * the color signal there).
+     */
+    hue: number;
     /** Same reasoning as `JournalDetailPage.isPreview` — see its comment. */
     isPreview?: boolean;
 }
@@ -31,7 +43,7 @@ export interface WorkDetailPageProps {
  * "sections" became heading+paragraph block pairs and "approach" became
  * an `approachList` block during the Phase 3 data import.
  */
-export function WorkDetailPage({ item, relatedPost, isPreview = false }: WorkDetailPageProps) {
+export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: WorkDetailPageProps) {
     const { ln, pick } = useTranslation();
     const caseStudy = item.caseStudy!;
     const isShipped = item.status === "shipped";
@@ -51,11 +63,11 @@ export function WorkDetailPage({ item, relatedPost, isPreview = false }: WorkDet
 
                 <div className="flex justify-between items-end gap-md mt-7 mb-6 flex-wrap">
                     <div>
-                        <Eyebrow tone="accent" className="mb-3.5">
+                        <Eyebrow tone="accent" className="mb-3.5" style={ { color: accentColorForHue(hue) } }>
                             { ln("eyebrow.caseStudy") }
                         </Eyebrow>
                         <h1 className="m-0 font-extrabold text-[clamp(32px,4.5vw,48px)] leading-[1.1] tracking-tight text-text-primary">
-                            { item.title }
+                            { pick(item.title) }
                         </h1>
                     </div>
                     <StatusBadge tone={ isShipped ? "success" : "warning" } className="whitespace-nowrap h-fit">
@@ -69,11 +81,14 @@ export function WorkDetailPage({ item, relatedPost, isPreview = false }: WorkDet
                     <span>{ ln("work.caseStudy.role", { role: pick(caseStudy.role) }) }</span>
                 </div>
 
-                <PlaceholderCover
+                <WorkCoverImage
                     className="h-[280px] rounded-xl border border-border-subtle mb-10"
-                    label={ `${ item.title.toLowerCase() } — hero screenshot` }
-                    src={ caseStudy.heroImage ?? undefined }
-                    alt={ item.title }
+                    override={ caseStudy.heroImage }
+                    cover={ item.cover }
+                    label={ `${ pick(item.title).toLowerCase() } — hero screenshot` }
+                    alt={ pick(item.title) }
+                    fetchPriority="high"
+                    loading="eager"
                 />
 
                 <ContentBlocks blocks={ caseStudy.blocks }/>
@@ -81,30 +96,16 @@ export function WorkDetailPage({ item, relatedPost, isPreview = false }: WorkDet
                 <Text as="h2" variant="h2" className="mb-3.5">
                     { ln("work.caseStudy.stackHeading") }
                 </Text>
-                <div className="flex flex-wrap gap-2.5 mb-10">
-                    { item.stack.map((tech) => (
-                        <Tag key={ tech } variant="neutral" size="md">
-                            { tech }
-                        </Tag>
-                    )) }
-                </div>
+                <TagList items={ item.stack } size="md" variant="neutral" className="gap-2.5 mb-10" />
 
                 { relatedPost && (
-                    <div
-                        className="bg-surface-base border border-border-subtle rounded-xl p-6 flex justify-between items-center gap-md flex-wrap">
-                        <div>
-                            <Eyebrow className="mb-1.5">{ ln("eyebrow.relatedJournalEntry") }</Eyebrow>
-                            <Text as="div" variant="h3" className="text-[17px]!">
-                                { pick(relatedPost.title) }
-                            </Text>
-                            <Text as="div" variant="caption" tone="muted">
-                                { pick(relatedPost.excerpt) }
-                            </Text>
-                        </div>
-                        <LinkButton href={ `/journal/${ relatedPost.slug }` } variant="primary">
-                            { ln("button.readThePost") } →
-                        </LinkButton>
-                    </div>
+                    <RelatedContentCallout
+                        eyebrow={ ln("eyebrow.relatedJournalEntry") }
+                        title={ pick(relatedPost.title) }
+                        body={ pick(relatedPost.excerpt) }
+                        href={ `/journal/${ relatedPost.slug }` }
+                        buttonLabel={ ln("button.readThePost") }
+                    />
                 ) }
             </div>
         </main>

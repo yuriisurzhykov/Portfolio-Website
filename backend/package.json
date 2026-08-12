@@ -16,6 +16,7 @@
     "create-admin": "tsx scripts/create-admin.ts",
     "seed-site-content": "tsx scripts/seed-site-content.ts",
     "backfill-post-covers": "tsx scripts/backfill-post-covers.ts",
+    "backfill-work-covers": "tsx scripts/backfill-work-covers.ts",
     "seed-e2e-fixtures": "dotenv -e .env.test -- tsx scripts/seed-e2e-fixtures.ts",
     "cleanup-expired-sessions": "tsx scripts/cleanup-expired-sessions.ts",
     "test": "npm run test:migrate && vitest run",
