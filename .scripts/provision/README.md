@@ -126,6 +126,19 @@ time you need it (disaster recovery, new server). See the repo's
   (`next start -H 127.0.0.1`) instead — see that file and `14-ufw.sh`
   below for the firewall half of the same fix.
 
+  **2026-08-11 — caught by code review:** `ProtectSystem=strict` with no
+  `ReadWritePaths=` refuses every write outside the sandbox (`EROFS`), and
+  this unit had none, even though `generateCoverForWork`/`generateCoverForPost`
+  write new covers to `shared/media` at runtime by the time this was
+  flagged — the original comment justifying `strict` ("never uses
+  next/image, no server-side runtime disk writes") had gone stale.
+  Added `ReadWritePaths=${APP_BASE_DIR}/shared`, covering both
+  `shared/media` and the newer `shared/.cache` (fontconfig). A target
+  provisioned before this fix needs `08-systemd-service.sh` re-run AND an
+  explicit `sudo systemctl restart <service>` — sandboxing directives only
+  take effect from the process's next start, `daemon-reload` alone does
+  not retroactively apply them to an already-running process.
+
 - `09-nginx-rate-limit-zone.sh` — installs the shared `login_limit`
   `limit_req_zone` (10r/m per IP) in `/etc/nginx/conf.d/`, protecting
   `/api/auth/login` — a second, independent layer in front of the
@@ -217,6 +230,28 @@ time you need it (disaster recovery, new server). See the repo's
   two. Ordering inside the script is deliberate (SSH allowed before the
   default-deny policy is set, which is set before `ufw enable`) so a
   mistake can't lock out the very SSH session running it.
+
+- `16-deploy-finish-helper.sh` — installs `/usr/local/bin/deploy-frontend-finish.sh`
+  (root-owned, from `../deploy-frontend-finish.sh`) and a narrow sudoers
+  NOPASSWD rule (`/etc/sudoers.d/deploy-frontend-finish`) letting
+  `yuriisoft` run exactly that one binary — same reasoning, same pattern
+  as `12-set-app-env-helper.sh`. **Written after finding, live, that this
+  script had no installer at all**: its first install (then named
+  `deploy-web-finish.sh`) was done by hand during the original Phase 6
+  bring-up and never got backfilled into a script, so every later edit to
+  it silently stayed on the VPS's own copy until someone remembered to
+  manually `sudo cp` the new version over — found when a real edit to
+  `deploy-frontend-finish.sh` (the `shared/.cache/fontconfig` self-heal,
+  see `../deploy-frontend-finish.sh`'s own dated comment) had no way to
+  reach the VPS at all. One-time step per box; every future edit to
+  `deploy-frontend-finish.sh` after this is a single re-run of this
+  script, no sudoers work needed again.
+
+  Getting THIS script (and the rest of `provision/`) onto the VPS in the
+  first place never requires a git checkout there: `deploy-target.yml`'s
+  "Sync deploy/provisioning scripts" step scp's this whole directory to
+  `~/deploy-scripts/.scripts/provision/` on every deploy, so it's always
+  present and current — just SSH in and run it from there.
 
 - `15-session-cleanup-cron.sh` — installs a nightly cron job (2am, one
   hour offset from `11-pg-backup.sh`'s 3am) that runs `backend/scripts/
