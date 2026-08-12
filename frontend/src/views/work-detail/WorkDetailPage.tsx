@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import type { PostSummary, WorkDetail } from "@portfolio/backend";
-import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { WorkCoverImage } from "@/shared/ui/work-cover-image";
@@ -63,9 +62,10 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: Wo
 
                 <div className="flex justify-between items-end gap-md mt-7 mb-6 flex-wrap">
                     <div>
-                        <Eyebrow tone="accent" className="mb-3.5" style={ { color: accentColorForHue(hue) } }>
+                        {/* Fill+ink, not colored text on the page bg — see frontend/README.md's dated a11y entry for why. */}
+                        <StatusBadge tone="accent" className="mb-3.5" style={ { backgroundColor: accentColorForHue(hue) } }>
                             { ln("eyebrow.caseStudy") }
-                        </Eyebrow>
+                        </StatusBadge>
                         <h1 className="m-0 font-extrabold text-[clamp(32px,4.5vw,48px)] leading-[1.1] tracking-tight text-text-primary">
                             { pick(item.title) }
                         </h1>

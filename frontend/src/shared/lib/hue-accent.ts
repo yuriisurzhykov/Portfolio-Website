@@ -15,7 +15,19 @@
 const ACCENT_LIGHTNESS = 0.72;
 const ACCENT_CHROMA = 0.17;
 
-/** A CSS color string for `hue` (0-360) at the site's brand accent lightness/chroma — e.g. `accentColorForHue(200)` → `"oklch(0.72 0.17 200)"`. */
+/**
+ * A CSS color string for `hue` (0-360) at the site's brand accent
+ * lightness/chroma — e.g. `accentColorForHue(200)` → `"oklch(0.72 0.17 200)"`.
+ *
+ * @remarks Background-fill use only (a pill/badge with fixed ink text on
+ * top, e.g. `StatusBadge`'s `text-accent-on-solid`) — never as a text
+ * color directly on the page background. A real a11y test caught this:
+ * this lightness reads at only ~2.1-2.5:1 contrast as TEXT against light
+ * theme's background for every hue, never just the two a given run
+ * happens to seed (`lightPalette.accentText` in `theme/tokens.ts` is a
+ * hand-darkened value that only works for ONE fixed hue, which arbitrary
+ * per-item hues can't reuse) — see frontend/README.md's dated entry.
+ */
 export function accentColorForHue(hue: number): string {
     return `oklch(${ ACCENT_LIGHTNESS } ${ ACCENT_CHROMA } ${ hue })`;
 }
