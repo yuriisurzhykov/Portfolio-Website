@@ -60,8 +60,11 @@ else
     # Same "validate before it ever touches /etc/sudoers.d/" reasoning as
     # 12-set-app-env-helper.sh - a syntactically broken file dropped there
     # directly can break sudo for EVERY user on the box, including root's
-    # own way out of the mistake.
-    TMP_SUDOERS=$(mktemp)
+    # own way out of the mistake. `sudo mktemp` (not a plain `mktemp`) for
+    # the same reason as that file: fs.protected_regular hardening refuses
+    # a root `tee` writing into a /tmp file owned by a different user - see
+    # 12-set-app-env-helper.sh's comment for the full story.
+    TMP_SUDOERS=$(sudo mktemp)
     echo "$SUDOERS_LINE" | sudo tee "$TMP_SUDOERS" > /dev/null
     if ! sudo visudo -c -f "$TMP_SUDOERS"; then
         echo "Refusing: generated sudoers rule failed visudo -c validation." >&2

@@ -1,0 +1,8 @@
+# Shell scripts run on a Linux VPS, verbatim, however they get there —
+# through a checkout, CI's own scp step, or a manual scp straight from a
+# contributor's Windows working copy (see .scripts/provision/README.md's
+# 2026-08-11 entry). A CRLF line ending breaks bash the moment it hits
+# something quote-sensitive (e.g. `set -o pipefail`), regardless of the
+# committer's own core.autocrlf setting — enforced here instead of relying
+# on that per-machine config being right.
+*.sh text eol=lf
