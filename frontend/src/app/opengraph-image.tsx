@@ -11,7 +11,7 @@ import { OG_CONTENT_TYPE, OG_SIZE, renderOgImage, truncate } from "@/shared/lib/
  * item; `generateImageMetadata` could make it per-item, which is out of
  * proportion for preview alt text.
  */
-export const alt = "Yurii Surzhykov — systems engineer";
+export const alt = "Yurii Surzhykov — Android Platform/System Engineer";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 
