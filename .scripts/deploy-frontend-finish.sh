@@ -59,6 +59,16 @@ cp "${BASE_DIR}/shared/.env" "${RELEASE_PATH}/backend/.env"
 chown nextapp:nextapp "${RELEASE_PATH}/backend/.env"
 chmod 600 "${RELEASE_PATH}/backend/.env"
 
+# Self-heals a target provisioned BEFORE provision/05-app-dirs.sh started
+# creating this — nextapp has no home directory, so sharp/librsvg's
+# fontconfig otherwise has nowhere to write its cache and logs "No
+# writable cache directories" on every cover render (harmless — the
+# render still succeeds uncached — but real log noise). Idempotent, same
+# reasoning as the "Sync MEDIA_DIR" step in deploy-target.yml.
+mkdir -p "${BASE_DIR}/shared/.cache/fontconfig"
+chown -R nextapp:nextapp "${BASE_DIR}/shared/.cache"
+chmod 700 "${BASE_DIR}/shared/.cache"
+
 (cd "${RELEASE_PATH}/backend" && runuser -u nextapp -- npx prisma migrate deploy)
 
 # Symlink switch happens here — AFTER migrations succeed (so a failed

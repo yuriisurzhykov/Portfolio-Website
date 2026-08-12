@@ -43,7 +43,17 @@ else
     # directly into that directory can break sudo for EVERY user on the
     # box, including root's own ability to `sudo` its way out of the
     # mistake. This check is not optional.
-    TMP_SUDOERS=$(mktemp)
+    #
+    # `sudo mktemp` (not a plain `mktemp` piped into `sudo tee`) is
+    # deliberate: the kernel's fs.protected_regular hardening (default on
+    # since Ubuntu ~22.04) refuses to open a file for writing, in a
+    # sticky world-writable directory like /tmp, when its owner is
+    # neither the directory owner nor the opening process's UID - a
+    # plain `mktemp` here creates the file as the CALLING user, and the
+    # later `sudo tee` (root) trips exactly that check ("Permission
+    # denied" from tee itself, not from sudo). Creating it as root from
+    # the start avoids the mismatch entirely.
+    TMP_SUDOERS=$(sudo mktemp)
     echo "$SUDOERS_LINE" | sudo tee "$TMP_SUDOERS" > /dev/null
     if ! sudo visudo -c -f "$TMP_SUDOERS"; then
         echo "Refusing: generated sudoers rule failed visudo -c validation." >&2

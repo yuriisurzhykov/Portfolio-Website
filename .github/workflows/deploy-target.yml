@@ -93,6 +93,22 @@ jobs:
           source: "release.tar.gz, .scripts/deploy-frontend.sh"
           target: "/tmp/"
 
+      # A separate target from the step above — "Deploy on Server" below
+      # `rm -rf`s /tmp/.scripts, but these root-owned installers must
+      # persist so a human can (re-)run them without ever needing a
+      # separate scp/git-checkout. Never auto-executed here — see
+      # provision/16-deploy-finish-helper.sh's own header for why, and
+      # provision/README.md's dated entry for the full story.
+      - name: Sync deploy/provisioning scripts (reference copy, never auto-run)
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: ".scripts/deploy-frontend-finish.sh, .scripts/deploy-frontend-finish.sh, .scripts/provision/"
+          target: "~/deploy-scripts/"
+
       # BEFORE the deploy, deliberately — unlike the optional-secrets step
       # further down, which runs after. Two reasons, both about failure
       # modes rather than tidiness:
@@ -135,16 +151,22 @@ jobs:
               "SITE_URL=${{ inputs.site-url }}"
 
       # Self-heals a target provisioned BEFORE `provision/06-app-env.sh`
-      # started writing MEDIA_DIR into a brand-new shared/.env — that
-      # script explicitly refuses to touch an EXISTING .env (by design, see
-      # its own comment), so a pre-existing dev/prod target would otherwise
-      # never pick this key up and would keep falling back to
-      # next.config.ts's release-local default, which vanishes every
-      # deploy while nginx keeps serving shared/media. Unconditional (no
-      # continue-on-error), unlike the Upstash/PlantUML sync below: this
-      # value is derived, always correct, and not a secret, so there's no
+      # started writing MEDIA_DIR/XDG_CACHE_HOME into a brand-new
+      # shared/.env — that script explicitly refuses to touch an EXISTING
+      # .env (by design, see its own comment), so a pre-existing dev/prod
+      # target would otherwise never pick these keys up. MEDIA_DIR missing
+      # means covers fall back to next.config.ts's release-local default,
+      # which vanishes every deploy while nginx keeps serving shared/media.
+      # XDG_CACHE_HOME missing means sharp's underlying fontconfig has
+      # nowhere to write its cache (nextapp has no home directory) and
+      # logs "No writable cache directories" on every cover render —
+      # harmless, but noisy (the actual directory this points at is
+      # created idempotently by deploy-frontend-finish.sh, self-healing
+      # the same way this env sync does). Unconditional (no
+      # continue-on-error), unlike the Upstash/PlantUML sync below: both
+      # values are derived, always correct, and not secrets, so there's no
       # "not configured yet" case to tolerate.
-      - name: Sync MEDIA_DIR (${{ inputs.environment-name }})
+      - name: Sync MEDIA_DIR / XDG_CACHE_HOME (${{ inputs.environment-name }})
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -153,7 +175,8 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             sudo /usr/local/bin/set-app-env-finish.sh ${{ inputs.base-dir }} \
-              "MEDIA_DIR=${{ inputs.base-dir }}/shared/media"
+              "MEDIA_DIR=${{ inputs.base-dir }}/shared/media" \
+              "XDG_CACHE_HOME=${{ inputs.base-dir }}/shared/.cache"
 
       - name: Deploy on Server (${{ inputs.environment-name }})
         uses: appleboy/ssh-action@v1.2.5

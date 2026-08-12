@@ -59,7 +59,7 @@ if [ -f "${ENV_FILE}" ]; then
 fi
 
 : "${PORTFOLIO_DB_PASSWORD:?Set PORTFOLIO_DB_PASSWORD}"
-: "${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET (at least 32 characters — see jwt.ts's getAccessSecret())}"
+: "${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET (at least 32 characters — see jwt.ts, getAccessSecret())}"
 
 if [ "${#JWT_ACCESS_SECRET}" -lt 32 ]; then
   echo "ERROR: JWT_ACCESS_SECRET is only ${#JWT_ACCESS_SECRET} characters — must be at least 32." >&2
