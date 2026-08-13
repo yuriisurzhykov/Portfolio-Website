@@ -162,6 +162,7 @@ export const themeVars = `
     --layout-content-journal: ${ layout.contentJournal };
     --layout-section-vertical-padding: ${ layout.sectionVerticalPadding };
     --layout-navbar-height: ${ layout.navbarHeight };
+    --layout-hero-graph-height: ${ layout.heroGraphHeight };
 
     /* Z-INDEX */
     --z-background: ${ zIndex.background };

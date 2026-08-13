@@ -379,6 +379,9 @@ export const layout = {
     contentJournal: "51.25rem",     // 820px   (All Journal)
     sectionVerticalPadding: "6rem",
     navbarHeight: "5rem",
+    // A one-off structural constant, same category as navbarHeight above —
+    // not a spacing/padding value, so it doesn't belong in `spacing`.
+    heroGraphHeight: "26.25rem",    // 420px  (Hero's ProjectGraph decoration)
 };
 
 export const zIndex = {

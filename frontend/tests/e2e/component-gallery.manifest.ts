@@ -59,4 +59,5 @@ export const componentGalleryManifest: ComponentGalleryEntry[] = [
     { id: "related-content-callout", label: "RelatedContentCallout" },
     { id: "related-link", label: "CompactRelatedLink" },
     { id: "work-cover-image", label: "WorkCoverImage" },
+    { id: "project-graph", label: "ProjectGraph" },
 ];
