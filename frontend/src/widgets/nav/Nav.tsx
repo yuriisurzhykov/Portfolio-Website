@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/utils";
 import { useHideOnScroll } from "@/shared/lib/useHideOnScroll";
 import { ThemeSegmentedToggle } from "./ThemeSegmentedToggle";
 import { LanguageSegmentedToggle } from "./LanguageSegmentedToggle";
+import { AvailabilityBadge } from "@/shared/ui/availability-badge";
 
 const navLinkClass = (isActive: boolean) =>
     cn(
@@ -48,8 +49,8 @@ export interface NavProps {
     config: ConfigContent;
 }
 
-export function Nav({ config: site }: NavProps) {
-    const { ln } = useTranslation();
+export function Nav({config: site}: NavProps) {
+    const {ln} = useTranslation();
     const pathname = usePathname();
     const hash = useUrlHash();
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -68,21 +69,21 @@ export function Nav({ config: site }: NavProps) {
 
     const navLinks = (
         <>
-            <Link href="/work" className={navLinkClass(pathname === "/work")}>
-                {ln("nav.work")}
+            <Link href="/work" className={ navLinkClass(pathname === "/work") }>
+                { ln("nav.work") }
             </Link>
-            <Link href="/journal" className={navLinkClass(pathname === "/journal")}>
-                {ln("nav.journal")}
+            <Link href="/journal" className={ navLinkClass(pathname === "/journal") }>
+                { ln("nav.journal") }
             </Link>
-            <Link href="/#contact" className={navLinkClass(hash === "#contact")}>
-                {ln("nav.contact")}
+            <Link href="/#contact" className={ navLinkClass(hash === "#contact") }>
+                { ln("nav.contact") }
             </Link>
         </>
     );
 
     return (
         <header
-            className={cn(
+            className={ cn(
                 "sticky top-0 z-navbar",
                 "flex items-center justify-between gap-sm",
                 "px-[clamp(16px,4vw,56px)] py-lg",
@@ -98,70 +99,70 @@ export function Nav({ config: site }: NavProps) {
                 // independent hook calls rather than one shared value.
                 "transition-transform duration-normal ease-standard",
                 hiddenOnScroll && "-translate-y-full",
-            )}
+            ) }
         >
             <Link href="/" className="font-mono font-bold text-body text-text-primary shrink-0">
-                {site.initials}
+                { site.initials }
             </Link>
 
-            <nav className="hidden sm:flex items-center gap-[16px] sm:gap-[28px]">
-                {navLinks}
+            <nav className="hidden sm:flex items-center gap-4 sm:gap-7">
+                { navLinks }
             </nav>
 
             <div className="hidden sm:flex items-center gap-xs sm:gap-sm shrink-0">
-                <LanguageSegmentedToggle />
-                <ThemeSegmentedToggle />
-                <StatusBadge tone="success" withDot className="whitespace-nowrap">
-                    <span className="hidden lg:inline">{ln(`status.${site.availability}`)}</span>
-                </StatusBadge>
+                <LanguageSegmentedToggle/>
+                <ThemeSegmentedToggle/>
+                <AvailabilityBadge tone={ site.availability } withDot className="whitespace-nowrap">
+                    <span className="hidden lg:inline">{ ln(`status.${ site.availability }`) }</span>
+                </AvailabilityBadge>
             </div>
 
             <button
                 type="button"
-                onClick={() => setMobileMenuOpen(true)}
+                onClick={ () => setMobileMenuOpen(true) }
                 className="sm:hidden p-xs rounded-md text-text-primary hover:bg-surface-raised transition-colors duration-fast"
-                aria-label={ln("label.aria.mobileMenu.open")}
-                aria-expanded={mobileMenuOpen}
+                aria-label={ ln("label.aria.mobileMenu.open") }
+                aria-expanded={ mobileMenuOpen }
             >
-                <Menu className="w-5 h-5" aria-hidden="true" />
+                <Menu className="w-5 h-5" aria-hidden="true"/>
             </button>
 
             <Drawer
-                open={mobileMenuOpen}
-                onClose={() => setMobileMenuOpen(false)}
-                aria-label={ln("label.aria.mobileMenu.panel")}
+                open={ mobileMenuOpen }
+                onClose={ () => setMobileMenuOpen(false) }
+                aria-label={ ln("label.aria.mobileMenu.panel") }
             >
                 <div className="flex items-center justify-between px-lg py-lg border-b border-border-subtle">
-                    <span className="font-mono font-bold text-body text-text-primary">{site.initials}</span>
+                    <span className="font-mono font-bold text-body text-text-primary">{ site.initials }</span>
                     <button
                         type="button"
-                        onClick={() => setMobileMenuOpen(false)}
+                        onClick={ () => setMobileMenuOpen(false) }
                         className="p-xs rounded-md text-text-primary hover:bg-surface-raised transition-colors duration-fast"
-                        aria-label={ln("label.aria.mobileMenu.close")}
+                        aria-label={ ln("label.aria.mobileMenu.close") }
                     >
-                        <X className="w-5 h-5" aria-hidden="true" />
+                        <X className="w-5 h-5" aria-hidden="true"/>
                     </button>
                 </div>
 
-                <nav className="flex flex-col px-lg py-lg gap-xs" onClick={() => setMobileMenuOpen(false)}>
-                    <Link href="/work" className={mobileNavLinkClass(pathname === "/work")}>
-                        {ln("nav.work")}
+                <nav className="flex flex-col px-lg py-lg gap-xs" onClick={ () => setMobileMenuOpen(false) }>
+                    <Link href="/work" className={ mobileNavLinkClass(pathname === "/work") }>
+                        { ln("nav.work") }
                     </Link>
-                    <Link href="/journal" className={mobileNavLinkClass(pathname === "/journal")}>
-                        {ln("nav.journal")}
+                    <Link href="/journal" className={ mobileNavLinkClass(pathname === "/journal") }>
+                        { ln("nav.journal") }
                     </Link>
-                    <Link href="/#contact" className={mobileNavLinkClass(hash === "#contact")}>
-                        {ln("nav.contact")}
+                    <Link href="/#contact" className={ mobileNavLinkClass(hash === "#contact") }>
+                        { ln("nav.contact") }
                     </Link>
                 </nav>
 
                 <div className="mt-auto flex flex-col gap-md px-lg py-lg border-t border-border-subtle">
                     <div className="flex items-center gap-sm">
-                        <LanguageSegmentedToggle />
-                        <ThemeSegmentedToggle />
+                        <LanguageSegmentedToggle/>
+                        <ThemeSegmentedToggle/>
                     </div>
                     <StatusBadge tone="success" withDot className="w-fit whitespace-nowrap">
-                        {ln(`status.${site.availability}`)}
+                        { ln(`status.${ site.availability }`) }
                     </StatusBadge>
                 </div>
             </Drawer>

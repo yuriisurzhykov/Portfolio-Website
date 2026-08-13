@@ -90,7 +90,7 @@ function WorkRow({ item }: { item: WorkSummary }) {
                 <Text as="div" variant="h3" className="mb-1 text-[18px]!">
                     { pick(item.title) }
                 </Text>
-                <Text as="div" variant="body" tone="muted" className="leading-[1.5]">
+                <Text as="div" variant="body" tone="muted" className="leading-1.5">
                     { pick(item.summary) }
                 </Text>
             </div>
@@ -103,7 +103,7 @@ function WorkRow({ item }: { item: WorkSummary }) {
                     <Text as="div" variant="h3" className="mb-1">
                         { pick(item.title) }
                     </Text>
-                    <Text as="div" variant="body" tone="muted" className="leading-[1.5]">
+                    <Text as="div" variant="body" tone="muted" className="leading-1.5">
                         { pick(item.summary) }
                     </Text>
                 </div>

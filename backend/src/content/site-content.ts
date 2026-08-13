@@ -19,13 +19,6 @@ const heroContentSchema = z.object({
     headline: z.array(z.string()),
     subhead: localizedTextSchema,
     chips: localizedArrayOf(z.string()),
-    graphNodes: z.array(
-        z.object({
-            label: z.string(),
-            sublabel: localizedTextSchema,
-            highlighted: z.boolean().optional(),
-        }),
-    ),
 });
 
 const contactContentSchema = z.object({

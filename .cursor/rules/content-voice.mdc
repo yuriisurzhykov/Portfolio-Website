@@ -1,0 +1,62 @@
+---
+description: Writing voice for journal posts and work case studies — avoid the recognizable "AI essay" register
+alwaysApply: true
+---
+
+# Content voice: write like the engineer, not like an essay generator
+
+Journal posts and work case studies on this site have a recognizable, repeated
+register that reads as generated rather than personal: a rhetorical universal
+opener, a short one-line sentence dropped in purely for cadence, and an
+aphoristic line closing the paragraph. Three or more real published pieces on
+this site already share this exact pattern — that repetition across
+independently-written pieces is itself the tell, since a real personal voice
+varies more than this.
+
+Concretely, stop producing:
+
+- A **rhetorical universal opener**: "There is a particular kind of X that
+  happens when Y..." / "There is a peculiar moment when...". Real technical
+  writing starts with the actual system, not a generalization about systems.
+- An **isolated one-line sentence used only for dramatic cadence**: "Then the
+  system grows." / "It has become a border." — a sentence that carries no new
+  information and exists only to create a beat.
+- An **aphoristic paragraph-closer**: "And borders are where architecture
+  begins." — a quotable-sounding line standing in for an actual conclusion.
+
+This applies to new journal drafts, new case studies, and translations going
+forward. It is **not** a mandate to rewrite what's already published — fix an
+existing piece's voice only when you're already substantively editing it for
+another reason, not as a standalone pass.
+
+## Example
+
+### Wrong
+
+> There is a peculiar moment in the life of a software system when a
+> solution that once felt almost embarrassingly simple begins to reveal how
+> many assumptions had been hiding inside it.
+>
+> An event bus is a good example.
+>
+> At first, the problem seems trivial. [...] Then the system grows.
+>
+> [...] At that point, the event bus is no longer a pipe.
+>
+> It has become a border.
+>
+> And borders are where architecture begins.
+
+### Right
+
+> FlowBus started as a plain Kotlin event bus — `Flow`, `SharedFlow`,
+> `Channel`, a handful of generic publish/subscribe functions. That held up
+> until state entered the picture: some events needed to survive a
+> late-arriving subscriber, some needed to survive a process restart, some
+> needed to stay invisible outside one module. At that point "deliver an
+> event from A to B" stopped being the real question — the real question was
+> how to keep dozens of components from corrupting each other's state
+> without everyone memorizing the rules by hand.
+
+Same underlying idea, no generalization, no cadence-only sentence, no
+aphorism — just what actually happened and why it mattered.

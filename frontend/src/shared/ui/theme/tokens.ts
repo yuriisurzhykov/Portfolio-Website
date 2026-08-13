@@ -367,6 +367,7 @@ export const motion = {
     },
     scale: {
         press: 0.97,
+        highlight: 1.02,
     }
 };
 
