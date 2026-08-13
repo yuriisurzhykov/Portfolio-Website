@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { ArrowRight, Code2, Database, Palette } from "lucide-react";
-import type { Block } from "@portfolio/backend";
+import type { Block, WorkSummary } from "@portfolio/backend";
+import { ProjectGraph } from "@/shared/ui/project-graph";
 
 import { Card } from "@/shared/ui/card";
 import { IconBadge } from "@/shared/ui/icon-badge";
@@ -62,6 +63,49 @@ const TECH_ICON_DEMO_REACT: TechIconView = {
 
 /** A deliberately simple, deterministic custom SVG for the `kind: "svg"` demo below — uses `fill="currentColor"` so it also demonstrates that a well-authored pasted SVG CAN pick up the accent hover color, unlike an arbitrary `kind: "url"` image. */
 const TECH_ICON_DEMO_SVG_MARKUP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
+
+/**
+ * 6 fixed items with deliberately overlapping `stack` tags (Kotlin ties
+ * 4 of these together, C++/NDK ties 3) — a real, checkable web of edges
+ * for the `ProjectGraph` demo below, not an arbitrary scatter. No random
+ * data, no timestamps: `component-gallery.spec.ts` screenshots this
+ * exact set every run, and `idleFloat={false}` (passed at the call site)
+ * keeps the WebGL animation itself from varying the captured frame.
+ */
+const PROJECT_GRAPH_DEMO_ITEMS: WorkSummary[] = [
+    "ONVIF Camera Streaming Library",
+    "RTSP, RTP & SDP Deep Dive",
+    "Room Migration Instruction",
+    "FlowBus Event Bus",
+    "Camera Discovery Pipeline",
+    "OEM Navigation Engine",
+].map((title, index) => {
+    const stacks = [
+        ["Kotlin", "C++/NDK", "ONVIF", "Networking"],
+        ["C++/NDK", "Networking", "Video", "Streaming"],
+        ["Gradle", "Android Room", "Kotlin"],
+        ["Kotlin", "Architecture", "Coroutines"],
+        ["ONVIF", "Networking", "Kotlin"],
+        ["C++/NDK", "Architecture", "Automotive"],
+    ];
+    return {
+        slug: `demo-project-${index}`,
+        title: { en: title, ru: title },
+        date: "2026-01-01",
+        status: index % 2 === 0 ? "shipped" : "in-progress",
+        summary: { en: "", ru: "" },
+        stack: stacks[index],
+        coverImage: null,
+        featured: true,
+        relatedPostSlug: null,
+        cover: null,
+        hasCaseStudy: false,
+        lifecycleState: "PUBLISHED",
+        publishedAt: null,
+        contentUpdatedAt: null,
+        availableLocales: ["en"],
+    };
+});
 
 const CONTENT_BLOCKS_DEMO: Block[] = [
     {
@@ -877,6 +921,21 @@ const unfold = (f, seed) => {
                         />
                     </div>
                 </div>
+            </section>
+
+            {/* SECTION: PROJECT GRAPH */}
+            <section className="space-y-md" data-component-id="project-graph">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    ProjectGraph
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Граф связей между Work-проектами (Hero-секция лендинга) —
+                    рёбра рисуются только между проектами с достаточным
+                    пересечением тегов <code>stack</code>. WebGL-линза на
+                    каждом узле — настоящее двойное преломление, не
+                    декоративный блюр (см. <code>shared/ui/project-graph/README.md</code>).
+                </Text>
+                <ProjectGraph items={PROJECT_GRAPH_DEMO_ITEMS} idleFloat={false} className="h-[360px] rounded-lg border border-border-subtle" />
             </section>
         </div>
     );

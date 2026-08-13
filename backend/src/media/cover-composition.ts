@@ -1,13 +1,23 @@
-import { buildFlowCurves, renderFlowCurves, type FlowCurve } from "./cover-flow";
+import { buildFlowCurves, type FlowCurve, renderFlowCurves } from "./cover-flow";
 import { renderFontFaceStyle } from "./cover-font-face";
 import type { CoverFonts } from "./cover-fonts";
-import { buildLetterformClip, renderLetterformClipDef, renderLetterformLayer, type LetterformClip } from "./cover-letterform";
-import { buildCoverPalette, BASE_LIGHTNESS } from "./cover-palette";
-import { randomInRange, type Prng } from "./cover-seed";
+import {
+    buildLetterformClip,
+    type LetterformClip,
+    renderLetterformClipDef,
+    renderLetterformLayer
+} from "./cover-letterform";
+import { BASE_LIGHTNESS, buildCoverPalette } from "./cover-palette";
+import { type Prng, randomInRange } from "./cover-seed";
 import { buildStampText, renderStampText } from "./cover-stamp";
 import { createTextMeasurer } from "./cover-text-measure";
 import { firstWordOf, statsFor } from "./cover-text-stats";
-import { buildTitleTextLayout, renderTitleTextLayer, TITLE_TEXT_FONT_SIZE, type TitleTextLayout } from "./cover-title-text";
+import {
+    buildTitleTextLayout,
+    renderTitleTextLayer,
+    TITLE_TEXT_FONT_SIZE,
+    type TitleTextLayout
+} from "./cover-title-text";
 import { escapeXmlAttribute } from "./cover-xml";
 import { buildWaveRidges, renderWaveRidges, type WaveRidge } from "./cover-wave";
 
@@ -25,14 +35,27 @@ import { buildWaveRidges, renderWaveRidges, type WaveRidge } from "./cover-wave"
 export const COVER_WIDTH = 1200;
 export const COVER_HEIGHT = 630;
 
-/** Fixed spot count — v1 randomized this (3-5); the approved Bold mood uses a fixed, denser count instead, since variety now comes from flow/wave/letterform/title-text, not from how many mesh spots there are. */
+/**
+ * Fixed spot count — v1 randomized this (3-5); the approved Bold mood uses a fixed, denser count instead,
+ * since variety now comes from flow/wave/letterform/title-text, not from how many mesh spots there are.
+ * */
 const SPOT_COUNT = 8;
-/** Spot radius as a fraction of canvas width — deliberately the SAME for every spot (not randomized per spot), unlike v1. */
+/**
+ * Spot radius as a fraction of canvas width — deliberately the SAME for every spot (not randomized per spot),
+ * unlike v1.
+ * */
 const SPOT_RADIUS_FRACTION = 0.48;
 const SPOT_OPACITY = 1;
-/** How far the extra two gradient stops sit (as a 0-1 "softness" fraction) — see `renderSpotGradient`'s own comment for the exact stop-position formula this drives. Fixed at 1 (maximum softness) in the approved Bold mood. */
+/**
+ * How far the extra two gradient stops sit (as a 0-1 "softness" fraction) — see `renderSpotGradient`'s own
+ * comment for the exact stop-position formula this drives. Fixed at 1 (maximum softness) in the approved
+ * Bold mood.
+ * */
 const SPOT_SOFTNESS = 1;
-/** Confirmed live (Day-0 gate, precise pixel-level check, not eyeballing) to be honoured by librsvg — see the plan's own gate section. */
+/**
+ * Confirmed live (Day-0 gate, precise pixel-level check, not eyeballing) to be honoured by librsvg — see
+ * the plan's own gate section.
+ * */
 const MESH_BLEND_MODE = "overlay";
 const VIGNETTE_OPACITY = 0.22;
 

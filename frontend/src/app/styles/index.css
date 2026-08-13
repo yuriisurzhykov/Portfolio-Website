@@ -198,6 +198,7 @@
     --transition-easing-exit: var(--easing-exit);
 
     --scale-press: var(--scale-press);
+    --scale-highlight: var(--scale-highlight);
 
     /* ------------------------------------------------------------------------
      * LAYOUT
@@ -209,6 +210,7 @@
     --layout-content-journal: var(--layout-content-journal);
     --layout-section-vertical-padding: var(--layout-section-vertical-padding);
     --layout-navbar-height: var(--layout-navbar-height);
+    --layout-hero-graph-height: var(--layout-hero-graph-height);
 
     /* ------------------------------------------------------------------------
      * Z-INDEX

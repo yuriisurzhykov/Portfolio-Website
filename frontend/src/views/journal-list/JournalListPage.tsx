@@ -95,7 +95,7 @@ export function JournalListPage({ entries, journalPage }: JournalListPageProps) 
                 <Eyebrow tone="accent" className="mt-6 mb-3.5">
                     { ln("eyebrow.journal") }
                 </Eyebrow>
-                <h1 className="m-0 mb-4 font-extrabold text-[clamp(30px,4vw,44px)] leading-[1.1] tracking-tight text-text-primary">
+                <h1 className="m-0 mb-4 font-extrabold text-[clamp(30px,4vw,44px)] leading-1 tracking-tight text-text-primary">
                     { pick(journalPage.heading) }
                 </h1>
                 <Text variant="body" tone="muted">
@@ -104,9 +104,9 @@ export function JournalListPage({ entries, journalPage }: JournalListPageProps) 
             </div>
 
             <div
-                className="relative max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-[100px]">
+                className="relative max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-md">
                 <div
-                    className="absolute left-[calc(clamp(20px,4vw,24px)+5px)] top-2 bottom-[100px] w-0.5 bg-border-subtle"/>
+                    className="absolute left-[calc(clamp(20px,4vw,24px)+5px)] top-2 bottom-25 w-0.5 bg-border-subtle"/>
                 { entries.map((post) => (
                     <LogEntry key={ post.slug } post={ post }/>
                 )) }

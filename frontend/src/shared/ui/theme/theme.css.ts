@@ -152,6 +152,7 @@ export const themeVars = `
     --easing-exit: ${ motion.easing.exit };
 
     --scale-press: ${ motion.scale.press };
+    --scale-highlight: ${ motion.scale.highlight };
 
     /* LAYOUT */
     --layout-content-max-width: ${ layout.contentMaxWidth };
@@ -161,6 +162,7 @@ export const themeVars = `
     --layout-content-journal: ${ layout.contentJournal };
     --layout-section-vertical-padding: ${ layout.sectionVerticalPadding };
     --layout-navbar-height: ${ layout.navbarHeight };
+    --layout-hero-graph-height: ${ layout.heroGraphHeight };
 
     /* Z-INDEX */
     --z-background: ${ zIndex.background };
