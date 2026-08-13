@@ -69,6 +69,22 @@ export function useGraphScene({ canvasRef, hitLayerRef, graph, labels, options }
     optionsRef.current = options;
 
     const sceneRef = React.useRef<GraphScene | null>(null);
+
+    // Pushes every options change (idle-motion correcting itself after
+    // mount — see `usePrefersReducedMotion`'s own hydration-safety
+    // comment — or a theme toggle) into the ALREADY-RUNNING scene. Without
+    // this, `GraphScene` only ever saw whatever `options` was at the exact
+    // moment it was constructed: the sphere would keep idle-floating
+    // forever even after the OS setting corrected to "reduce motion" (only
+    // the hit-target layer, which reads `optionsRef.current` fresh every
+    // frame, would have stopped — a real accessibility gap, not just a
+    // cosmetic one), and the canvas would keep the theme it launched with
+    // through any later light/dark toggle. Found by code review, not by
+    // this component's own live testing — see project-graph/README.md's
+    // dated entry.
+    React.useEffect(() => {
+        sceneRef.current?.setOptions(options);
+    }, [options]);
     const simulationRef = React.useRef<Simulation<SimNode, SimLink> | null>(null);
     const sizeRef = React.useRef({ width: 0, height: 0 });
     const hoveredIdRef = React.useRef<string | null>(null);
@@ -88,7 +104,20 @@ export function useGraphScene({ canvasRef, hitLayerRef, graph, labels, options }
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const scene = new GraphScene(canvas, optionsRef.current);
+        let scene: GraphScene;
+        try {
+            scene = new GraphScene(canvas, optionsRef.current);
+        } catch (err) {
+            // `canvas.getContext("webgl")` returning null (disabled,
+            // unsupported, or the browser already has too many live WebGL
+            // contexts) makes the constructor throw — left uncaught, that
+            // exception escapes this passive effect and Next.js replaces
+            // the whole landing-page segment with an error boundary instead
+            // of just omitting this decorative graph, which is the entire
+            // point of a component this non-essential ever failing.
+            console.error("[ProjectGraph] WebGL unavailable, rendering nothing:", err);
+            return;
+        }
         sceneRef.current = scene;
         if (scene.diagnostics.length > 0) {
             // A shader that fails to compile/link never throws — surfacing
@@ -108,7 +137,20 @@ export function useGraphScene({ canvasRef, hitLayerRef, graph, labels, options }
             const rect = container.getBoundingClientRect();
             sizeRef.current = { width: rect.width, height: rect.height };
             scene.resize(rect.width, rect.height);
-            simulationRef.current?.force("center", forceCenter(rect.width / 2, rect.height / 2));
+            const simulation = simulationRef.current;
+            if (simulation) {
+                simulation.force("center", forceCenter(rect.width / 2, rect.height / 2));
+                // `d3-force` stops ticking its internal timer once alpha
+                // decays past `alphaMin` — replacing a force after that
+                // point changes what WOULD be computed next tick, but no
+                // tick ever runs again to compute it, so neither this new
+                // center nor `boundsForce` (which reads live container size
+                // via a getter, not a snapshot) actually reaches node
+                // positions. `Math.max(current alpha, 0.3)` restarts ticking
+                // without disrupting a resize that happens to land mid-drag
+                // or mid-initial-settle (never LOWERS an already-higher alpha).
+                simulation.alpha(Math.max(simulation.alpha(), 0.3)).restart();
+            }
         });
         if (container) resizeObserver.observe(container);
 

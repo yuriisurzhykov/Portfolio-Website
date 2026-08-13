@@ -58,23 +58,23 @@ interface SceneFramebuffer {
 
 function compileShader(gl: WebGLRenderingContext, type: number, source: string, label: string, diagnostics: string[]): WebGLShader {
     const shader = gl.createShader(type);
-    if (!shader) throw new Error(`[GraphScene] gl.createShader returned null for ${label}`);
+    if (!shader) throw new Error(`[GraphScene] gl.createShader returned null for ${ label }`);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        diagnostics.push(`[${label}] ${gl.getShaderInfoLog(shader)}`);
+        diagnostics.push(`[${ label }] ${ gl.getShaderInfoLog(shader) }`);
     }
     return shader;
 }
 
 function createProgram(gl: WebGLRenderingContext, vertexSource: string, fragmentSource: string, label: string, diagnostics: string[]): WebGLProgram {
     const program = gl.createProgram();
-    if (!program) throw new Error(`[GraphScene] gl.createProgram returned null for ${label}`);
-    gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, vertexSource, `${label} vertex`, diagnostics));
-    gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource, `${label} fragment`, diagnostics));
+    if (!program) throw new Error(`[GraphScene] gl.createProgram returned null for ${ label }`);
+    gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, vertexSource, `${ label } vertex`, diagnostics));
+    gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource, `${ label } fragment`, diagnostics));
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        diagnostics.push(`[${label} link] ${gl.getProgramInfoLog(program)}`);
+        diagnostics.push(`[${ label } link] ${ gl.getProgramInfoLog(program) }`);
     }
     return program;
 }
@@ -84,7 +84,7 @@ function locate(gl: WebGLRenderingContext, program: WebGLProgram, attribs: strin
     const uniformLocations: Record<string, WebGLUniformLocation | null> = {};
     for (const name of attribs) attribLocations[name] = gl.getAttribLocation(program, name);
     for (const name of uniforms) uniformLocations[name] = gl.getUniformLocation(program, name);
-    return { program, attribs: attribLocations, uniforms: uniformLocations };
+    return {program, attribs: attribLocations, uniforms: uniformLocations};
 }
 
 /**
@@ -101,7 +101,13 @@ function locate(gl: WebGLRenderingContext, program: WebGLProgram, attribs: strin
  */
 export class GraphScene {
     private readonly gl: WebGLRenderingContext;
-    private readonly options: GraphSceneOptions;
+    /**
+     * NOT readonly on purpose — `setOptions` below replaces this reference live, whenever the owning
+     * component's derived options change (idle-motion correcting itself after mount, a theme toggle, ...).
+     * Every draw call already reads `this.options.*` fresh each frame, so swapping the reference is enough;
+     * nothing needs recompiling.
+     * */
+    private options: GraphSceneOptions;
     private readonly quadBuffer: WebGLBuffer;
     private readonly edgeBuffer: WebGLBuffer;
     private readonly gridProgram: ProgramHandle;
@@ -111,11 +117,15 @@ export class GraphScene {
     private sceneFbo: SceneFramebuffer | null = null;
     private disposed = false;
 
-    /** Non-empty only if a shader failed to compile/link — surfaced so a caller can show it instead of silently rendering nothing (see project-graph/README.md's "diagnostics" entry for why this was worth adding). */
+    /**
+     * Non-empty only if a shader failed to compile/link — surfaced so a caller can show it instead of
+     * silently rendering nothing (see project-graph/README.md's "diagnostics" entry for why this was
+     * worth adding).
+     * */
     readonly diagnostics: string[] = [];
 
     constructor(canvas: HTMLCanvasElement, options: GraphSceneOptions) {
-        const gl = canvas.getContext("webgl", { antialias: true, preserveDrawingBuffer: false });
+        const gl = canvas.getContext("webgl", {antialias: true, preserveDrawingBuffer: false});
         if (!gl) throw new Error("[GraphScene] WebGL is unavailable in this browser");
         this.gl = gl;
         this.options = options;
@@ -141,7 +151,25 @@ export class GraphScene {
         );
     }
 
-    /** `cssWidth`/`cssHeight` in CSS pixels — this multiplies by `devicePixelRatio` itself, matching every other pixel value `renderFrame` is given (also CSS px; see that method's own note). */
+    /**
+     * Updates every future `renderFrame`/`drawGrid`/`drawLens` call without
+     * recreating the canvas, programs, or FBO — nothing in
+     * `GraphSceneOptions` affects shader compilation, only the uniform
+     * values fed into an already-linked program each frame. The one thing
+     * a caller must NOT expect this to fix on its own: idle-motion or
+     * palette that had already been baked into a couple of frames before
+     * this call lands just carries on correctly from here — there's no
+     * retroactive re-render of frames already drawn, which is fine, since
+     * the visible effect is "corrects within one frame," not a rewind.
+     */
+    setOptions(options: GraphSceneOptions): void {
+        this.options = options;
+    }
+
+    /**
+     * `cssWidth`/`cssHeight` in CSS pixels — this multiplies by `devicePixelRatio` itself, matching
+     * every other pixel value `renderFrame` is given (also CSS px; see that method's own note).
+     * */
     resize(cssWidth: number, cssHeight: number): void {
         const gl = this.gl;
         const dpr = window.devicePixelRatio || 1;
@@ -167,7 +195,7 @@ export class GraphScene {
         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        this.sceneFbo = { framebuffer, texture, width: pxWidth, height: pxHeight };
+        this.sceneFbo = {framebuffer, texture, width: pxWidth, height: pxHeight};
     }
 
     /**
@@ -210,7 +238,7 @@ export class GraphScene {
         gl.viewport(0, 0, canvas.width, canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT);
         this.drawBlit(fbo.texture);
-        for (const { node, x, y } of positioned) {
+        for (const {node, x, y} of positioned) {
             this.drawLens(node, x, y, hoveredId, edges, canvas.width, canvas.height, dpr, fbo.texture);
         }
     }
@@ -233,7 +261,7 @@ export class GraphScene {
 
     private drawGrid(fboWidth: number, fboHeight: number): void {
         const gl = this.gl;
-        const { attribs, uniforms, program } = this.gridProgram;
+        const {attribs, uniforms, program} = this.gridProgram;
         gl.useProgram(program);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
         gl.enableVertexAttribArray(attribs.aPos);
@@ -259,7 +287,7 @@ export class GraphScene {
         dpr: number,
     ): void {
         const gl = this.gl;
-        const { attribs, uniforms, program } = this.edgeProgram;
+        const {attribs, uniforms, program} = this.edgeProgram;
         const data = new Float32Array(edges.length * 12);
         const [r, g, b] = this.options.accentColor;
         edges.forEach((edge, i) => {
@@ -297,7 +325,7 @@ export class GraphScene {
 
     private drawBlit(sceneTexture: WebGLTexture): void {
         const gl = this.gl;
-        const { attribs, uniforms, program } = this.blitProgram;
+        const {attribs, uniforms, program} = this.blitProgram;
         gl.useProgram(program);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
         gl.enableVertexAttribArray(attribs.aPos);
@@ -320,7 +348,7 @@ export class GraphScene {
         sceneTexture: WebGLTexture,
     ): void {
         const gl = this.gl;
-        const { attribs, uniforms, program } = this.lensProgram;
+        const {attribs, uniforms, program} = this.lensProgram;
         const isDimmed = hoveredId !== null && node.id !== hoveredId && !this.isConnectedTo(node.id, hoveredId, edges);
 
         gl.useProgram(program);
