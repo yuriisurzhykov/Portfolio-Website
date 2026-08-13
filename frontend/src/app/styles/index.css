@@ -198,6 +198,7 @@
     --transition-easing-exit: var(--easing-exit);
 
     --scale-press: var(--scale-press);
+    --scale-highlight: var(--scale-highlight);
 
     /* ------------------------------------------------------------------------
      * LAYOUT

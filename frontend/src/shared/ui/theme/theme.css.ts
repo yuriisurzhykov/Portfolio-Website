@@ -152,6 +152,7 @@ export const themeVars = `
     --easing-exit: ${ motion.easing.exit };
 
     --scale-press: ${ motion.scale.press };
+    --scale-highlight: ${ motion.scale.highlight };
 
     /* LAYOUT */
     --layout-content-max-width: ${ layout.contentMaxWidth };

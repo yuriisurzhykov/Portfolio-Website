@@ -64,7 +64,7 @@ export function LanguageSegmentedToggle() {
                         aria-current={ isActive ? "true" : undefined }
                         className={ cn(
                             "rounded-pill px-2.5 py-1.25",
-                            "font-mono font-semibold text-[10.5px] uppercase",
+                            "font-mono font-semibold text-xs uppercase",
                             "transition-colors duration-fast",
                             isActive ? "bg-text-primary text-bg-app" : "text-text-muted hover:text-text-primary",
                         ) }
