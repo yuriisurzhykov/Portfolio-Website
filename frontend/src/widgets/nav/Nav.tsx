@@ -16,8 +16,8 @@ import { AvailabilityBadge } from "@/shared/ui/availability-badge";
 
 const navLinkClass = (isActive: boolean) =>
     cn(
-        "font-medium text-caption transition-colors duration-fast",
-        isActive ? "text-text-primary" : "text-text-secondary hover:text-text-primary",
+        "font-medium transition-colors duration-fast",
+        isActive ? "font-bold text-body text-text-primary" : "text-caption text-text-secondary hover:text-text-primary",
     );
 
 const mobileNavLinkClass = (isActive: boolean) =>
@@ -101,7 +101,7 @@ export function Nav({config: site}: NavProps) {
                 hiddenOnScroll && "-translate-y-full",
             ) }
         >
-            <Link href="/" className="font-mono font-bold text-body text-text-primary shrink-0">
+            <Link href="/" className="font-mono font-bold text-body-lg text-text-primary shrink-0">
                 { site.initials }
             </Link>
 
