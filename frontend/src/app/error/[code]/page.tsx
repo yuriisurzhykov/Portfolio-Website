@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { StatusPage } from "@/shared/ui/status-page";
 import { parseStatusCode } from "@/shared/ui/status-page/status-content";
+import { NOINDEX } from "@/shared/lib/seo/noindex";
 
 interface PageProps {
     params: Promise<{ code: string }>;
@@ -24,7 +25,11 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     const { code } = await params;
     const parsed = parseStatusCode(code);
-    return { title: parsed ? `${ parsed } — Error` : "Error" };
+    // `noindex` rather than a `Disallow` in robots.txt: `proxy.ts` sends a
+    // rate-limited visitor HERE, so this path has to stay crawlable — see
+    // `app/robots.ts` for why closing it would be worse than leaving it
+    // open. `noindex` is the half of the job that still works.
+    return { ...NOINDEX, title: parsed ? `${ parsed } — Error` : "Error" };
 }
 
 export default async function Page({ params, searchParams }: PageProps) {

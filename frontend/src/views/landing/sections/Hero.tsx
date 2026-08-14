@@ -1,108 +1,83 @@
 "use client";
 
 import * as React from "react";
-import type { HeroContent, LocalizedText } from "@portfolio/backend";
+import dynamic from "next/dynamic";
+import type { HeroContent, LocalizedText, WorkSummary } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { Eyebrow } from "@/shared/ui/eyebrow";
-import { Tag } from "@/shared/ui/tag";
 import { LinkButton } from "@/shared/ui/button";
 import { useTranslation } from "@/shared/i18n";
+import { useMediaQuery } from "@/shared/lib/useMediaQuery";
 import { cn } from "@/shared/lib/utils";
+
+/**
+ * `ssr:false` isn't optional here — WebGL/canvas/`requestAnimationFrame`
+ * don't exist on the server, and even if they did, this decorative graph
+ * must never delay the headline/CTA (the actual LCP content) becoming
+ * interactive while its own JS loads. See `shared/ui/project-graph/README.md`.
+ */
+const ProjectGraphLazy = dynamic(() => import("@/shared/ui/project-graph").then((mod) => mod.ProjectGraph), {ssr: false});
+
+/** Tailwind v4's default `lg` breakpoint (`64rem`) — kept as a literal here rather than reading it out of the Tailwind config, since this is the ONLY place a breakpoint needs to be known in JS, not CSS. */
+const DESKTOP_QUERY = "(min-width: 1024px)";
 
 export interface HeroProps {
     hero: HeroContent;
     /** Just `config.role`, not the whole `ConfigContent` — this is the only piece of site config the hero section actually renders (Interface Segregation over threading the full object down for one field). */
     role: LocalizedText;
+    /** Same array `SelectedWork` renders below this section — reused here to drive the decorative project graph, not a second fetch of the same data. */
+    items: WorkSummary[];
 }
 
-export function Hero({ hero, role }: HeroProps) {
-    const { ln, pick } = useTranslation();
+export function Hero({hero, role, items}: HeroProps) {
+    const {ln, pick} = useTranslation();
+    // Gates actually MOUNTING the graph, not just hiding it with CSS — a
+    // `hidden lg:block` class alone still creates the WebGL context, the
+    // `d3-force` simulation, and the perpetual rAF loop against a zero-sized
+    // container on every mobile visitor (found by code review, not by this
+    // component's own live testing — see project-graph/README.md).
+    const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
     return (
         <section
             id="top"
-            className={cn(
+            className={ cn(
                 "relative overflow-hidden",
-                "max-w-[var(--layout-content-max-width)] mx-auto",
-                "px-[clamp(20px,4vw,56px)] pt-[clamp(48px,7vw,96px)] pb-[clamp(64px,8vw,96px)]",
-            )}
+                "max-w-(--layout-content-max-width) mx-auto",
+                "px-[clamp(20px,4vw,56px)] pt-14 pb-[clamp(64px,8vw,96px)]",
+                "flex items-center gap-8",
+            ) }
         >
-            <div
-                aria-hidden
-                className="absolute -top-[140px] -right-[120px] w-[460px] h-[460px] rounded-full pointer-events-none"
-                style={{
-                    background: "var(--color-accent-glow)",
-                    filter: "blur(var(--blur-aurora-strong))",
-                    opacity: "var(--color-accent-glow-opacity)",
-                }}
-            />
+            <div className="relative max-w-(--layout-content-reading)">
+                <Eyebrow tone="accent" className="mb-4.5">
+                    { pick(role) }
+                </Eyebrow>
 
-            <div className="relative grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-[48px] items-center">
-                <div>
-                    <Eyebrow tone="accent" className="mb-[18px]">
-                        {pick(role)}
-                    </Eyebrow>
+                <h1 className="m-0 mb-5.5 font-extrabold text-[clamp(40px,5.5vw,64px)] leading-[1.02] tracking-tight text-text-primary">
+                    { hero.headline.map((line, index) => (
+                        <React.Fragment key={ line }>
+                            { index > 0 && <br/> }
+                            { line }
+                        </React.Fragment>
+                    )) }
+                </h1>
 
-                    <h1 className="m-0 mb-[22px] font-extrabold text-[clamp(40px,5.5vw,64px)] leading-[1.02] tracking-tight text-text-primary">
-                        {hero.headline.map((line, index) => (
-                            <React.Fragment key={line}>
-                                {index > 0 && <br />}
-                                {line}
-                            </React.Fragment>
-                        ))}
-                    </h1>
+                <Text as="p" variant="body-lg" tone="secondary" className="mb-7.5 max-w-[46ch]">
+                    { pick(hero.subhead) }
+                </Text>
 
-                    <Text as="p" variant="body-lg" tone="secondary" className="mb-[30px] max-w-[46ch]">
-                        {pick(hero.subhead)}
-                    </Text>
-
-                    <div className="flex flex-wrap gap-[10px] mb-[36px]">
-                        {pick(hero.chips).map((chip) => (
-                            <Tag key={chip} variant="outline">
-                                {chip}
-                            </Tag>
-                        ))}
-                    </div>
-
-                    <div className="flex flex-wrap gap-[14px]">
-                        <LinkButton href="#work" variant="primary">
-                            {ln("button.viewArchitecture")}
-                        </LinkButton>
-                        <LinkButton href="#journal" variant="secondary">
-                            {ln("button.readJournal")}
-                        </LinkButton>
-                    </div>
-                </div>
-
-                <div className="relative h-[340px] hidden lg:block" aria-hidden>
-                    {hero.graphNodes.map((node, index) => (
-                        <div
-                            key={node.label}
-                            className={cn(
-                                "absolute w-[210px] rounded-md px-[16px] py-[14px]",
-                                "bg-surface-raised border-[1.5px]",
-                                node.highlighted ? "border-accent-solid" : "border-border-strong",
-                                "font-mono font-semibold text-caption text-text-primary",
-                            )}
-                            style={
-                                [
-                                    { top: 0, left: 20 },
-                                    { top: 110, left: 80 },
-                                    { top: 220, left: 30 },
-                                ][index]
-                            }
-                        >
-                            {node.label}
-                            <br />
-                            <span className="font-mono font-normal text-[10.5px] text-text-muted">
-                                {pick(node.sublabel)}
-                            </span>
-                        </div>
-                    ))}
-                    <div className="absolute top-[60px] left-[126px] w-[2px] h-[56px] bg-border-connector" />
-                    <div className="absolute top-[170px] left-[135px] w-[2px] h-[56px] bg-border-connector" />
+                <div className="flex flex-wrap gap-3.5">
+                    <LinkButton href="#contact" variant="primary">
+                        { ln("button.getInTouch") }
+                    </LinkButton>
+                    <LinkButton href="#journal" variant="secondary">
+                        { ln("button.readJournal") }
+                    </LinkButton>
                 </div>
             </div>
+
+            {/* Only mounted at all on `lg`+ — WebGL squeezed into a narrow column isn't worth the extra JS on mobile, and the text above already carries the full message on its own. */ }
+            { isDesktop && <ProjectGraphLazy items={ items } className="flex-1 h-(--layout-hero-graph-height)"/> }
         </section>
     );
 }

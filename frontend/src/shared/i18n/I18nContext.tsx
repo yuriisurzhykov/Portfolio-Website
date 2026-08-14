@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useState } from "react";
 import type { I18nContextType, Language, LanguageProps, Localized } from "./types";
 import { lnFor } from "./engine";
+import { pickFor } from "./pick";
 
 export const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
@@ -40,12 +41,7 @@ export const I18nProvider = ({children, initialLanguage}: LanguageProps) => {
     );
 
     function pick<T>(value: Localized<T>): T {
-        // `||`, not `??`: a per-field translation that hasn't been written
-        // yet is stored as `ru: ""` (see backend/src/content/localized-text.ts),
-        // not `null`/`undefined` — `??` only falls back on nullish, so an
-        // empty string would render as blank instead of falling back to
-        // English.
-        return value[language] || value.en;
+        return pickFor(value, language);
     }
 
     const contextValue: I18nContextType = {

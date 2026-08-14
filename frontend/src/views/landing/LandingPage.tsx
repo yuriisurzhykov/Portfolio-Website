@@ -21,9 +21,8 @@ export interface LandingPageProps {
 export function LandingPage({ featuredWork, latestPost, hero, contact, principles, techStack, config }: LandingPageProps) {
     return (
         <main>
-            <Hero hero={hero} role={config.role} />
+            <Hero hero={hero} role={config.role} items={featuredWork} />
             <TechStack techStack={techStack} />
-            <Principles principles={principles} />
             <SelectedWork items={featuredWork} />
             <JournalPreview post={latestPost} />
             <ContactCta contact={contact} email={config.email} />

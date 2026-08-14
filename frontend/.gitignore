@@ -47,6 +47,11 @@ next-env.d.ts
 .stryker-tmp
 /reports
 
+# Local-only output of scripts/og-contact-sheet.mjs — regenerated on demand
+# against a running server, never a committed artifact. The OG cards that
+# ARE committed are the Playwright baselines in tests/visual-snapshots/.
+/.og-cards/
+
 # Playwright — generated on every run, never commit. tests/visual-snapshots/ is NOT listed here
 # on purpose: those PNGs are the committed baseline "references" (see tests/README.md).
 /test-results/

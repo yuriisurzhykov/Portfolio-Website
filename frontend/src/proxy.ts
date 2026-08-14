@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { checkRateLimit } from "@portfolio/backend/edge";
-import { LOCALE_HEADER, RU_PREFIX } from "@/shared/lib/locale-constants";
+import type { Language } from "@/shared/i18n";
+import { LOCALE_HEADER, LOCALE_PARAM, RU_PREFIX } from "@/shared/lib/locale-constants";
 import { REQUEST_PATHNAME_HEADER } from "@/shared/lib/auth/constants";
 import { getClientIp } from "@/shared/lib/client-ip";
 
@@ -267,8 +268,49 @@ function withPathnameHeader(request: NextRequest, pathname: string): NextRespons
  */
 function handleLocale(request: NextRequest, pathname: string) {
     const { isRu, withoutLocale } = stripLocalePrefix(pathname);
+
+    // THIS FUNCTION RUNS A SECOND TIME on the URL the rewrite below points
+    // at. Next.js 16 re-invokes the proxy for its own internal rewrite
+    // target, and that pass sees a bare `/journal/x` with no `/ru` prefix.
+    // An earlier version resolved the locale from the path alone, so the
+    // second pass overwrote the `"ru"` the first had just resolved, and
+    // every `/ru/...` URL rendered in English — `<html lang="en">`,
+    // English title, English body. Found live under `next build && next
+    // start` with a temporary header that accumulated one entry per
+    // invocation (`|/ru/journal/x=ru|/journal/x=en`), not by reading code.
+    //
+    // The locale therefore travels in the REWRITTEN URL, not in a request
+    // header the second pass has to trust. The first attempt at that fix
+    // did preserve an already-set `LOCALE_HEADER` instead — which worked,
+    // but made the header forgeable, since nothing here can tell its own
+    // value from a client-supplied one. Harmless while the app is served
+    // directly (a display language for the one visitor who sent it), but
+    // it becomes cache poisoning the instant any shared cache appears in
+    // front: nginx `proxy_cache` and CDNs key on the URL alone, so ONE
+    // forged `x-locale: ru` would store a Russian response under the
+    // English URL and serve it to everyone until it expired.
+    //
+    // `Vary: x-locale` would be the textbook answer and DOES NOT WORK
+    // here — verified with `curl -D -` against a real production build,
+    // twice: appended to the middleware response it is dropped, and
+    // declared in `next.config.ts`'s `headers()` it reaches route
+    // handlers (`/robots.txt`, `/sitemap.xml`, the OG routes) but is
+    // overwritten by Next.js's own `Vary` on exactly the Server-Component
+    // pages that depend on the locale. That partial success is the trap:
+    // curling `/robots.txt` shows `vary: x-locale` and looks like it
+    // worked.
+    //
+    // Putting the locale in the URL removes the hidden input instead of
+    // annotating it: the response becomes a pure function of the URL,
+    // which is what a cache assumes in the first place. A forged
+    // `?__locale=ru` is possible, and harmless — it is a different URL, so
+    // a cache stores it under a different key.
+    const locale: Language = isRu || request.nextUrl.searchParams.get(LOCALE_PARAM) === "ru" ? "ru" : "en";
+
+    // Unconditional `set`, never a preserve: whatever the client sent
+    // under this name is discarded on every pass.
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set(LOCALE_HEADER, isRu ? "ru" : "en");
+    requestHeaders.set(LOCALE_HEADER, locale);
 
     if (!isRu) {
         return NextResponse.next({ request: { headers: requestHeaders } });
@@ -276,6 +318,22 @@ function handleLocale(request: NextRequest, pathname: string) {
 
     const url = request.nextUrl.clone();
     url.pathname = withoutLocale;
+    url.searchParams.set(LOCALE_PARAM, "ru");
+    // Next.js bug (vercel/next.js#94745): behind nginx, this rewrite's URL
+    // inherits "https" from X-Forwarded-Proto, but this app's own server
+    // (next start -H 127.0.0.1, TLS terminated only at nginx) never speaks
+    // TLS itself. A loopback-hostname normalization mismatch inside
+    // Next.js (127.0.0.1 vs. the "localhost" it rewrites that to
+    // internally) makes it treat the rewrite as external and self-proxy it
+    // — carrying that inherited "https" into a real TLS handshake against
+    // its own plain-HTTP port, which fails outright ("EPROTO ... wrong
+    // version number") and 500s every single /ru request. Verified live:
+    // reproduced against a real `next build && next start -H 127.0.0.1`
+    // with a spoofed `X-Forwarded-Proto: https` header, fixed by the one
+    // line below, confirmed against the same repro. The rewrite target is
+    // always THIS SAME server, so its scheme must always be "http"
+    // regardless of what scheme the original request arrived over.
+    url.protocol = "http:";
 
     return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
 }

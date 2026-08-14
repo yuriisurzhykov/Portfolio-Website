@@ -28,18 +28,35 @@ const config = {
         "src/shared/lib/date-format.ts",
         "src/shared/lib/slugify.ts",
         "src/shared/lib/sanitize-svg.ts",
+        "src/shared/lib/db-outage-fallback.ts",
+        // 2026-08-11, Work Item Covers & Unified Identity Hue: zero DOM/backend
+        // imports, its own dedicated DB-free test file.
+        "src/shared/lib/hue-accent.ts",
         "src/shared/i18n/engine/LocaleRegistry.ts",
         "src/shared/i18n/engine/index.ts",
+        "src/shared/i18n/pick.ts",
+        "src/shared/lib/seo/site-url.ts",
+        "src/shared/lib/seo/alternates.ts",
+        "src/shared/lib/seo/json-ld.ts",
+        "src/shared/lib/seo/open-graph.ts",
+        "src/shared/lib/seo/index-now-urls.ts",
         "src/shared/ui/block-editor/convert.ts",
         "src/shared/lib/tech-icons/registry.ts",
         "src/shared/lib/tech-icons/resolve-tech-icon.ts",
         "src/shared/lib/tech-icons/search-brand-icons.ts",
         "src/shared/ui/token-combobox/fuzzy-match.ts",
+        "src/views/admin-login/redirect-target.ts",
         "src/views/admin-settings-editor/tech-stack/parse-tech-input.ts",
         "src/views/admin-settings-editor/tech-stack/reorder.ts",
         "src/views/admin-settings-editor/tech-stack/icon-status.ts",
     ],
-    reporters: ["html", "clear-text", "progress"],
+    // "json" alongside the HTML report: `scripts/survived-mutants.mjs` reads
+    // it to list surviving mutants with their source line. Scraping the
+    // payload back out of the HTML was tried first and is not worth it —
+    // the report embeds this project's own source, and `json-ld.test.ts`
+    // contains a literal `</script>`, so every simple delimiter search
+    // lands inside a JSON string.
+    reporters: ["html", "json", "clear-text", "progress"],
     // Speeds up the run (Stryker's own warning: static mutants dominated
     // the runtime here) — see date-format.ts's module-level `Intl.
     // DateTimeFormat` construction, whose mutants are effectively

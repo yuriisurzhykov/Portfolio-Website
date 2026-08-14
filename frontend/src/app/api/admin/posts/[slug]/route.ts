@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deletePost, getPostForAdmin, postDraftInputSchema, updatePost } from "@portfolio/backend";
+import { deletePost, getPostForAdmin, postDraftInputSchema, savePostDraft } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
 
@@ -21,12 +21,19 @@ export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) =>
     }
 });
 
+/**
+ * What autosave calls on every save after the very first one — see
+ * `savePostDraft`'s own comment (admin-posts.ts): this ONLY ever writes a
+ * `ContentDraft` row now, never the live `Post` — the fix for the bug
+ * that motivated the whole draft/publish split (backend/src/content/README.md's
+ * dated entry). The live post only ever changes via `POST .../publish`.
+ */
 export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => {
     try {
         const { slug } = await params;
         const body = await request.json();
         const input = postDraftInputSchema.parse(body);
-        const updated = await updatePost(slug, input);
+        const updated = await savePostDraft(slug, input);
         if (!updated) {
             return NextResponse.json({ error: "Post not found." }, { status: 404 });
         }

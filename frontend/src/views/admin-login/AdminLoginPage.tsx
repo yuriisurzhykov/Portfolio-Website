@@ -7,17 +7,19 @@ import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
 import { Field, Input } from "@/shared/ui/form";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
+import { resolveRedirectTarget } from "./redirect-target";
 
 /**
- * Redirects go to `?from=<original path>`, set by `proxy.ts` when it
+ * Redirects go to `?from=<original path>`, set by `requirePage()` when it
  * bounces an unauthenticated visit to `/admin/login` — falls back to the
  * journal list (the admin section's default landing spot) if there's no
- * `from` (e.g. the admin navigated here directly, not via a redirect).
+ * usable `from`. The rules live in `resolveRedirectTarget`, a plain
+ * function, so they can be tested directly instead of through a rendered
+ * component.
  */
 function useRedirectTarget(): string {
     const searchParams = useSearchParams();
-    const from = searchParams.get("from");
-    return from && from.startsWith("/admin") ? from : "/admin/journal";
+    return resolveRedirectTarget(searchParams.get("from"));
 }
 
 export function AdminLoginPage() {

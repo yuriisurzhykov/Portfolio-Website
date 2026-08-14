@@ -24,3 +24,13 @@ export const REQUEST_PATHNAME_HEADER = "x-pathname";
  */
 export const CSRF_HEADER_NAME = "x-requested-with";
 export const CSRF_HEADER_VALUE = "portfolio-admin-ui";
+
+/**
+ * Where the sign-in page lives — declared once because two independent
+ * guards need to recognise it, and both exist to break the same loop:
+ * `admin-api.ts`'s `redirectToLogin` must not send the visitor to sign in
+ * when they are ALREADY signing in, and `resolveRedirectTarget`
+ * (`views/admin-login`) must not accept it as a "return to" destination
+ * after a successful sign-in.
+ */
+export const LOGIN_PATH = "/admin/login";

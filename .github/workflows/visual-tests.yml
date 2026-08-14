@@ -15,9 +15,9 @@ name: Visual & Accessibility Tests
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [ opened, synchronize, reopened ]
   push:
-    branches: [master]
+    branches: [ master ]
 
 permissions:
   # Still "write", not "read": the GitHub Pages publish steps below push to the (unprotected)
@@ -65,10 +65,19 @@ jobs:
       # networkidle-timeout hang) trips rate limiting meant for real visitors; that logic has its
       # own separate, fast unit suite (proxy.test.ts) and doesn't need re-exercising here.
       DISABLE_RATE_LIMIT: "true"
+      # Without these, `next build && next start` (spawned by playwright.config.ts's webServer)
+      # serves the NOINDEX variant of the site — that is, the one that never runs in production,
+      # which would leave the branch that DOES run in production covered by no test at all.
+      # seo.spec.ts asserts on robots.txt's contents and fails loudly if these go missing rather
+      # than silently checking the wrong build. Same two variables backend/.env.test.example
+      # documents for a local run; the host is fictional but has to look public, since
+      # frontend/src/instrumentation.ts refuses to start on `SEO_INDEXABLE=true` + localhost.
+      SEO_INDEXABLE: "true"
+      SITE_URL: https://e2e.example.com
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Prepare workspace
         uses: ./.github/actions/prepare-workspace
@@ -95,8 +104,25 @@ jobs:
             echo "dir=reports/master" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish report to GitHub Pages
+      # `peaceiris/actions-gh-pages` crashes with a misleading "gh-pages
+      # already exists" error if `publish_dir` is missing (e.g. "Run
+      # tests" failed before Playwright started) — this step fails
+      # loudly instead of silently skipping. See frontend/tests/README.md's
+      # dated entry for the full story, including a corrected first draft.
+      - name: Check report was produced
+        id: report-check
         if: always()
+        run: |
+          if [ -d "frontend/playwright-report" ] && [ -n "$(ls -A frontend/playwright-report 2>/dev/null)" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::error::frontend/playwright-report was never produced — Playwright never started. See the failed 'Run tests' step above for the real cause; skipping the GitHub Pages publish step below instead of letting peaceiris/actions-gh-pages crash on a missing publish_dir."
+            exit 1
+          fi
+
+      - name: Publish report to GitHub Pages
+        if: always() && steps.report-check.outputs.exists == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

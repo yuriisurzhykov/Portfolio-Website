@@ -34,7 +34,12 @@ export function Tooltip({ label, children, className }: TooltipProps) {
                 aria-hidden
                 className={cn(
                     "pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2",
-                    "whitespace-nowrap rounded-sm border border-border-default bg-surface-raised",
+                    // `bg-surface-base`, not `-raised` — see
+                    // `RelatedItemPicker`'s identical fix/comment: `-raised`
+                    // is a near-transparent tint meant to sit atop an
+                    // already-opaque parent, not to be a floating bubble's
+                    // only backdrop over whatever's on the page underneath.
+                    "whitespace-nowrap rounded-sm border border-border-default bg-surface-base",
                     "px-sm py-xs font-mono text-micro text-text-primary shadow-lg",
                     "opacity-0 scale-95 transition-[opacity,transform] duration-fast ease-standard",
                     "group-hover/tooltip:opacity-100 group-hover/tooltip:scale-100",

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { LifecycleState, WorkDetail, WorkInput, WorkStatus, WorkSummary } from "@portfolio/backend";
+import type { AdminWorkDetail, LifecycleState, WorkInput, WorkStatus, WorkSummary } from "@portfolio/backend";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
@@ -11,15 +11,19 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { TokenCombobox } from "@/shared/ui/token-combobox";
+import { RelatedItemPicker, type RelatedItemOption } from "@/shared/ui/related-item-picker";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { slugify } from "@/shared/lib/slugify";
+import { todayIsoDate } from "@/shared/lib/date-format";
 import { type AutosaveStatus, useAutosaveDraft } from "@/shared/lib/use-autosave-draft";
 
 export interface WorkEditorPageProps {
     /** Absent for "create new"; present (already-saved) for "edit". */
-    initialWork?: WorkDetail;
+    initialWork?: AdminWorkDetail;
     /** `techStack[].name` from `SiteContent` — fuzzy-search suggestions for the Stack field's `TokenCombobox`, not a hard-enforced list (see `token-combobox/README.md` for why free text is still allowed). Defaults to `[]` so callers that don't have this yet (there are none today, but the type stays honest) don't crash. */
     techStackSuggestions?: string[];
+    /** Every real Post, for `RelatedItemPicker`'s "Related journal post" field — same "hand the whole small list to the client" pattern as `techStackSuggestions`. Defaults to `[]` for the same reason. */
+    postOptions?: RelatedItemOption[];
 }
 
 const STATUS_OPTIONS: StatusToggleOption<WorkStatus>[] = [
@@ -30,7 +34,7 @@ const STATUS_OPTIONS: StatusToggleOption<WorkStatus>[] = [
 interface FormState {
     slug: string;
     title: string;
-    year: string;
+    date: string;
     status: WorkStatus;
     summary: string;
     stack: string[];
@@ -48,9 +52,9 @@ interface FormState {
 function autosaveStatusLabel(status: AutosaveStatus): string | null {
     switch (status) {
         case "saving":
-            return "Saving…";
+            return "Saving draft…";
         case "saved":
-            return "Saved just now";
+            return "Draft saved just now";
         case "error":
             return "Save failed — retrying";
         case "idle":
@@ -59,19 +63,20 @@ function autosaveStatusLabel(status: AutosaveStatus): string | null {
 }
 
 /**
- * English-only — same reasoning as `PostEditorPage`'s `toFormState`.
- * `initialWork`'s localized fields stay full `{en, ru}` pairs on the read
- * side; only `.en` is ever shown/edited here. `status` defaults to
- * `"in-progress"`, not `"shipped"` — same reasoning as `PostEditorPage`'s
- * identical change (2026-07-31, Phase 3): a brand new item is a DRAFT
- * (`lifecycleState`) until explicitly published, "shipped" as the default
- * was a leftover contradiction from before that field existed.
+ * English-only title (`.en` — `Work.title` was localized 2026-08-11, same
+ * shape as `Post.title`; translation happens on the separate "Add
+ * translation" page, same as Post) — same reasoning as `PostEditorPage`'s
+ * `toFormState`. `slug` reads `draftSlug` (the pending rename, if any), not
+ * `slug` — same reasoning as `PostEditorPage`'s identical change, see
+ * `AdminWorkDetail.draftSlug`'s comment. `status` defaults to
+ * `"in-progress"`, not `"shipped"` — a brand new item is a DRAFT
+ * (`lifecycleState`) until explicitly published.
  */
-function toFormState(work?: WorkDetail): FormState {
+function toFormState(work?: AdminWorkDetail): FormState {
     return {
-        slug: work?.slug ?? "",
-        title: work?.title ?? "",
-        year: work ? String(work.year) : String(new Date().getFullYear()),
+        slug: work?.draftSlug ?? work?.slug ?? "",
+        title: work?.title.en ?? "",
+        date: work?.date ?? todayIsoDate(),
         status: work?.status ?? "in-progress",
         summary: work?.summary.en ?? "",
         stack: work?.stack ?? [],
@@ -86,22 +91,31 @@ function toFormState(work?: WorkDetail): FormState {
     };
 }
 
-export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkEditorPageProps) {
+export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOptions = [] }: WorkEditorPageProps) {
     const router = useRouter();
     const isEditing = Boolean(initialWork);
 
+    // Same reasoning as `PostEditorPage`'s identical field — re-set
+    // wholesale by "Discard changes"/"Load into draft", read for
+    // everything the form doesn't itself own (case-study blocks, in
+    // particular).
+    const [work, setWork] = React.useState<AdminWorkDetail | undefined>(initialWork);
     const [form, setForm] = React.useState<FormState>(() => toFormState(initialWork));
     // Same reasoning as `PostEditorPage`'s `slugTouched` — an existing
     // item's slug never follows title edits, only a brand new one's does,
     // and only until the admin edits the slug field directly.
     const [slugTouched, setSlugTouched] = React.useState(isEditing);
     const blockEditorRef = React.useRef<BlockEditorHandle>(null);
+    // Same reasoning as `PostEditorPage`'s identical field.
+    const [contentVersion, setContentVersion] = React.useState(0);
     const [error, setError] = React.useState<string | null>(null);
-    // Separate from `error` — see admin-post-editor/PostEditorPage.tsx's identical field for why.
-    const [notice, setNotice] = React.useState<string | null>(null);
     const [deleting, setDeleting] = React.useState(false);
+    const [discarding, setDiscarding] = React.useState(false);
+    const [previewPending, setPreviewPending] = React.useState(false);
     const [lifecycleState, setLifecycleState] = React.useState<LifecycleState>(initialWork?.lifecycleState ?? "DRAFT");
     const [lifecyclePending, setLifecyclePending] = React.useState(false);
+    /** Same reasoning as `PostEditorPage`'s identical field. */
+    const [hasUnpublishedChanges, setHasUnpublishedChanges] = React.useState(initialWork?.hasUnpublishedChanges ?? false);
     // Guards "Back to list"/"Add translation" — see `navigateAfterFlush` below.
     const [navPending, setNavPending] = React.useState(false);
     /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical field — see its comment. */
@@ -113,7 +127,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         buildInput: () => ({
             slug: form.slug.trim() || undefined,
             title: form.title.trim(),
-            year: Number(form.year) || 0,
+            date: form.date,
             status: form.status,
             summary: form.summary.trim(),
             // Already an array of trimmed, deduped-by-TokenCombobox tokens —
@@ -138,19 +152,17 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         create: (input) => adminApi.createWork(input),
         update: (slug, input) => adminApi.updateWork(slug, input),
         getSlug: (result) => result.slug,
-        // Same reasoning as `PostEditorPage.tsx`'s identical field — fires for the initial create AND for a later rename.
+        // Same reasoning as `PostEditorPage.tsx`'s identical field — fires ONLY for the initial create.
         onSlugChanged: (result) => {
             setCurrentSlug(result.slug);
             router.replace(`/admin/work/${ result.slug }/edit`);
         },
         onSaved: (result) => {
-            // Auto-unpublish safety net — see admin-work.ts's `updateWork`
-            // and PostEditorPage.tsx's identical check for the full
-            // reasoning.
-            if (lifecycleState === "PUBLISHED" && result.lifecycleState === "DRAFT") {
-                setNotice("Saved, but automatically unpublished — this item no longer has everything required to stay public (e.g. a missing summary or case-study field). Fill in what's missing, then Publish again.");
-            }
             setLifecycleState(result.lifecycleState);
+            // Same reasoning as `PostEditorPage.tsx`'s identical check.
+            if (currentSlug !== null) {
+                setHasUnpublishedChanges(true);
+            }
         },
         onError: (err) => setError(err instanceof AdminApiError ? err.message : "Something went wrong while saving. Retrying automatically…"),
     });
@@ -174,12 +186,11 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         update("slug", slug);
     }
 
+    /** Same reasoning as `PostEditorPage.tsx`'s identical function — see its comment. */
     async function handlePublish() {
         if (!currentSlug) return;
         setError(null);
-        setNotice(null);
         setLifecyclePending(true);
-        // Same reasoning as PostEditorPage.tsx's identical structure.
         try {
             await autosave.flush();
         } catch {
@@ -190,6 +201,11 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         try {
             const result = await adminApi.publishWork(currentSlug);
             setLifecycleState(result.lifecycleState);
+            setHasUnpublishedChanges(false);
+            if (result.slug !== currentSlug) {
+                setCurrentSlug(result.slug);
+                router.replace(`/admin/work/${ result.slug }/edit`);
+            }
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to publish.");
         } finally {
@@ -200,7 +216,6 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
     async function handleUnpublish() {
         if (!currentSlug) return;
         setError(null);
-        setNotice(null);
         setLifecyclePending(true);
         try {
             const result = await adminApi.unpublishWork(currentSlug);
@@ -210,6 +225,38 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         } finally {
             setLifecyclePending(false);
         }
+    }
+
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical function — see its comment on why this flushes before discarding. */
+    async function handleDiscard() {
+        if (!currentSlug) return;
+        if (!window.confirm("Discard every unpublished change and go back to what's currently live?")) return;
+
+        setError(null);
+        setDiscarding(true);
+        await autosave.flush().catch(() => {});
+        try {
+            const fresh = await adminApi.discardWorkDraft(currentSlug);
+            setWork(fresh);
+            setForm(toFormState(fresh));
+            setSlugTouched(true);
+            setLifecycleState(fresh.lifecycleState);
+            setHasUnpublishedChanges(false);
+            setContentVersion((v) => v + 1);
+        } catch (err) {
+            setError(err instanceof AdminApiError ? err.message : "Failed to discard changes.");
+        } finally {
+            setDiscarding(false);
+        }
+    }
+
+    /** Same reasoning as `PostEditorPage.tsx`'s identical function. */
+    async function handlePreview() {
+        if (!currentSlug) return;
+        setPreviewPending(true);
+        await autosave.flush().catch(() => {});
+        setPreviewPending(false);
+        window.open(`/work/${ currentSlug }?preview=1`, "_blank", "noopener,noreferrer");
     }
 
     async function handleDelete() {
@@ -276,21 +323,40 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-sm">
+                <div className="flex items-center gap-sm flex-wrap">
                     {isEditing && (
                         <>
                             <StatusBadge tone={lifecycleState === "PUBLISHED" ? "success" : "warning"} withDot>
                                 {lifecycleState === "PUBLISHED" ? "Published" : "Draft"}
                             </StatusBadge>
-                            {lifecycleState === "DRAFT" ? (
-                                <Button type="button" variant="secondary" size="sm" onClick={handlePublish} loading={lifecyclePending}>
-                                    Publish
+                            {lifecycleState === "PUBLISHED" && hasUnpublishedChanges && (
+                                <StatusBadge tone="warning">Unpublished changes</StatusBadge>
+                            )}
+                            <Button type="button" variant="secondary" size="sm" onClick={handlePublish} loading={lifecyclePending}>
+                                {lifecycleState === "DRAFT" ? "Publish" : "Update"}
+                            </Button>
+                            {hasUnpublishedChanges && (
+                                <Button type="button" variant="ghost" size="sm" onClick={handleDiscard} loading={discarding}>
+                                    Discard changes
                                 </Button>
-                            ) : (
+                            )}
+                            {lifecycleState === "PUBLISHED" && (
                                 <Button type="button" variant="ghost" size="sm" onClick={handleUnpublish} loading={lifecyclePending}>
                                     Unpublish
                                 </Button>
                             )}
+                            <Button type="button" variant="ghost" size="sm" onClick={handlePreview} loading={previewPending}>
+                                Preview
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => navigateAfterFlush(`/admin/work/${ currentSlug }/history`)}
+                                loading={navPending}
+                            >
+                                History
+                            </Button>
                         </>
                     )}
                     {isEditing && (
@@ -301,7 +367,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                             onClick={() => navigateAfterFlush(`/admin/work/${ currentSlug }/translate`)}
                             loading={navPending}
                         >
-                            {initialWork?.summary.ru ? "Edit translation" : "Add translation"}
+                            {work?.summary.ru ? "Edit translation" : "Add translation"}
                         </Button>
                     )}
                     {isEditing && (
@@ -321,10 +387,18 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                     </Text>
                 </div>
 
-                <Field label="Title" htmlFor="title" hint="Not localized — same value in both languages on the public site.">
+                <Field label="Title" htmlFor="title">
                     <Input id="title" required value={form.title} onChange={(e) => updateTitle(e.target.value)} />
                 </Field>
-                <Field label="Slug" htmlFor="slug" hint="Auto-generated from the title — edit if you want a different URL.">
+                <Field
+                    label="Slug"
+                    htmlFor="slug"
+                    hint={
+                        isEditing
+                            ? `Auto-generated from the title — edit if you want a different URL. Currently live at /work/${ currentSlug }; a change here takes effect on Publish/Update.`
+                            : "Auto-generated from the title — edit if you want a different URL."
+                    }
+                >
                     <Input id="slug" required value={form.slug} onChange={(e) => updateSlugManually(e.target.value)} />
                 </Field>
                 <Field label="Summary" htmlFor="summary" hint="One or two sentences — the blurb shown under the title on the card.">
@@ -332,8 +406,8 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                 </Field>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                    <Field label="Year" htmlFor="year" hint="Used to sort the /work ledger, newest first.">
-                        <Input id="year" type="number" required value={form.year} onChange={(e) => update("year", e.target.value)} />
+                    <Field label="Date" htmlFor="date" hint="Used to sort the /work ledger, newest first — edit freely, unlike a journal post's date.">
+                        <Input id="date" type="date" required value={form.date} onChange={(e) => update("date", e.target.value)} />
                     </Field>
                     <TokenCombobox
                         id="work-stack"
@@ -361,13 +435,15 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                     </div>
                 </div>
 
-                <Field
+                <RelatedItemPicker
+                    id="relatedPostSlug"
                     label="Related journal post"
-                    htmlFor="relatedPostSlug"
-                    hint={"Optional — the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."}
-                >
-                    <Input id="relatedPostSlug" value={form.relatedPostSlug} onChange={(e) => update("relatedPostSlug", e.target.value)} placeholder="e.g. flowbus" />
-                </Field>
+                    hint="Optional — the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."
+                    value={form.relatedPostSlug || null}
+                    onChange={(slug) => update("relatedPostSlug", slug ?? "")}
+                    options={postOptions}
+                    placeholder="Search journal posts…"
+                />
             </Card>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
@@ -421,15 +497,12 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                                     The narrative itself — same block editor as a journal post’s body.
                                 </Text>
                             </div>
-                            <BlockEditor ref={blockEditorRef} initialBlocks={initialWork?.caseStudy?.blocks ?? []} onChange={autosave.scheduleSave} />
+                            <BlockEditor key={contentVersion} ref={blockEditorRef} initialBlocks={work?.caseStudy?.blocks ?? []} onChange={autosave.scheduleSave} />
                         </div>
                     </>
                 )}
             </Card>
 
-            {notice && (
-                <Text variant="caption" className="text-status-warning" role="status">{notice}</Text>
-            )}
             {error && (
                 <Text variant="caption" className="text-status-error" role="alert">{error}</Text>
             )}

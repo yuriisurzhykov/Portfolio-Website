@@ -5,7 +5,7 @@ import { proxy } from "./proxy";
 
 function makeRequest(
     path: string,
-    options: { ip?: string; prefetch?: boolean; accept?: string; rsc?: boolean } = {},
+    options: { ip?: string; prefetch?: boolean; accept?: string; rsc?: boolean; forwardedProto?: string } = {},
 ): NextRequest {
     const headers = new Headers();
     headers.set("x-forwarded-for", options.ip ?? "203.0.113.1");
@@ -18,7 +18,20 @@ function makeRequest(
     if (options.rsc) {
         headers.set("rsc", "1");
     }
-    return new NextRequest(new URL(path, "http://localhost:3000"), { headers });
+    // Real deployments (behind nginx) run over `X-Forwarded-Proto: https`,
+    // and by the time a request reaches middleware, Next.js's own server
+    // has ALREADY folded that into `request.nextUrl.protocol` itself (see
+    // the "forces the rewrite target's protocol to http" regression test
+    // below) — setting the header alone on a `NextRequest` built here does
+    // NOT reproduce that, since this constructor doesn't re-derive
+    // `nextUrl` from headers the way the real server pipeline does. The
+    // base URL's own scheme is what actually stands in for "the protocol
+    // middleware sees on `request.nextUrl`" in this test harness.
+    if (options.forwardedProto) {
+        headers.set("x-forwarded-proto", options.forwardedProto);
+    }
+    const scheme = options.forwardedProto === "https" ? "https" : "http";
+    return new NextRequest(new URL(path, `${ scheme }://localhost:3000`), { headers });
 }
 
 const HTML_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
@@ -317,5 +330,102 @@ describe("proxy — DISABLE_RATE_LIMIT (Playwright suite escape hatch)", () => {
 
         const oneOverLimit = await proxy(makeRequest("/journal", { ip }));
         expect(oneOverLimit.status).toBe(307);
+    });
+});
+
+/**
+ * Nothing pinned this before, and it had already broken silently once:
+ * every `/ru/...` URL rendered in English under a production build because
+ * the proxy runs a SECOND time on its own rewrite target and re-resolved
+ * the locale from the (now unprefixed) path.
+ *
+ * `x-middleware-rewrite` and `x-middleware-request-*` are how Next.js
+ * transports a rewrite target and mutated request headers out of
+ * middleware. Asserting on them is reaching into a transport detail, and
+ * it is the only way to observe this function's actual output without a
+ * running server — the e2e suite covers the same behavior end-to-end
+ * (`seo.spec.ts`: `<html lang>`, canonical, `og:locale`).
+ */
+describe("proxy — locale resolution", () => {
+    beforeEach(() => {
+        vi.stubEnv("DISABLE_RATE_LIMIT", "true");
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    function resolvedLocale(response: Response): string | null {
+        return response.headers.get("x-middleware-request-x-locale");
+    }
+
+    function rewriteTarget(response: Response): URL | null {
+        const value = response.headers.get("x-middleware-rewrite");
+        return value ? new URL(value, "http://localhost:3000") : null;
+    }
+
+    it("rewrites /ru/... to the unprefixed route and carries the locale IN THE URL", async () => {
+        const target = rewriteTarget(await proxy(makeRequest("/ru/journal/my-post")));
+
+        expect(target?.pathname).toBe("/journal/my-post");
+        // In the URL, not only in a header: a cache keys on the URL, so
+        // this is what makes the response a pure function of its address.
+        expect(target?.searchParams.get("__locale")).toBe("ru");
+    });
+
+    it("keeps the site root as / when rewriting /ru", async () => {
+        expect(rewriteTarget(await proxy(makeRequest("/ru")))?.pathname).toBe("/");
+    });
+
+    it("preserves a page's own query string across the rewrite", async () => {
+        const target = rewriteTarget(await proxy(makeRequest("/ru/work?tech=kotlin")));
+
+        expect(target?.searchParams.get("tech")).toBe("kotlin");
+        expect(target?.searchParams.get("__locale")).toBe("ru");
+    });
+
+    it("resolves \"ru\" on the SECOND pass, which sees the rewritten URL with no /ru prefix", async () => {
+        // The exact scenario that regressed: this is what Next.js hands
+        // back to the proxy after its own rewrite.
+        expect(resolvedLocale(await proxy(makeRequest("/journal/my-post?__locale=ru")))).toBe("ru");
+    });
+
+    it("resolves \"en\" for an ordinary unprefixed URL", async () => {
+        expect(resolvedLocale(await proxy(makeRequest("/journal/my-post")))).toBe("en");
+    });
+
+    /**
+     * Regression test for a real production outage (vercel/next.js#94745):
+     * behind nginx, an incoming request carries `X-Forwarded-Proto: https`
+     * even though this app's own server only ever speaks plain HTTP (TLS
+     * terminates at nginx) — `request.nextUrl.clone()` copies that "https"
+     * straight into the rewrite target, and Next.js's own loopback-hostname
+     * normalization bug then treats the rewrite as external and self-proxies
+     * it, attempting a real TLS handshake against the plain-HTTP port
+     * ("EPROTO ... wrong version number") and 500ing every single /ru
+     * request. Reproduced live against a real `next build && next start -H
+     * 127.0.0.1` with this exact spoofed header before being fixed by
+     * forcing the rewrite's own protocol to "http:" — see `handleLocale`'s
+     * comment. Every other test in this file constructs requests without
+     * `x-forwarded-proto`, so none of them would have caught this.
+     */
+    it("forces the rewrite target's protocol to http, even when the original request arrived over a forwarded https connection", async () => {
+        const target = rewriteTarget(
+            await proxy(makeRequest("/ru/journal/my-post", { forwardedProto: "https" })),
+        );
+
+        expect(target?.protocol).toBe("http:");
+        expect(target?.pathname).toBe("/journal/my-post");
+    });
+
+    it("IGNORES a client-supplied x-locale header — it is an output of this function, never an input", async () => {
+        // Trusting it would be harmless while the app is served directly,
+        // and would become cache poisoning behind any shared cache: nginx
+        // and CDNs key on the URL alone, so one forged header could store
+        // a Russian response under the English URL for everyone.
+        const request = makeRequest("/journal/my-post");
+        request.headers.set("x-locale", "ru");
+
+        expect(resolvedLocale(await proxy(request))).toBe("en");
     });
 });

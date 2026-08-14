@@ -15,7 +15,7 @@ import type { CardProps } from "@/shared/ui/card/Card.types";
  */
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     function Card(
-        { variant = "filled", interactive = false, className, ...rest }: CardProps,
+        {variant = "filled", interactive = false, className, ...rest}: CardProps,
         ref: ForwardedRef<HTMLDivElement>,
     ) {
         const variantClasses = {
@@ -43,7 +43,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
                 "hover:bg-surface-raised",
                 "hover:border-border-highlight",
                 "hover:shadow-soft-lg",
-                "hover:scale-press",
+                "hover:scale-highlight",
                 "focus-visible:outline-none",
                 "focus-visible:shadow-focus-ring",
             )
@@ -51,15 +51,15 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
 
         return (
             <div
-                ref={ref}
-                className={cn(
+                ref={ ref }
+                className={ cn(
                     "rounded-xl", // maps to radius token
                     "text-text-primary",
                     variantClasses,
                     interactiveClasses,
                     className,
-                )}
-                {...rest}
+                ) }
+                { ...rest }
             />
         );
     },

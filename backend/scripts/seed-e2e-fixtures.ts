@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { createPost, publishPost } from "../src/content/admin-posts";
-import { createWork, publishWork } from "../src/content/admin-work";
+import { createPost, publishPost, savePostDraft, translatePost } from "../src/content/admin-posts";
+import { createWork, publishWork, translateWork } from "../src/content/admin-work";
 import { resetTestDatabase } from "../src/test-utils/db";
 import { prisma } from "../src/db/client";
 
@@ -73,7 +73,7 @@ const FIXTURES = {
         withCaseStudy: {
             slug: "navigation-engine",
             title: "Navigation Engine (E2E fixture)",
-            year: 2025,
+            date: "2025-06-01",
             status: "shipped" as const,
             summary: "A fixture case study covering the hero-image + approach-steps-grid template variant.",
             stack: ["Kotlin", "Jetpack Compose"],
@@ -111,7 +111,7 @@ const FIXTURES = {
         secondCaseStudy: {
             slug: "onboarding-flow",
             title: "Onboarding Flow Redesign (E2E fixture)",
-            year: 2024,
+            date: "2024-05-01",
             status: "shipped" as const,
             summary: "A fixture case study covering the no-hero-image template variant.",
             stack: ["TypeScript", "React"],
@@ -137,7 +137,7 @@ const FIXTURES = {
         withoutCaseStudy: {
             slug: "internal-tooling",
             title: "Internal Tooling (E2E fixture)",
-            year: 2023,
+            date: "2023-01-01",
             status: "in-progress" as const,
             summary: "A fixture work item with no case study — exercises the hasCaseStudy: false filter.",
             stack: ["Python"],
@@ -197,6 +197,50 @@ const FIXTURES = {
     },
 };
 
+/**
+ * Russian versions for exactly ONE post and ONE work item, on purpose.
+ *
+ * Until these existed, every fixture title in this file was English, so the
+ * entire Russian branch — `availableLocales`, hreflang, and the canonical
+ * of an UNTRANSLATED Russian page pointing back at the English URL — had no
+ * e2e coverage at all: with everything translated (or nothing), whichever
+ * of the two canonical rules is wrong would still look right. Leaving
+ * `testing-culture` and `onboarding-flow` untranslated is what makes both
+ * branches live at once.
+ *
+ * The Cyrillic here is also what `og-image.spec.ts` needs: a broken font
+ * subset renders as "tofu" only when there are non-Latin glyphs to draw.
+ */
+/** The address `testing-culture` briefly lived at during seeding, purely so a redirect exists to test. */
+const RENAMED_FROM = { post: "testing-culture-draft" };
+
+const TRANSLATIONS = {
+    posts: {
+        flowbus: {
+            title: "Заметки о Flowbus (E2E-фикстура)",
+            category: "Архитектура",
+            excerpt: "Фикстурный пост, покрывающий вариант шаблона с блоком кода.",
+            blocks: [
+                { type: "lead" as const, text: "Фикстурный контент для e2e-набора, а не настоящий пост." },
+                { type: "paragraph" as const, text: "Этот пост существует, чтобы проверить отрисовку блока кода." },
+            ],
+        },
+    },
+    work: {
+        "navigation-engine": {
+            title: "Навигационный движок (E2E-фикстура)",
+            summary: "Фикстурный кейс: hero-изображение и сетка шагов подхода.",
+            startedLabel: "Янв 2025",
+            shippedLabel: "Июн 2025",
+            role: "Ведущий инженер",
+            blocks: [
+                { type: "lead" as const, text: "Как детерминированный движок навигации заменил стихийный роутинг." },
+                { type: "paragraph" as const, text: "Фикстурный контент для e2e-набора, а не настоящий кейс." },
+            ],
+        },
+    },
+};
+
 async function main(): Promise<void> {
     await resetTestDatabase();
 
@@ -224,7 +268,50 @@ async function main(): Promise<void> {
         await publishPost(post.slug);
     }
 
-    console.log("Seeded e2e fixtures: 3 work items (2 with a case study, 1 without), 3 posts (2 with a body, 1 without).");
+    // Creates a slug-history row WITHOUT changing the final fixture set:
+    // the post ends up at `testing-culture` either way, but
+    // `/journal/testing-culture-draft` now has to answer with a permanent
+    // redirect. `seo.spec.ts` asserts that, which is the only way to prove
+    // end-to-end that a rename doesn't throw away the old address (see
+    // backend/src/content/slug-history.ts).
+    //
+    // **Correction, 2026-08-09 (draft/publish split).** A slug rename now
+    // only reaches the live row — and therefore `SlugHistory` — through
+    // `publishPost`, never through a draft save alone (`savePostDraft`,
+    // the direct successor of what used to be `updatePost`'s content-write
+    // half — see content/README.md's dated entry). So each rename below is
+    // a `savePostDraft` (stages the new slug) followed immediately by a
+    // `publishPost` (actually applies it) — the SAME two-step dance the
+    // real admin editor's Publish/Update button performs, not a shortcut
+    // this script invented for itself.
+    await savePostDraft(FIXTURES.posts.secondPost.slug, {
+        ...FIXTURES.posts.secondPost,
+        slug: RENAMED_FROM.post,
+    });
+    await publishPost(FIXTURES.posts.secondPost.slug);
+    await savePostDraft(RENAMED_FROM.post, FIXTURES.posts.secondPost);
+    await publishPost(RENAMED_FROM.post);
+
+    // Same correction as the rename above: `translatePost`/`translateWork`
+    // only stage the Russian side in a draft now (see admin-posts.ts's
+    // `translatePost`) — without the `publishPost`/`publishWork` call
+    // right after, the translation would never actually reach the live
+    // row, and every e2e assertion that depends on a REAL Russian page
+    // existing (hreflang in `seo.spec.ts`, Cyrillic glyphs in
+    // `og-image.spec.ts`) would silently stop having anything to find.
+    for (const [slug, translation] of Object.entries(TRANSLATIONS.posts)) {
+        await translatePost(slug, translation);
+        await publishPost(slug);
+    }
+    for (const [slug, translation] of Object.entries(TRANSLATIONS.work)) {
+        await translateWork(slug, translation);
+        await publishWork(slug);
+    }
+
+    console.log(
+        "Seeded e2e fixtures: 3 work items (2 with a case study, 1 without), 3 posts (2 with a body, 1 without), " +
+        `1 post and 1 work item translated into Russian, 1 slug-history entry (/journal/${ RENAMED_FROM.post }).`,
+    );
 }
 
 main()

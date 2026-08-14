@@ -1,4 +1,8 @@
 import { StatusPage } from "@/shared/ui/status-page";
+import { NOINDEX } from "@/shared/lib/seo/noindex";
+
+/** Same reasoning as the root `not-found.tsx`'s — see its comment on the two contradicting directives. */
+export const metadata = NOINDEX;
 
 /**
  * Next.js's convention for this route segment — renders whenever

@@ -8,13 +8,17 @@ import { Text } from "@/shared/ui/text";
 import { cn } from "@/shared/lib/utils";
 
 export interface AdminListItemProps {
-    /** Status/"Featured" pills — top-left. A post only ever has one (published/upcoming); a work item can have two (shipped/in-progress + Featured) — hence a slot, not a single `status` prop. */
+    /** Status/"Featured" pills, and any category/stack chips (e.g. `<TagList maxVisible={3}/>`) — top-left, one wrapping row. A post only ever has one status pill (published/upcoming); a work item can have two (shipped/in-progress + Featured) — hence a slot, not a single `status` prop. */
     badges: React.ReactNode;
     /** Short, single-line meta — top-right, opposite the badges. A formatted date for a post, the year for a work item. */
     meta: React.ReactNode;
     title: string;
     /** Optional — the slug row is only rendered when this is non-empty, so a future "actually, drop the slug" decision is a one-line call-site change, not a component edit. */
     slug?: string;
+    /** A small cover thumbnail — leading column, added 2026-08-11 (Work Item Covers & Unified Identity Hue) once BOTH `Post` and `Work` had a real generated cover worth previewing in the list, not just on the public site. Optional so a caller that has no cover concept at all (or hasn't wired one up yet) doesn't have to pass anything. */
+    thumbnail?: React.ReactNode;
+    /** A small "linked to X" indicator (typically a `CompactRelatedLink`) — rendered below the slug, added alongside `thumbnail`. Only meaningful when the record actually has a cross-link (`Post.relatedWorkSlug`/`Work.relatedPostSlug`) — the caller decides whether to pass it at all. */
+    related?: React.ReactNode;
     editHref: string;
     onDelete: () => void;
     deleting?: boolean;
@@ -42,23 +46,27 @@ export interface AdminListItemProps {
  * row, not a footer row) — they're actions on THIS record, and the title
  * is the one line that most obviously identifies which record that is.
  */
-export function AdminListItem({ badges, meta, title, slug, editHref, onDelete, deleting }: AdminListItemProps) {
+export function AdminListItem({ badges, meta, title, slug, thumbnail, related, editHref, onDelete, deleting }: AdminListItemProps) {
     return (
-        <Card variant="outlined" className="p-md flex flex-col gap-sm">
-            <div className="flex items-center justify-between gap-sm">
-                <div className="flex items-center gap-xs flex-wrap min-w-0">{badges}</div>
-                <Text variant="caption" tone="faint" className="font-mono whitespace-nowrap shrink-0">{meta}</Text>
-            </div>
-
-            <div className="flex items-start justify-between gap-md">
-                <Text variant="body" className="font-medium line-clamp-3 min-w-0">{title}</Text>
-                <div className="flex items-center gap-xs shrink-0">
-                    <RevealAction as="link" href={editHref} label="Edit" icon={<Pencil className="w-4 h-4" aria-hidden="true" />} />
-                    <RevealAction as="button" onClick={onDelete} loading={deleting} label="Delete" tone="danger" icon={<Trash2 className="w-4 h-4" aria-hidden="true" />} />
+        <Card variant="outlined" className="p-md flex gap-md">
+            {thumbnail && <div className="shrink-0">{thumbnail}</div>}
+            <div className="flex-1 flex flex-col gap-sm min-w-0">
+                <div className="flex items-center justify-between gap-sm">
+                    <div className="flex items-center gap-xs flex-wrap min-w-0">{badges}</div>
+                    <Text variant="caption" tone="faint" className="font-mono whitespace-nowrap shrink-0">{meta}</Text>
                 </div>
-            </div>
 
-            {slug && <Text variant="caption" tone="faint" className="font-mono truncate">{slug}</Text>}
+                <div className="flex items-start justify-between gap-md">
+                    <Text variant="body" className="font-medium line-clamp-3 min-w-0">{title}</Text>
+                    <div className="flex items-center gap-xs shrink-0">
+                        <RevealAction as="link" href={editHref} label="Edit" icon={<Pencil className="w-4 h-4" aria-hidden="true" />} />
+                        <RevealAction as="button" onClick={onDelete} loading={deleting} label="Delete" tone="danger" icon={<Trash2 className="w-4 h-4" aria-hidden="true" />} />
+                    </div>
+                </div>
+
+                {slug && <Text variant="caption" tone="faint" className="font-mono truncate">{slug}</Text>}
+                {related && <div>{related}</div>}
+            </div>
         </Card>
     );
 }

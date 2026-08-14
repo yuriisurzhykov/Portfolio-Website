@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hero Graph Playground — Project Network Spike</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+    :root {
+        --bg: #0b0b0d;
+        --panel: #16161a;
+        --border: rgba(255,255,255,.1);
+        --text: #f5f3f0;
+        --text2: #b3b0ab;
+        --accent: #e8743a;
+        --accent-rgb: 232,116,58;
+        font-family: 'Inter', system-ui, sans-serif;
+        /*
+         * Live-tunable glass params — defaults here match the sliders'
+         * `value` attributes below, so the page looks identical whether
+         * JS has run yet or not. Kept as plain unitless numbers (not e.g.
+         * "1.6") where they're used as an rgba() alpha or a filter-function
+         * argument, since calc()/var() substitution needs a bare number
+         * there, not a pre-built function call.
+         */
+        --glass-blur: 1.5px;
+        --glass-fallback-blur: 6px;
+        --glass-saturate: 1.4;
+        --glass-brightness: 1.18;
+        --glass-highlight: .16;
+        --glass-tint: .18;
+        --glass-border: .24;
+        --glass-glow: .3;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+
+    /*
+     * A sparse dot grid gives backdrop-filter almost nothing to bend — blur
+     * a near-blank background and it's still near-blank, no matter how
+     * strong the displacement is. Added a real line grid underneath the
+     * dots specifically so refraction has something visible to warp: drag
+     * a node over these lines and watch them curve inside it — that's the
+     * actual proof the shader is doing anything, independent of how the
+     * final "look" gets tuned.
+     */
+    #stage {
+        flex: 1; position: relative; overflow: hidden;
+        background-color: #0a0a0c;
+        background-image:
+            linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px),
+            radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px);
+        background-size: 60px 60px, 60px 60px, 26px 26px;
+    }
+    #edgesSvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .edge { stroke: var(--accent); stroke-width: 1.2px; stroke-opacity: .22; fill: none; transition: stroke-opacity .2s ease, stroke-width .2s ease; }
+    .edge.highlighted { stroke-opacity: .9; stroke-width: 2.4px; }
+    #edgesSvg.hovering .edge:not(.highlighted) { stroke-opacity: .04; }
+
+    #nodesLayer { position: absolute; inset: 0; }
+    .node { position: absolute; left: 0; top: 0; cursor: grab; will-change: transform; }
+    .node.dragging { cursor: grabbing; z-index: 5; }
+    .node-glass {
+        position: absolute; inset: 0; border-radius: 50%;
+        background:
+            radial-gradient(circle at 32% 28%, rgba(255,255,255,var(--glass-highlight)), rgba(255,255,255,calc(var(--glass-highlight) * .15)) 42%, transparent 70%),
+            radial-gradient(circle at 68% 78%, rgba(var(--accent-rgb),var(--glass-tint)) 0%, rgba(var(--accent-rgb),calc(var(--glass-tint) * .25)) 55%, transparent 75%);
+        border: 1px solid rgba(255,255,255,var(--glass-border));
+        box-shadow: 0 0 14px 2px rgba(var(--accent-rgb),var(--glass-glow)), inset 0 0 10px rgba(255,255,255,calc(var(--glass-glow) * .25));
+        transition: box-shadow .25s ease, transform .25s ease, opacity .2s ease;
+    }
+    /*
+     * Real refraction (pixels of whatever's behind the node actually
+     * bending), not just a blur — only Chromium supports an SVG filter
+     * (feDisplacementMap, defined in the hidden <svg> below) referenced
+     * from backdrop-filter. Two declarations of the SAME property in the
+     * SAME rule: if a browser can't parse the second (the url() one), it
+     * drops that whole declaration and keeps the first — Safari/Firefox
+     * end up with plain frosted blur, Chromium gets the actual lens bend.
+     * No @supports needed; this is the standard documented fallback for
+     * this exact technique (confirmed against multiple independent 2026
+     * writeups before using it here — Safari has historically accepted the
+     * url() syntax without erroring while still silently not applying it,
+     * which this pattern tolerates either way).
+     * 4 variants (different feTurbulence seeds) so nodes don't all look
+     * like the exact same stamped sphere.
+     */
+    .node-glass.v0 { backdrop-filter: blur(var(--glass-fallback-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); backdrop-filter: blur(var(--glass-blur)) url(#glass-lens-0) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); }
+    .node-glass.v1 { backdrop-filter: blur(var(--glass-fallback-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); backdrop-filter: blur(var(--glass-blur)) url(#glass-lens-1) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); }
+    .node-glass.v2 { backdrop-filter: blur(var(--glass-fallback-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); backdrop-filter: blur(var(--glass-blur)) url(#glass-lens-2) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); }
+    .node-glass.v3 { backdrop-filter: blur(var(--glass-fallback-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); backdrop-filter: blur(var(--glass-blur)) url(#glass-lens-3) saturate(var(--glass-saturate)) brightness(var(--glass-brightness)); }
+    .node:hover .node-glass { box-shadow: 0 0 28px 8px rgba(var(--accent-rgb),calc(var(--glass-glow) * 1.8)), inset 0 0 12px rgba(255,255,255,calc(var(--glass-glow) * .45)); transform: scale(1.08); }
+    .node.dragging .node-glass { box-shadow: 0 0 32px 10px rgba(var(--accent-rgb),calc(var(--glass-glow) * 2.1)), inset 0 0 12px rgba(255,255,255,calc(var(--glass-glow) * .5)); }
+    .node.dimmed .node-glass { opacity: .3; }
+    .node-label {
+        position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 7px;
+        white-space: nowrap; pointer-events: none; font: 500 10.5px 'JetBrains Mono', monospace;
+        color: var(--text2); text-shadow: 0 1px 3px rgba(0,0,0,.7); transition: opacity .2s ease;
+    }
+    .node.dimmed .node-label { opacity: .3; }
+
+    #panel { width: 380px; min-width: 380px; background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 20px; }
+    h1 { font-size: 16px; margin: 0 0 4px; }
+    .subtitle { font-size: 12px; color: var(--text2); margin: 0 0 18px; line-height: 1.55; }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 12px; }
+    legend { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); padding: 0 6px; }
+    label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text2); margin: 7px 0; }
+    label span.val { font-family: 'JetBrains Mono', monospace; color: var(--text); min-width: 34px; text-align: right; font-size: 11px; }
+    input[type=range] { flex: 1; accent-color: var(--accent); }
+    input[type=text] { background: #0e0e10; border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px; width: 100%; }
+    .row { display: flex; flex-direction: column; margin: 8px 0; gap: 4px; }
+    .row-label { font-size: 12px; color: var(--text2); }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); margin: 2px 0 8px; font-weight: 600; }
+    .checkbox-row input { width: 16px; height: 16px; accent-color: var(--accent); }
+    button { background: var(--accent); color: #0b0b0d; border: none; border-radius: 6px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; width: 100%; }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); margin-top: 6px; }
+    button:hover { opacity: .88; }
+    .stats { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text2); background: #0e0e10; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin: 6px 0 0; line-height: 1.6; }
+
+    .project-item { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+    .project-item:last-child { border-bottom: none; }
+    .project-item .name { flex: 1; font-size: 12.5px; }
+    .project-item .tags { font-size: 10px; color: var(--text2); display: block; margin-top: 2px; }
+    .project-item button.remove { width: auto; background: transparent; color: var(--text2); border: 1px solid var(--border); padding: 3px 8px; font-size: 14px; line-height: 1; }
+    .project-item button.remove:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
+</style>
+</head>
+<body>
+
+<!--
+    Hidden once, referenced by every node's `backdrop-filter: url(#glass-lens-N)`
+    (see the .node-glass.vN rules above). feTurbulence generates procedural
+    noise; feGaussianBlur softens it so the displacement reads as a gentle
+    lens bend instead of static/jitter; feDisplacementMap uses that noise's
+    red/green channels to actually push the backdrop's pixels around per
+    point — that per-pixel push is the "shader" part CSS alone can't do.
+-->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+        <filter id="glass-lens-0" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.05 0.05" numOctaves="2" seed="3" result="noise"/>
+            <feGaussianBlur in="noise" stdDeviation="2.5" result="softNoise"/>
+            <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="16" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="glass-lens-1" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.055 0.045" numOctaves="2" seed="11" result="noise"/>
+            <feGaussianBlur in="noise" stdDeviation="2.5" result="softNoise"/>
+            <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="18" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="glass-lens-2" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.045 0.06" numOctaves="2" seed="27" result="noise"/>
+            <feGaussianBlur in="noise" stdDeviation="2.5" result="softNoise"/>
+            <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="14" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="glass-lens-3" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.06 0.05" numOctaves="2" seed="42" result="noise"/>
+            <feGaussianBlur in="noise" stdDeviation="2.5" result="softNoise"/>
+            <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="20" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+    </defs>
+</svg>
+
+<div id="stage">
+    <svg id="edgesSvg"></svg>
+    <div id="nodesLayer"></div>
+</div>
+
+<div id="panel">
+    <h1>Hero Graph Playground</h1>
+    <p class="subtitle">
+        Каждый узел — проект. Связь между двумя узлами появляется, если у их
+        <code>stack</code>-тегов достаточно пересечения (индекс Жаккара) —
+        не случайные линии, а то же поле, что уже рисует <code>TagList</code>
+        на реальном сайте. Размер узла = сколько у него связей. Наведи на
+        узел, чтобы увидеть только его связи; потяни узел мышью; добавь свой
+        проект ниже и смотри, как граф пересобирается вживую.
+    </p>
+
+    <fieldset>
+        <legend>Graph settings</legend>
+        <label>Similarity threshold <input type="range" id="threshold" min="0" max="0.6" step="0.02" value="0.15"><span class="val" id="thresholdVal">0.15</span></label>
+        <div class="checkbox-row"><input type="checkbox" id="floatToggle" checked><label style="margin:0" for="floatToggle">Idle floating (off if OS reduced-motion is set)</label></div>
+        <div class="stats" id="statsOut">—</div>
+        <button type="button" class="secondary" id="btnReset">Reset to default 6 projects</button>
+    </fieldset>
+
+    <fieldset>
+        <legend>Glass tuning</legend>
+        <div class="row-label" style="margin-bottom:2px">Distortion (Chromium only — the SVG shader itself)</div>
+        <label>Displacement scale <input type="range" id="glassScale" min="0" max="60" step="1" value="26"><span class="val" id="glassScaleVal"></span></label>
+        <label>Turbulence frequency <input type="range" id="glassFreq" min="0.01" max="0.15" step="0.005" value="0.03"><span class="val" id="glassFreqVal"></span></label>
+        <label>Turbulence octaves <input type="range" id="glassOctaves" min="1" max="4" step="1" value="2"><span class="val" id="glassOctavesVal"></span></label>
+        <label>Noise softening <input type="range" id="glassSoften" min="0" max="8" step="0.5" value="2.5"><span class="val" id="glassSoftenVal"></span></label>
+        <label>Backdrop blur (Chromium) <input type="range" id="glassBlur" min="0" max="8" step="0.5" value="1.5"><span class="val" id="glassBlurVal"></span></label>
+        <label>Fallback blur (Safari/Firefox) <input type="range" id="glassFallbackBlur" min="0" max="16" step="0.5" value="6"><span class="val" id="glassFallbackBlurVal"></span></label>
+        <div class="row-label" style="margin:8px 0 2px">Look (applies everywhere)</div>
+        <label>Saturate <input type="range" id="glassSaturate" min="1" max="2.5" step="0.05" value="1.4"><span class="val" id="glassSaturateVal"></span></label>
+        <label>Brightness <input type="range" id="glassBrightness" min="0.8" max="1.4" step="0.02" value="1.18"><span class="val" id="glassBrightnessVal"></span></label>
+        <label>Highlight opacity <input type="range" id="glassHighlight" min="0" max="0.7" step="0.02" value="0.16"><span class="val" id="glassHighlightVal"></span></label>
+        <label>Accent tint opacity <input type="range" id="glassTint" min="0" max="0.7" step="0.02" value="0.18"><span class="val" id="glassTintVal"></span></label>
+        <label>Border opacity <input type="range" id="glassBorder" min="0" max="0.6" step="0.02" value="0.24"><span class="val" id="glassBorderVal"></span></label>
+        <label>Glow strength <input type="range" id="glassGlow" min="0" max="1" step="0.02" value="0.3"><span class="val" id="glassGlowVal"></span></label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Add project</legend>
+        <form id="addForm">
+            <div class="row"><div class="row-label">Name</div><input type="text" id="newName" placeholder="e.g. Sensor Fusion SDK" required></div>
+            <div class="row"><div class="row-label">Tags (comma-separated)</div><input type="text" id="newTags" placeholder="Kotlin, C++/NDK, Sensors" required></div>
+            <button type="submit">+ Add project</button>
+        </form>
+    </fieldset>
+
+    <fieldset>
+        <legend>Projects</legend>
+        <div id="projectList"></div>
+    </fieldset>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Mock data — same shape SelectedWork already fetches (name + stack tags),
+// pre-seeded so the default graph shows a realistic cluster rather than a
+// random scatter (Kotlin ties 4 of these together, C++/NDK ties 3, etc).
+// ---------------------------------------------------------------------------
+let nextId = 0;
+function project(name, tags, pos) {
+    const p = { id: `p${nextId++}`, name, tags };
+    if (pos) { p.x = pos.x; p.y = pos.y; }
+    return p;
+}
+function defaultProjects() {
+    nextId = 0;
+    return [
+        project("ONVIF Camera Streaming Library", ["Kotlin", "C++/NDK", "ONVIF", "Networking"]),
+        project("RTSP, RTP & SDP Deep Dive", ["C++/NDK", "Networking", "Video", "Streaming"]),
+        project("Room Migration Instruction", ["Gradle", "Android Room", "Kotlin"]),
+        project("FlowBus Event Bus", ["Kotlin", "Architecture", "Coroutines"]),
+        project("Camera Discovery Pipeline", ["ONVIF", "Networking", "Kotlin"]),
+        project("OEM Navigation Engine", ["C++/NDK", "Architecture", "Automotive"]),
+    ];
+}
+let nodes = defaultProjects();
+
+// ---------------------------------------------------------------------------
+// "Real relationship" = Jaccard similarity of two projects' tag sets — the
+// exact `stack` data `TagList` already renders on the live cards, not a
+// new field. Edges below `threshold` simply aren't drawn, so the graph
+// doesn't turn into an unreadable hairball as more projects get added.
+// ---------------------------------------------------------------------------
+function jaccard(tagsA, tagsB) {
+    const a = new Set(tagsA.map((t) => t.toLowerCase()));
+    const b = new Set(tagsB.map((t) => t.toLowerCase()));
+    let intersection = 0;
+    for (const t of a) if (b.has(t)) intersection++;
+    const union = a.size + b.size - intersection;
+    return union === 0 ? 0 : intersection / union;
+}
+function computeEdges(list, threshold) {
+    const edges = [];
+    for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+            const similarity = jaccard(list[i].tags, list[j].tags);
+            if (similarity >= threshold) {
+                edges.push({ key: `${list[i].id}::${list[j].id}`, source: list[i].id, target: list[j].id, similarity });
+            }
+        }
+    }
+    return edges;
+}
+
+// ---------------------------------------------------------------------------
+// Layout — a real force simulation (d3-force), not a one-off scatter. Nodes
+// with more/stronger connections settle near their cluster's center; a
+// custom "bounds" force keeps everything inside the visible stage, since
+// d3-force has no concept of a viewport on its own.
+// ---------------------------------------------------------------------------
+const stageEl = document.getElementById("stage");
+const svg = d3.select("#edgesSvg");
+const nodesLayer = d3.select("#nodesLayer");
+let width = stageEl.clientWidth;
+let height = stageEl.clientHeight;
+
+function boundsForce(padding) {
+    let nodesRef;
+    function force() {
+        for (const n of nodesRef) {
+            const r = n.r ?? 24;
+            n.x = Math.max(padding + r, Math.min(width - padding - r, n.x));
+            n.y = Math.max(padding + r, Math.min(height - padding - r, n.y));
+        }
+    }
+    force.initialize = (ns) => { nodesRef = ns; };
+    return force;
+}
+
+const simulation = d3.forceSimulation()
+    .force("link", d3.forceLink().id((d) => d.id).distance((d) => 160 - d.similarity * 90).strength((d) => 0.15 + d.similarity * 0.5))
+    .force("charge", d3.forceManyBody().strength(-220))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collide", d3.forceCollide((d) => (d.r ?? 24) + 10))
+    .force("bounds", boundsForce(24))
+    .on("tick", renderPositions);
+
+const dragBehavior = d3.drag()
+    .on("start", function (event, d) {
+        d.fx = d.x; d.fy = d.y;
+        simulation.alphaTarget(0.3).restart();
+        d3.select(this).classed("dragging", true);
+    })
+    .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+    .on("end", function (event, d) {
+        d.fx = null; d.fy = null;
+        simulation.alphaTarget(0);
+        d3.select(this).classed("dragging", false);
+    });
+
+let hoveredId = null;
+let adjacency = new Map();
+let nodeSelection, edgeSelection;
+
+function rebuildAdjacency(edges) {
+    adjacency = new Map(nodes.map((n) => [n.id, new Set()]));
+    for (const e of edges) {
+        adjacency.get(e.source)?.add(e.target);
+        adjacency.get(e.target)?.add(e.source);
+    }
+}
+function radiusFor(node) {
+    const connections = adjacency.get(node.id)?.size ?? 0;
+    return Math.min(46, 20 + connections * 5);
+}
+
+function updateGraph() {
+    const threshold = parseFloat(document.getElementById("threshold").value);
+    const edges = computeEdges(nodes, threshold);
+    rebuildAdjacency(edges);
+    nodes.forEach((n) => { n.r = radiusFor(n); });
+
+    simulation.nodes(nodes);
+    simulation.force("link").links(edges);
+    simulation.alpha(1).restart();
+
+    edgeSelection = svg.selectAll("line.edge")
+        .data(edges, (d) => d.key)
+        .join(
+            (enter) => enter.append("line").attr("class", "edge").attr("opacity", 0)
+                .call((e) => e.transition().duration(300).attr("opacity", 1)),
+            (update) => update,
+            (exit) => exit.transition().duration(200).attr("opacity", 0).remove(),
+        );
+
+    nodeSelection = nodesLayer.selectAll(".node")
+        .data(nodes, (d) => d.id)
+        .join(
+            (enter) => {
+                const el = enter.append("div").attr("class", "node").style("opacity", 0)
+                    .style("width", (d) => `${d.r * 2}px`).style("height", (d) => `${d.r * 2}px`);
+                el.append("div").attr("class", (d) => `node-glass v${hashSeed(d.id) % 4}`);
+                el.append("div").attr("class", "node-label").text((d) => d.name);
+                el.call(dragBehavior)
+                    .on("mouseenter", (_, d) => { hoveredId = d.id; refreshHighlight(); })
+                    .on("mouseleave", () => { hoveredId = null; refreshHighlight(); });
+                el.transition().duration(350).style("opacity", 1);
+                return el;
+            },
+            (update) => update.style("width", (d) => `${d.r * 2}px`).style("height", (d) => `${d.r * 2}px`),
+            (exit) => exit.transition().duration(250).style("opacity", 0).remove(),
+        );
+
+    refreshHighlight();
+    renderProjectList();
+    renderStats(edges);
+}
+
+function refreshHighlight() {
+    svg.classed("hovering", !!hoveredId);
+    edgeSelection?.classed("highlighted", (d) => !!hoveredId && (d.source.id ?? d.source) === hoveredId || !!hoveredId && (d.target.id ?? d.target) === hoveredId);
+    nodeSelection?.classed("dimmed", (d) => !!hoveredId && d.id !== hoveredId && !adjacency.get(hoveredId)?.has(d.id));
+}
+
+function renderPositions() {
+    edgeSelection?.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y)
+        .attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
+    nodeSelection?.style("transform", (d) => `translate(${d.x + floatOffset(d, "x") - d.r}px, ${d.y + floatOffset(d, "y") - d.r}px)`);
+}
+
+// ---------------------------------------------------------------------------
+// Idle floating — a visual-only offset layered on top of the simulation's
+// own x/y, so it never fights d3's physics (which stops ticking on its own
+// once alpha settles — this loop is what keeps the graph feeling "alive"
+// afterward). Fully skipped under prefers-reduced-motion, the same
+// convention the real site already uses (see TechStack.tsx's
+// motion-reduce: classes) rather than just slowing it down.
+// ---------------------------------------------------------------------------
+const reduceMotionPreferred = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let floatEnabled = !reduceMotionPreferred;
+document.getElementById("floatToggle").checked = floatEnabled;
+function hashSeed(id) { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+function floatOffset(d, axis) {
+    if (!floatEnabled) return 0;
+    const seed = hashSeed(d.id);
+    const t = performance.now() / 1000;
+    const freq = 0.25 + (seed % 10) / 40;
+    const phase = seed % 6.28;
+    const amplitude = 4;
+    return axis === "x" ? Math.sin(t * freq + phase) * amplitude : Math.cos(t * freq * 1.3 + phase) * amplitude;
+}
+(function floatLoop() {
+    if (floatEnabled && !document.hidden) renderPositions();
+    requestAnimationFrame(floatLoop);
+})();
+
+// ---------------------------------------------------------------------------
+// Glass tuning — the CSS-variable-backed properties (blur/saturate/
+// brightness/opacities) are set directly on :root, since regular CSS
+// properties accept var()/calc() substitution. The SVG shader's own
+// numbers (feTurbulence's frequency/octaves, feGaussianBlur's stdDeviation,
+// feDisplacementMap's scale) are NOT CSS properties — no var() applies to
+// them — so those are pushed via setAttribute on each of the 4 filters'
+// primitives instead. Each variant keeps its own small offset from the
+// slider's base value (same idea as before), so "add more distortion"
+// still keeps nodes visibly distinct from each other, not just louder
+// copies of one identical filter.
+// ---------------------------------------------------------------------------
+const glassVariants = [
+    { seed: 3, freqOffset: 0, scaleOffset: 0 },
+    { seed: 11, freqOffset: 0.006, scaleOffset: 2 },
+    { seed: 27, freqOffset: -0.006, scaleOffset: -2 },
+    { seed: 42, freqOffset: 0.012, scaleOffset: 4 },
+];
+const glassSliderIds = [
+    "glassScale", "glassFreq", "glassOctaves", "glassSoften", "glassBlur", "glassFallbackBlur",
+    "glassSaturate", "glassBrightness", "glassHighlight", "glassTint", "glassBorder", "glassGlow",
+];
+function applyGlassParams() {
+    const scale = parseFloat(document.getElementById("glassScale").value);
+    const freq = parseFloat(document.getElementById("glassFreq").value);
+    const octaves = document.getElementById("glassOctaves").value;
+    const soften = document.getElementById("glassSoften").value;
+
+    glassVariants.forEach((variant, i) => {
+        const filterEl = document.getElementById(`glass-lens-${i}`);
+        const f = Math.max(0.008, freq + variant.freqOffset).toFixed(3);
+        filterEl.querySelector("feTurbulence").setAttribute("baseFrequency", `${f} ${f}`);
+        filterEl.querySelector("feTurbulence").setAttribute("numOctaves", octaves);
+        filterEl.querySelector("feTurbulence").setAttribute("seed", variant.seed);
+        filterEl.querySelector("feGaussianBlur").setAttribute("stdDeviation", soften);
+        filterEl.querySelector("feDisplacementMap").setAttribute("scale", Math.max(0, scale + variant.scaleOffset));
+    });
+
+    const root = document.documentElement.style;
+    root.setProperty("--glass-blur", `${document.getElementById("glassBlur").value}px`);
+    root.setProperty("--glass-fallback-blur", `${document.getElementById("glassFallbackBlur").value}px`);
+    root.setProperty("--glass-saturate", document.getElementById("glassSaturate").value);
+    root.setProperty("--glass-brightness", document.getElementById("glassBrightness").value);
+    root.setProperty("--glass-highlight", document.getElementById("glassHighlight").value);
+    root.setProperty("--glass-tint", document.getElementById("glassTint").value);
+    root.setProperty("--glass-border", document.getElementById("glassBorder").value);
+    root.setProperty("--glass-glow", document.getElementById("glassGlow").value);
+}
+for (const id of glassSliderIds) {
+    document.getElementById(id).addEventListener("input", (event) => {
+        document.getElementById(`${id}Val`).textContent = event.target.value;
+        applyGlassParams();
+    });
+    document.getElementById(`${id}Val`).textContent = document.getElementById(id).value;
+}
+applyGlassParams();
+
+// ---------------------------------------------------------------------------
+// Side panel — project list, stats, and the add/remove mechanics the whole
+// spike is here to demonstrate.
+// ---------------------------------------------------------------------------
+function renderProjectList() {
+    const list = document.getElementById("projectList");
+    list.innerHTML = nodes.map((n) => `
+        <div class="project-item">
+            <div>
+                <div class="name">${n.name}</div>
+                <span class="tags">${n.tags.join(" · ")}</span>
+            </div>
+            <button class="remove" data-remove="${n.id}" title="Remove">×</button>
+        </div>
+    `).join("");
+}
+document.getElementById("projectList").addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-remove]");
+    if (!btn) return;
+    nodes = nodes.filter((n) => n.id !== btn.dataset.remove);
+    updateGraph();
+});
+
+function renderStats(edges) {
+    const avg = edges.length ? edges.reduce((sum, e) => sum + e.similarity, 0) / edges.length : 0;
+    document.getElementById("statsOut").textContent =
+        `${nodes.length} projects · ${edges.length} connections\navg similarity: ${avg.toFixed(2)}`;
+}
+
+document.getElementById("threshold").addEventListener("input", (event) => {
+    document.getElementById("thresholdVal").textContent = event.target.value;
+    updateGraph();
+});
+document.getElementById("floatToggle").addEventListener("change", (event) => {
+    floatEnabled = event.target.checked;
+});
+document.getElementById("btnReset").addEventListener("click", () => {
+    nodes = defaultProjects();
+    updateGraph();
+});
+document.getElementById("addForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = document.getElementById("newName").value.trim();
+    const tags = document.getElementById("newTags").value.split(",").map((t) => t.trim()).filter(Boolean);
+    if (!name || tags.length === 0) return;
+    nodes.push(project(name, tags, { x: width / 2 + (Math.random() - 0.5) * 60, y: height / 2 + (Math.random() - 0.5) * 60 }));
+    event.target.reset();
+    updateGraph();
+});
+window.addEventListener("resize", () => {
+    width = stageEl.clientWidth;
+    height = stageEl.clientHeight;
+    simulation.force("center", d3.forceCenter(width / 2, height / 2));
+    simulation.alpha(0.4).restart();
+});
+
+updateGraph();
+</script>
+</body>
+</html>

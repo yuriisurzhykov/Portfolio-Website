@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { ArrowRight, Code2, Database, Palette } from "lucide-react";
-import type { Block } from "@portfolio/backend";
+import type { Block, WorkSummary } from "@portfolio/backend";
+import { ProjectGraph } from "@/shared/ui/project-graph";
 
 import { Card } from "@/shared/ui/card";
 import { IconBadge } from "@/shared/ui/icon-badge";
@@ -20,9 +21,13 @@ import { CodeBlock, type CodeBlockLabels } from "@/shared/ui/code-block";
 import { Eyebrow } from "@/shared/ui/eyebrow";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { PlaceholderCover } from "@/shared/ui/placeholder-cover";
+import { CoverImage } from "@/shared/ui/cover-image";
 import { Markdown } from "@/shared/ui/markdown";
 import { Diagram } from "@/shared/ui/diagram";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
+import { TagList } from "@/shared/ui/tag-list";
+import { RelatedContentCallout, CompactRelatedLink } from "@/shared/ui/related-content-callout";
+import { WorkCoverImage } from "@/shared/ui/work-cover-image";
 import { useTranslation } from "@/shared/i18n";
 
 /**
@@ -58,6 +63,49 @@ const TECH_ICON_DEMO_REACT: TechIconView = {
 
 /** A deliberately simple, deterministic custom SVG for the `kind: "svg"` demo below — uses `fill="currentColor"` so it also demonstrates that a well-authored pasted SVG CAN pick up the accent hover color, unlike an arbitrary `kind: "url"` image. */
 const TECH_ICON_DEMO_SVG_MARKUP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>';
+
+/**
+ * 6 fixed items with deliberately overlapping `stack` tags (Kotlin ties
+ * 4 of these together, C++/NDK ties 3) — a real, checkable web of edges
+ * for the `ProjectGraph` demo below, not an arbitrary scatter. No random
+ * data, no timestamps: `component-gallery.spec.ts` screenshots this
+ * exact set every run, and `idleFloat={false}` (passed at the call site)
+ * keeps the WebGL animation itself from varying the captured frame.
+ */
+const PROJECT_GRAPH_DEMO_ITEMS: WorkSummary[] = [
+    "ONVIF Camera Streaming Library",
+    "RTSP, RTP & SDP Deep Dive",
+    "Room Migration Instruction",
+    "FlowBus Event Bus",
+    "Camera Discovery Pipeline",
+    "OEM Navigation Engine",
+].map((title, index) => {
+    const stacks = [
+        ["Kotlin", "C++/NDK", "ONVIF", "Networking"],
+        ["C++/NDK", "Networking", "Video", "Streaming"],
+        ["Gradle", "Android Room", "Kotlin"],
+        ["Kotlin", "Architecture", "Coroutines"],
+        ["ONVIF", "Networking", "Kotlin"],
+        ["C++/NDK", "Architecture", "Automotive"],
+    ];
+    return {
+        slug: `demo-project-${index}`,
+        title: { en: title, ru: title },
+        date: "2026-01-01",
+        status: index % 2 === 0 ? "shipped" : "in-progress",
+        summary: { en: "", ru: "" },
+        stack: stacks[index],
+        coverImage: null,
+        featured: true,
+        relatedPostSlug: null,
+        cover: null,
+        hasCaseStudy: false,
+        lifecycleState: "PUBLISHED",
+        publishedAt: null,
+        contentUpdatedAt: null,
+        availableLocales: ["en"],
+    };
+});
 
 const CONTENT_BLOCKS_DEMO: Block[] = [
     {
@@ -627,6 +675,27 @@ export function DesignSystemPlayground() {
                 />
             </section>
 
+            {/* SECTION: COVERIMAGE */}
+            <section className="space-y-md" data-component-id="cover-image">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    CoverImage
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Procedurally generated post cover: blur-up from an inline placeholder, explicit
+                    width/height, a two-width srcset, alt=&quot;&quot; (decorative). A fixed, checked-in
+                    sample asset — see <code>public/demo/</code> — so this demo never depends on a real
+                    generated cover existing.
+                </Text>
+                <CoverImage
+                    src="/demo/cover-sample-1200.webp"
+                    srcNarrow="/demo/cover-sample-640.webp"
+                    placeholder="data:image/webp;base64,UklGRqoAAABXRUJQVlA4WAoAAAAQAAAAFwAADAAAQUxQSDwAAAABfyAmTfqHlp1WiIiUAZoGQEIFaMBowIyAEZgJNAMNzOKMYgWNYAUjeEf0P6Nkr32ss++DL8xobpaEkBVWUDggSAAAAHADAJ0BKhgADQA+7WSpTamlpCIwCAEwHYliALsAHjbGOAWHAAD+gxbiBMjCM/UubyO360y5EatexlBmsgA3EYn1TD1H+AAAAA=="
+                    width={1200}
+                    height={630}
+                    className="w-full max-w-lg rounded-lg border border-border-subtle"
+                />
+            </section>
+
             {/* SECTION: MARKDOWN */}
             <section className="space-y-md" data-component-id="markdown">
                 <Text as="h2" variant="h2" className="font-semibold">
@@ -739,6 +808,134 @@ const unfold = (f, seed) => {
 }`}
                     </CodeBlock>
                 </Surface>
+            </section>
+
+            {/* SECTION: TAGLIST */}
+            <section className="space-y-md" data-component-id="tag-list">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    TagList
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Список текстовых тегов в двух состояниях: полный список (без
+                    <code>maxVisible</code>) и свёрнутый (с индикатором «+N» для остатка).
+                </Text>
+
+                <div className="space-y-md">
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            full
+                        </Text>
+                        <TagList items={["Kotlin", "Jetpack Compose", "Coroutines", "Room"]} />
+                    </div>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            collapsed (maxVisible=2)
+                        </Text>
+                        <TagList items={["Kotlin", "Jetpack Compose", "Coroutines", "Room"]} maxVisible={2} />
+                    </div>
+                </div>
+            </section>
+
+            {/* SECTION: RELATED CONTENT CALLOUT */}
+            <section className="space-y-md" data-component-id="related-content-callout">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    RelatedContentCallout
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Блок «связанный пост» / «связанный проект» — общий для
+                    JournalDetailPage и WorkDetailPage, вместо двух независимо
+                    выросших, но идентичных по разметке блоков.
+                </Text>
+                <RelatedContentCallout
+                    eyebrow="Related project"
+                    title="Dynamic Design System"
+                    body="A token-driven, multi-brand component library shipped across three products."
+                    href="#"
+                    buttonLabel="View case study"
+                />
+            </section>
+
+            {/* SECTION: COMPACT RELATED LINK */}
+            <section className="space-y-md" data-component-id="related-link">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    CompactRelatedLink
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Компактная ссылка с видимой подписью — для списков/ledger, где
+                    полноразмерный <code>RelatedContentCallout</code> был бы слишком тяжёлым.
+                </Text>
+                <CompactRelatedLink href="#" label="Related post" />
+            </section>
+
+            {/* SECTION: WORK COVER IMAGE */}
+            <section className="space-y-md" data-component-id="work-cover-image">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    WorkCoverImage
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Приоритет обложки Work-проекта: ручной override, иначе
+                    сгенерированная обложка, иначе декоративный плейсхолдер.
+                </Text>
+
+                <div className="grid gap-md" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            manual override (wins over a generated cover)
+                        </Text>
+                        <WorkCoverImage
+                            override="/demo/cover-sample-1200.webp"
+                            cover={null}
+                            alt="Sample project"
+                            label="sample project"
+                            className="h-[120px] rounded-lg border border-border-subtle"
+                        />
+                    </div>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            generated cover
+                        </Text>
+                        <WorkCoverImage
+                            override={null}
+                            cover={{
+                                src: "/demo/cover-sample-1200.webp",
+                                srcNarrow: "/demo/cover-sample-640.webp",
+                                placeholder: "data:image/webp;base64,UklGRqoAAABXRUJQVlA4WAoAAAAQAAAAFwAADAAAQUxQSDwAAAABfyAmTfqHlp1WiIiUAZoGQEIFaMBowIyAEZgJNAMNzOKMYgWNYAUjeEf0P6Nkr32ss++DL8xobpaEkBVWUDggSAAAAHADAJ0BKhgADQA+7WSpTamlpCIwCAEwHYliALsAHjbGOAWHAAD+gxbiBMjCM/UubyO360y5EatexlBmsgA3EYn1TD1H+AAAAA==",
+                                width: 1200,
+                                height: 630,
+                            }}
+                            alt="Sample project"
+                            label="sample project"
+                            className="h-[120px] rounded-lg border border-border-subtle"
+                        />
+                    </div>
+                    <div className="space-y-sm">
+                        <Text variant="micro" tone="muted">
+                            no cover at all
+                        </Text>
+                        <WorkCoverImage
+                            override={null}
+                            cover={null}
+                            alt="Sample project"
+                            label="sample project — cover image"
+                            className="h-[120px] rounded-lg border border-border-subtle"
+                        />
+                    </div>
+                </div>
+            </section>
+
+            {/* SECTION: PROJECT GRAPH */}
+            <section className="space-y-md" data-component-id="project-graph">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    ProjectGraph
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Граф связей между Work-проектами (Hero-секция лендинга) —
+                    рёбра рисуются только между проектами с достаточным
+                    пересечением тегов <code>stack</code>. WebGL-линза на
+                    каждом узле — настоящее двойное преломление, не
+                    декоративный блюр (см. <code>shared/ui/project-graph/README.md</code>).
+                </Text>
+                <ProjectGraph items={PROJECT_GRAPH_DEMO_ITEMS} idleFloat={false} className="h-[360px] rounded-lg border border-border-subtle" />
             </section>
         </div>
     );

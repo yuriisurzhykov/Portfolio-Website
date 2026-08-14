@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -84,6 +84,14 @@ jobs:
       base-dir: /srv/apps/yuriisoft-frontend-dev
       service-name: yuriisoft-frontend-dev.service
       deploy-tag: ${{ github.sha }}
+      # An explicit "false", not an omitted variable: site-url.ts treats
+      # anything other than the exact string "true" as noindex either way,
+      # but writing it down says this is a decision, not an oversight.
+      seo-indexable: "false"
+      # Set even though this target is noindex — without it `metadataBase`
+      # falls back to localhost and every canonical/OG URL rendered on dev
+      # becomes meaningless, which makes dev useless for checking them.
+      site-url: https://dev.yuriisoft.me
     secrets:
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_PORT: ${{ secrets.VPS_PORT }}
@@ -116,7 +124,7 @@ jobs:
         run: mv release.tar.gz "frontend-${{ github.ref_name }}.tar.gz"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: "frontend-${{ github.ref_name }}.tar.gz"
@@ -132,6 +140,13 @@ jobs:
       # github.ref_name IS the tag name for a tag push (v1.2.3) — no separate
       # "read version from tag" step needed, it was just re-deriving this.
       deploy-tag: ${{ github.ref_name }}
+      # THE one environment that gets indexed. Deploy publishes this to
+      # shared/.env before starting the new release, so it can no longer be
+      # forgotten — which matters because forgetting it is not a small
+      # mistake: indexing is opt-in, so an absent variable means the whole
+      # site serves `noindex` and Google starts dropping pages.
+      seo-indexable: "true"
+      site-url: https://yuriisoft.me
     secrets:
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_PORT: ${{ secrets.VPS_PORT }}
