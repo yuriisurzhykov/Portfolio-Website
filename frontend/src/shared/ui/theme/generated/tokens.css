@@ -146,6 +146,7 @@
     --ds-layout-reading-top-padding: clamp(3rem, 2.33rem + 3.33vw, 5rem);
     --ds-layout-navbar-height: 5rem;
     --ds-layout-hero-graph-height: 26.25rem;
+    --ds-layout-code-editor-min-height: 8rem;
     --ds-z-background: 0;
     --ds-z-content: 10;
     --ds-z-navbar: 20;

@@ -26,6 +26,14 @@ describe("no-raw-dimension-value", () => {
         expect(lint("const x = <div style={{ gap: `26px` }} />;")).toHaveLength(1);
     });
 
+    // A quoted key ("width") parses as a string Literal, unlike every test
+    // above (an unquoted key like `width:` parses as an Identifier) — the
+    // only shape that actually distinguishes propertyKeyName's two branches
+    // from each other rather than always taking the Identifier one.
+    it("flags a bare dimension literal even when its property key is quoted (a Literal node, not an Identifier)", () => {
+        expect(lint('const x = <div style={{ "width": "26px" }} />;')).toHaveLength(1);
+    });
+
     it("does NOT flag a calc()/clamp()/var() expression", () => {
         expect(lint('const x = <div style={{ width: "calc(100% - 2rem)" }} />;')).toHaveLength(0);
         expect(lint('const x = <div style={{ width: "var(--ds-dimension-md)" }} />;')).toHaveLength(0);

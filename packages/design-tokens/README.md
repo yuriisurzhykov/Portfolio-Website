@@ -238,6 +238,79 @@ ceremony. Removed both call-site guards entirely and added a real test — a
 radius-only project with no `color` category anywhere — proving a
 color-less project still compiles instead of crashing on either validator.
 
+## 2026-08-15 — DS001's dimension/typography side: `no-arbitrary-dimension-class`/`no-raw-dimension-value`, and why they end up flagging EVERY bare literal, no threshold
+
+Added as the dimension counterpart to the two existing color rules, during a
+repo-wide sweep replacing hardcoded `w-[26px]`-style Tailwind values and
+inline `style={{ width: "26px" }}` with real design tokens. Shares
+`ast-helpers.ts` (extracted from the two color rules for this) —
+`isClassNameAttribute`/`isStyleAttribute`/`propertyKeyName`/`walkForStrings`
+were duplicated inline in both before this, now a single copy all four rules
+import.
+
+**A `minPx` threshold option existed for one round-trip, then was removed
+entirely** — worth recording exactly why, since a smaller threshold-based
+design is the "obvious" first approach and this project's owner explicitly
+rejected it. The first version exempted a literal below a configurable floor
+(intended for a consuming project's own smallest primitive step, e.g. 4px)
+on the theory that a 2-3px pill/chip-boundary micro-adjustment is "too small
+to be a real token concern." Challenged directly: *"why wasn't `gap-[2px]`
+actually fixed instead of just exempted?"* — checking for real (not
+assuming) found that every one of those cases already had a real fix: this
+project's own `xxs` token (4px) or a plain Tailwind numeric utility
+(`gap-0.5`, `mt-px`) matched an EXISTING sibling component's already-migrated
+pattern exactly (see `frontend/src/shared/ui/theme/README.md`'s 2026-08-15
+entry). Once that was true for every case in this codebase, the `minPx`
+option had no reason to exist — a threshold is only justified by a value
+that genuinely has no real alternative, and none did. Both rules now report
+every bare literal unconditionally; the schema is `[]`.
+
+**Same reasoning killed the `vh`/`vw`/`vmin`/`vmax` exemption**, added in
+the same round for "relative to the viewport, not a fixed-scale concern."
+The project owner's actual position, stated directly: *"in any component we
+must use tokens — ours, or Tailwind's own built-ins. Any other value is a
+mistake."* No unit gets a free pass just because it isn't px/rem/em/%. In
+practice this didn't even cost a new token: `StatusPage.tsx`'s one real
+`min-h-[60vh]` case turned out to have a genuine structural fix (the
+ancestor layout already provides a `flex`/`flex-1` chain in every context it
+renders in — see the same theme README entry), not a value to grandfather
+in. `ch` remains the one still-exempt unit — a character-based line-length
+tied to font metrics, not a fixed-scale spacing/sizing concern the way `vh`
+turned out to be once actually checked.
+
+**Mutation testing, added to this package's scope alongside the two new
+rule files:** `ast-helpers.ts` had never been in `stryker.config.mjs`'s
+`mutate` list (only the two rules that originally contained its logic
+inline were) — adding it surfaced 15 real no-coverage mutants that predate
+this session's dimension work, not new bugs. Two categories, both fixed with
+a real test (not a suppression, since both are genuinely-unspecified real
+`walkForStrings`/`propertyKeyName` shapes, not equivalent code):
+- The existing `&&` test asserted on `active && "text-primary"` — a value
+  that never matches the dimension regex either way, so it never actually
+  proved `LogicalExpression` gets walked at all (the exact "weak assertion
+  passes regardless of the mutant" pattern this repo's mutation-testing rule
+  warns about). Fixed by using a real dimension-bearing literal on the
+  walked branch, and added the three still-untested `walkForStrings` shapes
+  real component code in this repo actually uses: an array argument to
+  `cn()`, a clsx-style conditional object (`cn({ "gap-[2px]": active })`),
+  and a template literal directly in `className` (not just inline `style`,
+  already covered there).
+- `propertyKeyName`'s `Identifier` vs `Literal` branches were only ever
+  exercised by unquoted style keys (`{ width: "26px" }` parses as
+  `Identifier`) — every existing test used that shape, so a mutant
+  collapsing the `if (key.type === "Identifier")` guard to `if (true)`
+  changed nothing observable. Added one test with a quoted key
+  (`{ "width": "26px" }`, a `Literal` node) to actually distinguish the two
+  branches.
+
+Score after: 75.65% (up from the prior 73.54% baseline before this session's
+dimension work — `ast-helpers.ts` alone went 51.52% → 77.27%). `break`
+stays at 70 (see `stryker.config.mjs`) — comfortable headroom, same
+reasoning as the prior baseline entries: not chasing the remaining
+no-coverage mutants (mostly string-literal error-message text and
+defensive `[]`/`{}` initializers in the two rule files themselves) further
+right now, a documented v1 scope limit rather than an oversight.
+
 ## How to use this in a NEW project
 
 1. Add this package as a workspace dependency (see `frontend/package.json`'s

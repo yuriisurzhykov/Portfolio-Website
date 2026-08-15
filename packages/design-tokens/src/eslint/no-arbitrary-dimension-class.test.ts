@@ -69,6 +69,23 @@ describe("no-arbitrary-dimension-class", () => {
         expect(lint('const x = <div className={active ? "gap-[2px]" : "gap-sm"} />;')).toHaveLength(1);
     });
 
+    // Each of these puts the dimension-bearing literal on the branch that
+    // ONLY that AST shape's own case in walkForStrings visits — unlike the
+    // `&&` test above (whose right side, "text-primary", never matches the
+    // dimension regex regardless of whether LogicalExpression is even
+    // walked), a mutant that deletes/breaks the case here changes the
+    // reported count, not just an unrelated string's fate.
+    it("walks every remaining AST shape walkForStrings supports: && (real match on the right), array, object-key (clsx form), and template literal", () => {
+        expect(lint('const x = <div className={active && "gap-[2px]"} />;')).toHaveLength(1);
+        expect(lint('const x = <div className={cn(["w-[26px]", "p-md"])} />;')).toHaveLength(1);
+        expect(lint('const x = <div className={cn({ "gap-[2px]": active, "p-md": true })} />;')).toHaveLength(1);
+        expect(lint('const x = <div className={`gap-[2px] ${extra}`} />;')).toHaveLength(1);
+    });
+
+    it("does not crash and does not false-match on a clsx object keyed by a plain identifier shorthand", () => {
+        expect(lint('const x = <div className={cn({ [dynamicKey]: active })} />;')).toHaveLength(0);
+    });
+
     it("ignores a non-className attribute even with the same-looking string", () => {
         expect(lint('const x = <div data-token="w-[26px]" />;')).toHaveLength(0);
     });

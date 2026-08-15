@@ -920,7 +920,7 @@ const unfold = (f, seed) => {
                             cover={null}
                             alt="Sample project"
                             label="sample project"
-                            className="h-[120px] rounded-lg border border-border-subtle"
+                            className="h-30 rounded-lg border border-border-subtle"
                         />
                     </div>
                     <div className="space-y-sm">

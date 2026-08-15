@@ -41,4 +41,13 @@ export const layout = definePrimitives({
     // A one-off structural constant, same category as navbarHeight above —
     // not a spacing/padding value, so it doesn't belong in `tokens/dimension.ts`.
     heroGraphHeight: "26.25rem",    // 420px  (Hero's ProjectGraph decoration)
+    // `DiagramBlock.tsx`'s source-code `<Editor>` (react-simple-code-editor)
+    // only accepts a `style` prop, no `className` — so this can't use
+    // Tailwind's built-in numeric spacing scale (`min-h-32`) the way every
+    // other single-use dimension in this migration did; referenced via
+    // `var(--ds-layout-code-editor-min-height)` directly in inline style
+    // instead. No existing dimension step is close enough to substitute
+    // (6xl is 96px, 32px short of the 128px an editor needs to show a
+    // handful of real diagram-source lines without feeling cramped).
+    codeEditorMinHeight: "8rem",    // 128px
 });

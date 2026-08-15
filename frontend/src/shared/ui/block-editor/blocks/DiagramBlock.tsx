@@ -121,7 +121,7 @@ export const DiagramBlock = createReactBlockSpec(
                                 highlight={ (code) => highlightSource(code, engine) }
                                 padding={ 12 }
                                 placeholder="Diagram source…"
-                                style={ { minHeight: "8rem" } }
+                                style={ { minHeight: "var(--ds-layout-code-editor-min-height)" } }
                             />
                         </div>
                     ) : source ? (
