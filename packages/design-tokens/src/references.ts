@@ -103,7 +103,10 @@ export function resolveString(value: string, registry: Registry, seen: ReadonlyS
     return value.replace(TOKEN_REFERENCE, (_match, path: string) => resolveReference(path, registry, seen));
 }
 
-/** Recursively resolves every scalar string in a tree; numbers pass through untouched. Authoring tags (`__kind`, `__namespace`, ...) are dropped — they're metadata for the compiler, never a CSS value. */
+/**
+ * Recursively resolves every scalar string in a tree; numbers pass through untouched. Authoring tags
+ * (`__kind`, `__namespace`, ...) are dropped — they're metadata for the compiler, never a CSS value.
+ * */
 export function resolveTree<T extends TokenTree>(tree: T, registry: Registry): T {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(tree)) {

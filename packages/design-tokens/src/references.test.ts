@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collectReferences, getByPath, resolveString, resolveTree, TokenReferenceError } from "./references";
+import type { TokenTree } from "./types";
 
 describe("getByPath", () => {
     it("resolves a nested dotted path", () => {
@@ -117,9 +118,17 @@ describe("resolveTree", () => {
 
     // Neither a string, a number, an array, nor a plain object — the final
     // `else` branch (a boolean/null leaf) had zero coverage before this.
+    // `TokenTree` itself doesn't admit boolean/null leaves (only
+    // `ScalarToken | TokenTree | readonly unknown[]`), so this needs a cast
+    // to even construct — but the runtime shape is real, not contrived: a
+    // shadow composite's `ShadowLayer.inset?: boolean` flows through this
+    // exact function via `serializeCompositesFor`'s `resolveTree(composite, ...)`
+    // call on the whole layer tree, a real gap between this type and what
+    // it's actually called with elsewhere in the package.
     it("passes a boolean/null leaf through untouched, the final else branch", () => {
         const registry = {};
-        expect(resolveTree({ inset: true, missing: null }, registry)).toEqual({ inset: true, missing: null });
+        const tree = { inset: true, missing: null } as unknown as TokenTree;
+        expect(resolveTree(tree, registry)).toEqual({ inset: true, missing: null });
     });
 });
 
