@@ -68,10 +68,31 @@ describe("validateGradientStops", () => {
         ).toThrow(/out-of-order stops/);
     });
 
-    it("throws when a stop's opacity is out of 0..1", () => {
+    // Two consecutive stops at the EXACT same position are allowed (a hard
+    // color-stop edge, a real CSS idiom) — distinguishes `<` from `<=` in
+    // the out-of-order check, which an only-strictly-descending test never
+    // would.
+    it("allows two consecutive stops at the exact same position (a hard edge)", () => {
+        expect(() =>
+            validateGradientStops({ hero: { type: "linear", angle: 0, stops: [{ color: "a", position: 40 }, { color: "b", position: 40 }] } }),
+        ).not.toThrow();
+    });
+
+    it("throws when a stop's opacity is out of 0..1, on EITHER side of the range", () => {
         expect(() =>
             validateGradientStops({ hero: { type: "linear", angle: 0, stops: [{ color: "a", position: 0, opacity: 1.5 }] } }),
         ).toThrow(/opacity out of 0\.\.1/);
+        expect(() =>
+            validateGradientStops({ hero: { type: "linear", angle: 0, stops: [{ color: "a", position: 0, opacity: -0.5 }] } }),
+        ).toThrow(/opacity out of 0\.\.1/);
+    });
+
+    // Exact boundary values (0 and 1) must be ACCEPTED, not rejected —
+    // distinguishes `<`/`>` from `<=`/`>=` on both ends of the opacity check.
+    it("accepts opacity at the exact 0 and 1 boundaries", () => {
+        expect(() =>
+            validateGradientStops({ hero: { type: "linear", angle: 0, stops: [{ color: "a", position: 0, opacity: 0 }, { color: "b", position: 100, opacity: 1 }] } }),
+        ).not.toThrow();
     });
 
     it("validates every layer of a layered gradient independently, naming which layer failed", () => {

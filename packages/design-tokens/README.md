@@ -303,13 +303,93 @@ a real test (not a suppression, since both are genuinely-unspecified real
   (`{ "width": "26px" }`, a `Literal` node) to actually distinguish the two
   branches.
 
-Score after: 75.65% (up from the prior 73.54% baseline before this session's
-dimension work — `ast-helpers.ts` alone went 51.52% → 77.27%). `break`
-stays at 70 (see `stryker.config.mjs`) — comfortable headroom, same
-reasoning as the prior baseline entries: not chasing the remaining
-no-coverage mutants (mostly string-literal error-message text and
-defensive `[]`/`{}` initializers in the two rule files themselves) further
-right now, a documented v1 scope limit rather than an oversight.
+Score after this first pass: 75.65% (up from the prior 73.54% baseline —
+`ast-helpers.ts` alone went 51.52% → 77.27%).
+
+## 2026-08-15 (continued) — `break` raised 70 → 85 by closing real gaps across the WHOLE package, not by lowering the bar
+
+Requested directly: raise the mutation-testing threshold to "at least 85%,
+ideally 95%." The very first response to that request was to actually
+re-measure with a fresh run rather than trust the dated comment above —
+which is also exactly the discipline this section is about: a `break`
+threshold is only ever allowed to move to match a REAL number, never typed
+in as a target and left for the code to catch up to later.
+
+Went file by file through every survived/no-coverage mutant already in
+`mutate` (not just the two dimension rules added earlier the same day),
+reading what each one actually changed before writing anything — the same
+per-mutant discipline the mutation-testing rule asks for on every file, at
+package scale for once instead of one function at a time:
+
+- **`compile.ts` (60.30% → 83.42%):** `flatSemantics` (radius/spacing/
+  typography's no-theme-axis DS101/DS102 branch) was NEVER exercised
+  end-to-end — every existing test used `flatSemantics: {}`. Same for the
+  `shadow` half of `serializeCompositesFor` (only `gradient` had a test) and
+  a category with no matching `contracts` entry at all (the `?? []`
+  fallback). Also found, the same way DS001's color validators were found
+  unwired in an earlier entry above: `validateUniqueVariableNames` (DS007)
+  was called from `compileDesignTokens` but had ZERO test proving the real
+  per-theme assembly loop actually reaches it — added one that collides a
+  primitive category's name with a component's, and a second colliding
+  through the gradient/color lines specifically (colorLines/gradientLines/
+  shadowLines each build their own `.trim().split(":")[0]` list
+  independently; a collision through only one of them doesn't prove the
+  others are wired).
+- **`references.ts` (68.81% → 88.07%):** `typeof null === "object"` is why
+  `current == null || typeof current !== "object"` in `getByPath` does NOT
+  collapse to `&&` for all inputs — an explicit `null` value (not just a
+  missing key) takes a genuinely different path (`||` returns `undefined`
+  gracefully; the `&&` mutant tries to index into `null` and throws). Also:
+  a reference resolving to a non-scalar (an object) had no test at all, the
+  circular-reference and unresolvable-path tests only asserted the error
+  TYPE (would pass even with a blanked-out message), and `resolveTree`'s
+  array branch was only ever fed all-object arrays (never a MIXED array,
+  the one shape that actually proves the ternary isn't just "recurse into
+  everything").
+- **`no-raw-color-value.ts`/`no-raw-dimension-value.ts` (70%/75% →
+  91.67%/90%):** the exact same weak-assertion + missing-guard-test shape
+  in both files (they're structural mirrors of each other) — a template-
+  literal test that only checked `.toHaveLength(1)` without checking WHICH
+  value was reported, no test for a spread element or computed key inside
+  the style object, and no test for the two rules' own `isStyleAttribute`/
+  value-shape guard clauses failing closed on a non-JSXExpressionContainer
+  style value.
+- **`ast-helpers.ts` (77.27% → 92.42%):** had no dedicated test file at
+  all — only ever exercised indirectly through the 4 rules that import it.
+  Added `ast-helpers.test.ts` with direct unit tests, because some AST
+  shapes (a `JSXSpreadAttribute` with no `.name` at all, a node whose
+  `.type` isn't `"JSXAttribute"`) are literally unreachable through a real
+  ESLint `JSXAttribute(node)` visitor — no amount of rule-level test writing
+  could ever have reached them.
+- **`css-value.ts` (72.44% → 84.25%):** `hslStringToRgb01`'s piecewise
+  `hueToChannel` has 4 branches; the only tested hues (red, white, black)
+  drove different channels through only 2 of them. Added a golden-value
+  sweep across all 6 primary/secondary 60°-spaced hues (yellow/green/cyan/
+  blue/magenta) — exact, well-known conversions, not approximated.
+- **`gradient.ts` (89.87% → 98.73%), `merge.ts` (90.48% → 100%),
+  `usage-graph.ts` (86.67% → 97.78%), `validate.ts` (83.63% → 91.23%):**
+  boundary values (opacity/position exactly at 0/1/lastPosition, not just
+  inside or outside the range), `&&` vs `||` distinguished with a value
+  that's an object on only ONE side (not both), and — the one that repeated
+  three times across `usage-graph.ts`'s three `.sort()` calls — every
+  existing test happened to insert items in ALREADY-alphabetical order, so
+  deleting the sort changed nothing any assertion could see. Fixed with
+  inputs inserted in reverse-alphabetical order.
+
+**Real final result: 89.88%** (886 killed / 98 no-coverage / 11 survived /
+3 timeout). `break` raised 70 → 85 (`low` 65 → 80, `high` 85 → 90) — real
+headroom below the measured number, not at the ceiling, same reasoning as
+backend's/frontend's own configs. **Not raised to 95** as also asked: the
+real number doesn't clear it, and typing in a threshold above what's
+actually true would just fail the very next CI run for no code change,
+exactly the thing this rule exists to prevent. The remaining gap is the
+same documented shape as the pre-existing baseline — long human-facing
+error-message string literals, defensive `[]`/`{}` initializers, and a
+handful of `hueToChannel` `ArithmeticOperator` mutants that would need
+inputs landing on exact floating-point branch boundaries to distinguish —
+a real, honestly-scoped v1 limit, not silently accepted as unfixable
+without checking (every mutant list above WAS checked, file by file,
+before anything here was written).
 
 ## How to use this in a NEW project
 

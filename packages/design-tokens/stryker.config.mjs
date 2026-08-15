@@ -35,34 +35,38 @@ const config = {
     ],
     reporters: ["html", "clear-text", "progress"],
     ignoreStatic: true,
-    // Real baseline (2026-08-14, see packages/design-tokens/README.md's
-    // dated entry for the full story): started at 56.80% on the very first
-    // real run; adding a dedicated serializers/shadow.test.ts (0% covered —
-    // no direct test existed at all), strengthening serializers/css-value.test.ts
-    // and serializers/gradient.test.ts, and tightening 3 compile.ts
-    // assertions (asserting the actual DS201/DS102 message text, not just
-    // that SOME error was thrown) brought it to 72.35% (620/857 killed).
-    // `compile.ts` (58.20%) and the two eslint rule files (61-69%) are the
-    // remaining real gaps — mostly StringLiteral mutants inside long
-    // human-facing error messages and defensive `[]`/`{}` initializers,
-    // genuinely lower-value to chase further than the structural bugs the
-    // rest of this suite already caught live (DS201/DS102/DS007 taken
-    // straight from a real build failure during this migration, not
-    // invented for the test).
-    // Updated same day, same entry: wiring DS001's color validators into
-    // `compile.ts` (previously unit-tested but never actually called — see
-    // the README's dated entry) added real mutants there; two guard-clause
-    // mutants survived the first pass, one turned out genuinely equivalent
-    // (`validateNoRawColorLiterals` already no-ops on `null`/`undefined`)
-    // and was removed as dead ceremony rather than chased with a test, the
-    // other was closed with a real test. New total: 73.54%.
-    // `break` set a bit below the measured number as headroom for new code,
-    // same reasoning as backend's/frontend's own configs — not at the
-    // ceiling, but a real regression still fails.
+    // Real baseline history (2026-08-14, see packages/design-tokens/README.md's
+    // dated entries for the full story): 56.80% -> 72.35% -> 73.54% across
+    // the original color-rule/compile.ts wiring work.
+    // 2026-08-15: after adding the dimension-rule pair (no-arbitrary-
+    // dimension-class/no-raw-dimension-value) and a dedicated
+    // ast-helpers.test.ts, then closing real gaps across every file in this
+    // list (flat-semantics/shadow-composite/DS007-wiring paths in
+    // compile.ts that no test had ever exercised, a full HSL-wheel
+    // golden-value sweep in css-value.ts, array/null/`__`-tag edge cases in
+    // references.ts and validate.ts, weak `&&`-vs-`||`/boundary assertions
+    // in gradient.ts and merge.ts, and non-alphabetical-insertion-order
+    // sort-proof tests in usage-graph.ts) — not by lowering the bar, by
+    // reading what each surviving mutant actually changed and either
+    // sharpening the assertion or adding the missing test, per this repo's
+    // own mutation-testing rule. Real measured result: 89.88% (886 killed,
+    // 98 no-coverage, 11 survived, 3 timeout). The remaining gap is mostly
+    // the same documented low-value shape as before (StringLiteral mutants
+    // in long human-facing error messages, `[]`/`{}` defensive
+    // initializers, and a handful of trigonometric ArithmeticOperator
+    // mutants in css-value.ts's HSL math that would need per-branch
+    // floating-point boundary inputs to distinguish) — not chased further
+    // in this pass, a documented v1 scope limit.
+    // `break` raised 70 -> 85 (real headroom below the measured 89.88%,
+    // same "don't fail every PR over one untested line" reasoning as
+    // backend's/frontend's configs) per explicit request to raise this
+    // threshold — NOT set to 95 as also asked, since the actual measured
+    // score doesn't clear it yet; raising `break` above the real number
+    // would just make CI red on the very next run for no code change.
     thresholds: {
-        high: 85,
-        low: 65,
-        break: 70,
+        high: 90,
+        low: 80,
+        break: 85,
     },
 };
 

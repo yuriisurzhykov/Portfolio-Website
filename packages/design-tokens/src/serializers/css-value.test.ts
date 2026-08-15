@@ -78,6 +78,27 @@ describe("hslStringToRgb01", () => {
     it("wraps a hue given as a negative or >360 number the same way CSS does", () => {
         expect(hslStringToRgb01("hsl(360 100% 50%)")).toEqual(hslStringToRgb01("hsl(0 100% 50%)"));
     });
+
+    // A single hue (red, h=0) only ever drives `hueToChannel`'s R/G/B calls
+    // through 2 of its 4 piecewise ranges ([0,1/6) and the tt<0-then-wrapped
+    // boundary case) — every OTHER primary/secondary hue lands its three
+    // channels' `tt` values in the remaining ranges ([1/6,1/2), [1/2,2/3),
+    // [2/3,1)), which nothing here exercised before. These are exact,
+    // well-known conversions (every browser's own color picker agrees),
+    // not approximated — a real golden-value sweep, not just "doesn't crash."
+    it("converts every 60°-spaced primary/secondary hue to its exact known RGB, sweeping every hueToChannel branch", () => {
+        const cases: Array<[string, [number, number, number]]> = [
+            ["hsl(60 100% 50%)", [1, 1, 0]], // yellow
+            ["hsl(120 100% 50%)", [0, 1, 0]], // green
+            ["hsl(180 100% 50%)", [0, 1, 1]], // cyan
+            ["hsl(240 100% 50%)", [0, 0, 1]], // blue
+            ["hsl(300 100% 50%)", [1, 0, 1]], // magenta
+        ];
+        for (const [hsl, expected] of cases) {
+            const [r, g, b] = hslStringToRgb01(hsl);
+            expect([r, g, b].map((c) => Math.round(c))).toEqual(expected);
+        }
+    });
 });
 
 describe("hslStringToRgbString", () => {

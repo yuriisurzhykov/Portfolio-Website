@@ -133,6 +133,30 @@ describe("compileDesignTokens — generic output shape", () => {
         expect(result.warnings.some((w) => w.includes('DS101 Optional global-semantic token "{theme.color.decorativeAccent}"'))).toBe(true);
     });
 
+    // Existing tests only ever check `result.css.toContain(...)` for a flat
+    // declaration, never WHICH selector block it landed under — a mutant
+    // flipping `index === 0` to always/never true (so flat declarations end
+    // up duplicated into every theme block, or missing from :root entirely)
+    // survived past every other test in this file for exactly that reason.
+    it("puts flat primitive/semantic declarations under :root ONLY, never duplicated into a later .theme-* block", () => {
+        const darkTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.950}", interactivePrimary: "{color.brand.500}" });
+        const lightTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.0}", interactivePrimary: "{color.brand.500}" });
+        const input: CompilerInput = {
+            primitives: { color },
+            contracts: { color: colorContract },
+            themes: { dark: { color: darkTheme }, light: { color: lightTheme } },
+            flatSemantics: {},
+            components: [],
+            composites: [],
+        };
+        const result = compileDesignTokens(input);
+        const rootBlock = result.css.slice(result.css.indexOf(":root {"), result.css.indexOf(".theme-light {"));
+        const lightBlock = result.css.slice(result.css.indexOf(".theme-light {"));
+        expect(rootBlock).toContain("--ds-color-neutral-950: hsl(219 25% 5%);");
+        expect(rootBlock).toContain("--ds-color-brand-500: hsl(20 94% 61%);");
+        expect(lightBlock).not.toContain("--ds-color-brand-500");
+    });
+
     it("flattens EVERY primitive category into :root, not just color — each with its own kebab-cased leaf names", () => {
         const darkTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.950}", interactivePrimary: "{color.brand.500}" });
         const lightTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.0}", interactivePrimary: "{color.brand.500}" });
@@ -167,6 +191,74 @@ describe("compileDesignTokens — generic output shape", () => {
         const result = compileDesignTokens(input);
         expect(result.resolved.dark.gradient.brand).toBe("linear-gradient(135deg, hsl(20 94% 61%) 0%, hsl(255 100% 82%) 100%)");
         expect(result.css).toContain("--ds-gradient-brand: linear-gradient(135deg, hsl(20 94% 61%) 0%, hsl(255 100% 82%) 100%);");
+    });
+
+    // The `gradient` test above never exercised `serializeCompositesFor`'s
+    // parallel `shadow` branch at all (a real coverage gap, not just an
+    // unlikely one — `__compositeKind === "shadow"` and every line under it
+    // were untested before this).
+    it("resolves a composite (shadow) recipe through the same registry, the other half of serializeCompositesFor", () => {
+        const darkTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.950}", interactivePrimary: "{color.brand.500}" });
+        const lightTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.0}", interactivePrimary: "{color.brand.500}" });
+        const shadows = defineComposite("shadow", {
+            card: [{ x: 0, y: 4, blur: 8, spread: 0, color: "{color.neutral.950}" }],
+        });
+        const input: CompilerInput = {
+            primitives: { color },
+            contracts: { color: colorContract },
+            themes: { dark: { color: darkTheme }, light: { color: lightTheme } },
+            flatSemantics: {},
+            components: [],
+            composites: [shadows],
+        };
+        const result = compileDesignTokens(input);
+        expect(result.resolved.dark.shadow.card).toBe("0px 4px 8px 0px hsl(219 25% 5%)");
+        expect(result.css).toContain("--ds-shadow-card: 0px 4px 8px 0px hsl(219 25% 5%);");
+    });
+
+    // Every prior test used `flatSemantics: {}` — the whole no-theme-axis
+    // branch of `requiredGlobalPaths`/`definedGlobalPaths`/
+    // `printFlatDeclarations` (radius/spacing/typography in the real
+    // project) was never exercised end-to-end through `compileDesignTokens`
+    // before this.
+    it("resolves a flat (no-theme-axis) semantic category, flags its unused optional role, and flattens it into :root", () => {
+        const radiusPrimitives = definePrimitives({ sm: "0.25rem", md: "0.5rem" });
+        const radiusContract = defineContract({ category: "radius", required: ["control"] });
+        const radiusTheme = defineTheme(radiusContract, { control: "{radius.md}", card: "{radius.sm}" });
+        const darkTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.950}", interactivePrimary: "{color.brand.500}" });
+        const lightTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.0}", interactivePrimary: "{color.brand.500}" });
+        const input: CompilerInput = {
+            primitives: { color, radius: radiusPrimitives },
+            contracts: { color: colorContract, radius: radiusContract },
+            themes: { dark: { color: darkTheme }, light: { color: lightTheme } },
+            flatSemantics: { radius: radiusTheme },
+            components: [defineComponentTokens("codeBlock", { corner: "{semantic.radius.control}" })],
+            composites: [],
+        };
+        const result = compileDesignTokens(input);
+        expect(result.css).toContain("--ds-semantic-radius-control: 0.5rem;");
+        // "card" is optional (not in radiusContract.required) and consumed by
+        // nothing — the exact behavior requiredGlobalPaths/definedGlobalPaths
+        // exist to distinguish from "control", which IS required and so must
+        // never be flagged even though it's ALSO only consumed once. Asserts
+        // the warnings array EXACTLY (not just "contains card") — `defineTheme`
+        // stamps `__kind`/`__category` onto every tree, and a broken
+        // `!role.startsWith("__")` filter would leak THOSE in as spurious
+        // "defined but unused" paths too, which a mere `.some(...)` check
+        // on "card" alone would miss entirely.
+        expect(result.warnings).toEqual(['DS101 Optional global-semantic token "{semantic.radius.card}" is referenced by no component/composite token. (Best-effort signal only — a REQUIRED role consumed exclusively through the Tailwind adapter never triggers this.)']);
+    });
+
+    // DS102 for a flat category specifically — the themed-category DS102
+    // test above never proves the flat branch of the same check works.
+    it("fails DS102 when a flat semantic role (not a themed one) is consumed by exactly one namespace", () => {
+        const radiusPrimitives = definePrimitives({ sm: "0.25rem" });
+        const radiusContract = defineContract({ category: "radius", required: [] });
+        const radiusTheme = defineTheme(radiusContract, { codeBlockCorner: "{radius.sm}" });
+        const input = baseInput([defineComponentTokens("codeBlock", { corner: "{semantic.radius.codeBlockCorner}" })]);
+        expect(() => compileDesignTokens({ ...input, primitives: { ...input.primitives, radius: radiusPrimitives }, contracts: { ...input.contracts, radius: radiusContract }, flatSemantics: { radius: radiusTheme } })).toThrow(
+            /DS102 Global-semantic token "\{semantic\.radius\.codeBlockCorner\}" is consumed by only one namespace: "component:codeBlock"/,
+        );
     });
 });
 
@@ -218,7 +310,7 @@ describe("compileDesignTokens — DS001, wired into the actual compile pipeline 
         expect(() => compileDesignTokens({ ...input, composites: [goodGradient] })).not.toThrow();
     });
 
-    it("doesn't require a color category at all — a project with no color primitives or color theme axis compiles fine", () => {
+    it("doesn't require a color category at all — a project with no color primitives or color theme axis compiles fine, and never emits color-scheme for a non-dark/light theme name", () => {
         const radiusPrimitives = definePrimitives({ sm: "0.25rem", md: "0.5rem" });
         const radiusContract = defineContract({ category: "radius", required: [] });
         const radiusTheme = defineTheme(radiusContract, { control: "{radius.md}" });
@@ -230,6 +322,94 @@ describe("compileDesignTokens — DS001, wired into the actual compile pipeline 
             components: [],
             composites: [],
         };
-        expect(() => compileDesignTokens(input)).not.toThrow();
+        const result = compileDesignTokens(input);
+        // The dark/light tests elsewhere only prove the TRUE branch of the
+        // ternary emits "color-scheme: <name>;" — this proves the FALSE
+        // branch for a theme name that's neither, which nothing else in this
+        // file checks.
+        expect(result.css).not.toContain("color-scheme");
+    });
+});
+
+describe("compileDesignTokens — requiredGlobalPaths' contract fallback", () => {
+    // Every other test always supplies a contract for every category in
+    // `input.contracts` — nothing proved `input.contracts[category]?.required ?? []`
+    // actually falls back gracefully (treats every role as optional, no
+    // crash) for a category with NO CONTRACT ENTRY AT ALL, which
+    // `input.contracts` (a plain Record, not required to cover every
+    // category) allows.
+    it("treats every role as optional (never required) for a themed category with no matching contract entry", () => {
+        const darkTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.950}", interactivePrimary: "{color.brand.500}" });
+        const lightTheme = defineTheme(colorContract, { surfacePrimary: "{color.neutral.0}", interactivePrimary: "{color.brand.500}" });
+        // `radius` has a theme entry but no `contracts.radius` at all.
+        const radiusTheme = defineTheme(defineContract({ category: "radius", required: [] }), { control: "{radius.md}" });
+        const input: CompilerInput = {
+            primitives: { color, radius: definePrimitives({ md: "0.5rem" }) },
+            contracts: { color: colorContract }, // no "radius" entry
+            themes: { dark: { color: darkTheme, radius: radiusTheme }, light: { color: lightTheme, radius: radiusTheme } },
+            flatSemantics: {},
+            components: [],
+            composites: [],
+        };
+        const result = compileDesignTokens(input);
+        // No contract means nothing is required, so an unreferenced
+        // "control" role must warn (DS101), not be silently treated as
+        // required and exempted.
+        expect(result.warnings.some((w) => w.includes('DS101 Optional global-semantic token "{theme.radius.control}"'))).toBe(true);
+    });
+});
+
+describe("compileDesignTokens — output structure not covered by other describe blocks", () => {
+    // Every other test only ever checks a block's CONTENT via `.toContain(...)`,
+    // never that consecutive theme blocks are actually separated by a blank
+    // line — a mutant collapsing the join separator to "" would still pass
+    // every `.toContain` check (the substrings are still all there, just
+    // jammed together with no boundary).
+    it("separates :root and each .theme-* block with a real blank line, not concatenated with no separator", () => {
+        const result = compileDesignTokens(baseInput([]));
+        expect(result.css).toContain("}\n\n.theme-light {");
+    });
+
+    it("emits the exact AUTO-GENERATED header, not just SOME header", () => {
+        const result = compileDesignTokens(baseInput([]));
+        expect(result.css).toContain("/*\n * AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.\n");
+        expect(result.css).toContain(" * Source: frontend/src/shared/ui/theme/{tokens,contracts,themes,semantic,components,composites}/\n");
+        expect(result.css).toContain(" * Generator: frontend/scripts/generate-design-tokens.ts\n */");
+    });
+
+    // DS007 is unit-tested in isolation in validate.test.ts, but nothing
+    // proved `compileDesignTokens` actually WIRES `validateUniqueVariableNames`
+    // into the real per-theme assembly loop — the exact "existed, tested,
+    // never called" shape this package's README already documents once for
+    // DS001's color validators.
+    it("actually calls validateUniqueVariableNames on the real assembled per-theme variable list, not just in isolation (DS007 wiring)", () => {
+        // A primitive category literally named "codeBlock" collides with the
+        // component namespace "codeBlock" once both flatten through
+        // cssVariableName's kebab-casing — same generated name, two
+        // different sources, the real shape DS007 exists to catch.
+        const collidingPrimitives = definePrimitives({ keyword: "0.5rem" });
+        const input = baseInput([defineComponentTokens("codeBlock", { keyword: "{color.accent.purple}" })]);
+        expect(() =>
+            compileDesignTokens({ ...input, primitives: { ...input.primitives, "component-code-block": collidingPrimitives } }),
+        ).toThrow(/DS007 duplicate generated CSS variable name: "--ds-component-code-block-keyword"/);
+    });
+
+    // The DS007 test above only ever exercises the componentLines/
+    // flat.primitiveNames pair — colorLines, gradientLines, and shadowLines
+    // each build their OWN `.trim().split(":")[0]` list independently, and
+    // none of those had a real collision to prove they're being compared
+    // (as opposed to, say, silently building an empty/broken name list).
+    it("catches a DS007 collision through the color/gradient lines specifically, not just componentLines", () => {
+        // A primitive category literally named "gradient" with leaf "purple"
+        // produces "--ds-gradient-purple" — the exact same generated name a
+        // gradient composite named "purple" produces.
+        const gradientNamedPrimitives = definePrimitives({ purple: "0.5rem" });
+        const collidingGradient = defineComposite("gradient", {
+            purple: { type: "linear", angle: 0, stops: [{ color: "{color.accent.purple}", position: 0 }, { color: "{color.brand.500}", position: 100 }] },
+        });
+        const input = baseInput([]);
+        expect(() =>
+            compileDesignTokens({ ...input, primitives: { ...input.primitives, gradient: gradientNamedPrimitives }, composites: [collidingGradient] }),
+        ).toThrow('DS007 duplicate generated CSS variable name: "--ds-gradient-purple"');
     });
 });

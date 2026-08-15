@@ -81,15 +81,18 @@ const config = {
     // (2026-08-14, see src/shared/ui/theme/README.md's dated entry):
     // 97.15% (574 killed, 2 survived — both pre-existing in
     // block-editor/convert.ts, unrelated to any of these additions —
-    // 6 timeouts, 47 ignored, out of 644 total). `break` deliberately left
-    // well below the real number, not raised to ~97 or 100 — see
-    // backend/stryker.config.mjs's identical reasoning: raising it would
-    // turn any future non-100% file red without a dedicated decision about
-    // that file.
+    // 6 timeouts, 47 ignored, out of 644 total).
+    // Raised 75 -> 95 (2026-08-15) after re-measuring a fresh 97.18% real
+    // score (579 mutants this run vs. 644 previously — file list drifted
+    // slightly since the last baseline, re-verified rather than trusted) —
+    // not a guessed bump, a real run against the code as it stood that day
+    // (see frontend/README.md's dated entry). Still not raised to the
+    // ceiling itself, same reasoning as backend/stryker.config.mjs: a
+    // single new line of untested logic shouldn't fail every PR outright.
     thresholds: {
-        high: 90,
-        low: 75,
-        break: 75,
+        high: 95,
+        low: 90,
+        break: 95,
     },
 };
 

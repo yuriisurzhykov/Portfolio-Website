@@ -22,8 +22,46 @@ describe("no-raw-dimension-value", () => {
         expect(lint('const x = <div style={{ borderRadius: "6px" }} />;')).toHaveLength(1);
     });
 
-    it("flags a raw dimension literal inside a template literal", () => {
-        expect(lint("const x = <div style={{ gap: `26px` }} />;")).toHaveLength(1);
+    it("flags a raw dimension literal inside a template literal, with the exact property/value in the message", () => {
+        const messages = lint("const x = <div style={{ gap: `26px` }} />;");
+        expect(messages).toHaveLength(1);
+        expect(messages[0].message).toContain('"gap"');
+        expect(messages[0].message).toContain("26px");
+    });
+
+    // Both halves matter: leading/trailing whitespace must still match
+    // (`.trim()` before testing), for BOTH the plain-Literal and
+    // TemplateLiteral branches.
+    it("flags a dimension literal with surrounding whitespace, in both a plain string and a template literal", () => {
+        expect(lint('const x = <div style={{ width: " 26px " }} />;')).toHaveLength(1);
+        expect(lint("const x = <div style={{ width: ` 26px ` }} />;")).toHaveLength(1);
+    });
+
+    // Neither a string Literal nor a TemplateLiteral — must fall through
+    // both branches without reporting or crashing.
+    it("does not flag (and does not crash on) a dynamic, non-literal style value", () => {
+        expect(lint("const x = <div style={{ width: someVariable }} />;")).toHaveLength(0);
+    });
+
+    // A number is a `Literal` node, but not a STRING one.
+    it("does not flag a numeric literal on a dimension-bearing property", () => {
+        expect(lint("const x = <div style={{ zIndex: 5, top: 0 }} />;")).toHaveLength(0);
+    });
+
+    it("does not flag (and does not crash on) a computed, non-literal object key", () => {
+        expect(lint('const x = <div style={{ [dynamicKey]: "26px" }} />;')).toHaveLength(0);
+    });
+
+    it("skips a spread element inside the style object without crashing, and still flags a real sibling property", () => {
+        expect(lint('const x = <div style={{ ...base, width: "26px" }} />;')).toHaveLength(1);
+    });
+
+    // A style value that's a plain string LITERAL, not a `{...}`
+    // JSXExpressionContainer at all — `style="26px"` is syntactically valid
+    // JSX, distinct from `style={someStyleObject}` (already covered below),
+    // which IS a JSXExpressionContainer, just not an ObjectExpression.
+    it("ignores a style attribute whose value is a plain string literal, not an expression container", () => {
+        expect(lint('const x = <div style="width: 26px" />;')).toHaveLength(0);
     });
 
     // A quoted key ("width") parses as a string Literal, unlike every test

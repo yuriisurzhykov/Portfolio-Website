@@ -45,6 +45,21 @@ describe("mergeTokenTree", () => {
         expect(mergeTokenTree(base, { stops: overrideStops })).toEqual({ stops: overrideStops });
     });
 
+    // Both sides must be plain objects to recurse — an object on only ONE
+    // side must replace wholesale, not attempt a merge (which would throw
+    // trying to `Object.entries()` a string, or silently produce the wrong
+    // shape). Proves `&&`, not `||`.
+    it("replaces wholesale, not merges, when only one side of a key is a plain object", () => {
+        expect(mergeTokenTree({ neutral: { 0: "a" } }, { neutral: "not an object" as never })).toEqual({ neutral: "not an object" });
+        expect(mergeTokenTree({ neutral: "not an object" as never }, { neutral: { 0: "a" } })).toEqual({ neutral: { 0: "a" } });
+    });
+
+    // `isPlainObject`'s `value !== null` half — without it, `typeof null === "object"`
+    // would make a null base value look mergeable and crash trying to spread it.
+    it("replaces wholesale when the base value is explicitly null, not just absent", () => {
+        expect(mergeTokenTree({ neutral: null as never }, { neutral: { 0: "a" } })).toEqual({ neutral: { 0: "a" } });
+    });
+
     it("ignores an explicit undefined override, leaving the base value in place", () => {
         const base = { a: "1", b: "2" };
         expect(mergeTokenTree(base, { a: undefined } as never)).toEqual({ a: "1", b: "2" });
