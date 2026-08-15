@@ -44,7 +44,7 @@ export function Hero({hero, role, items}: HeroProps) {
             className={ cn(
                 "relative overflow-hidden",
                 "max-w-(--layout-content-max-width) mx-auto",
-                "px-[clamp(20px,4vw,56px)] pt-14 pb-[clamp(64px,8vw,96px)]",
+                "px-(--layout-section-horizontal-padding) pt-14 pb-[clamp(64px,8vw,96px)]",
                 "flex items-center gap-8",
             ) }
         >

@@ -13,8 +13,8 @@ export interface JournalPreviewProps {
     post: PostSummary | null;
 }
 
-export function JournalPreview({post}: JournalPreviewProps) {
-    const {ln, pick} = useTranslation();
+export function JournalPreview({ post }: JournalPreviewProps) {
+    const { ln, pick } = useTranslation();
 
     if (!post) return null;
 
@@ -23,31 +23,31 @@ export function JournalPreview({post}: JournalPreviewProps) {
             id="journal"
             className="max-w-(--layout-content-max-width) mx-auto px-2xl pb-[clamp(64px,8vw,96px)] scroll-mt-20"
         >
-            <Text variant="body-lg" className="mb-5 text-text-primary">{ ln("eyebrow.fromJournal") }</Text>
+            <Text variant="body-lg" className="mb-md text-text-primary">{ ln("eyebrow.fromJournal") }</Text>
             <Link
                 href={ `/journal/${ post.slug }` }
-                className="group relative block p-8 pl-11 bg-surface-base border border-border-subtle rounded-xl hover:border-border-default transition-colors duration-normal"
+                className="group relative block p-xl pl-2xl bg-surface-base border border-border-subtle rounded-xl hover:border-border-default transition-colors duration-normal"
             >
                 <span
                     aria-hidden
                     className={ cn(
-                        "absolute left-4 top-3.5 bottom-3.5 w-0.75 rounded-pill bg-accent-solid origin-top",
+                        "absolute left-md top-sm bottom-sm w-0.75 rounded-pill bg-accent-solid origin-top",
                         "scale-y-0 transition-transform duration-slow ease-entrance motion-reduce:transition-none",
                         "group-hover:scale-y-100 group-focus-visible:scale-y-100",
                     ) }
                 />
                 <div className="flex gap-lg items-start">
                     <div className="min-w-0 flex-1">
-                        <div className="flex gap-sm items-center mb-3.5 flex-wrap">
+                        <div className="flex gap-sm items-center mb-sm flex-wrap">
                             <StatusBadge tone="accent">{ pick(post.category) }</StatusBadge>
                             <Text variant="caption" tone="faint" className="font-mono normal-case">
-                                { ln("journal.readMins", {count: post.readMins}) }
+                                { ln("journal.readMins", { count: post.readMins }) }
                             </Text>
                         </div>
-                        <Text as="h3" variant="h3" className="mb-2.5">
+                        <Text as="h3" variant="h3" className="mb-xs">
                             { pick(post.title) }
                         </Text>
-                        <Text variant="body" tone="muted" className="max-w-[70ch] leading-[1.6]">
+                        <Text variant="body" tone="muted" className="max-w-[70ch] leading-relaxed">
                             { pick(post.excerpt) }
                         </Text>
                     </div>

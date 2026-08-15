@@ -221,6 +221,9 @@
     --layout-content-reading: var(--ds-layout-content-reading);
     --layout-content-journal: var(--ds-layout-content-journal);
     --layout-section-vertical-padding: var(--ds-layout-section-vertical-padding);
+    --layout-section-horizontal-padding: var(--ds-layout-section-horizontal-padding);
+    --layout-reading-horizontal-padding: var(--ds-layout-reading-horizontal-padding);
+    --layout-reading-top-padding: var(--ds-layout-reading-top-padding);
     --layout-navbar-height: var(--ds-layout-navbar-height);
     --layout-hero-graph-height: var(--ds-layout-hero-graph-height);
 

@@ -86,7 +86,7 @@ export function Nav({ config: site }: NavProps) {
             className={ cn(
                 "sticky top-0 z-navbar",
                 "flex items-center justify-between gap-sm",
-                "px-[clamp(16px,4vw,56px)] py-lg",
+                "px-(--layout-section-horizontal-padding) py-lg",
                 "bg-overlay-scrim backdrop-blur-md",
                 "border-b border-border-subtle",
                 // Stays put through the hero (useHideOnScroll only starts

@@ -18,7 +18,7 @@ export function ContactCta({ contact, email }: ContactCtaProps) {
     return (
         <section
             id="contact"
-            className="max-w-(--layout-content-max-width) mx-auto px-[clamp(20px,4vw,56px)] pb-[clamp(80px,9vw,120px)] scroll-mt-20"
+            className="max-w-(--layout-content-max-width) mx-auto px-(--layout-section-horizontal-padding) pb-[clamp(80px,9vw,120px)] scroll-mt-20"
         >
             <div className="text-center rounded-2xl bg-surface-base border border-border-subtle p-[clamp(40px,6vw,64px)]">
                 <Text as="h2" variant="h2" className="m-0 mb-4">

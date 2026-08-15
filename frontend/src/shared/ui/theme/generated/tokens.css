@@ -141,6 +141,9 @@
     --ds-layout-content-reading: 47.5rem;
     --ds-layout-content-journal: 51.25rem;
     --ds-layout-section-vertical-padding: 6rem;
+    --ds-layout-section-horizontal-padding: clamp(1.25rem, 0.5rem + 3.75vw, 3.5rem);
+    --ds-layout-reading-horizontal-padding: clamp(1.25rem, 1.17rem + 0.42vw, 1.5rem);
+    --ds-layout-reading-top-padding: clamp(3rem, 2.33rem + 3.33vw, 5rem);
     --ds-layout-navbar-height: 5rem;
     --ds-layout-hero-graph-height: 26.25rem;
     --ds-z-background: 0;

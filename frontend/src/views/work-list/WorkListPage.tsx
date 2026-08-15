@@ -26,7 +26,7 @@ export interface WorkListPageProps {
     activeTech: ActiveTechFilter | null;
 }
 
-const desktopRowGridCols = "sm:grid-cols-[56px_72px_1fr_auto_auto]";
+const desktopRowGridCols = "sm:grid-cols-[3.5rem_4.5rem_1fr_auto_auto]";
 
 /**
  * `caseStudyHref`/`relatedPostHref` are mutually exclusive by construction
@@ -75,8 +75,8 @@ function WorkRow({ item }: { item: WorkSummary }) {
     const body = (
         <>
             {/* Mobile: stacked card */ }
-            <div className="sm:hidden py-[18px] px-4">
-                <div className="flex items-center gap-sm mb-2">
+            <div className="sm:hidden py-md px-md">
+                <div className="flex items-center gap-sm mb-xs">
                     { thumbnail }
                     <div className="flex-1 flex items-center justify-between gap-sm">
                         <span className="font-mono text-caption text-text-faint">{ formatYear(item.date) }</span>
@@ -86,23 +86,23 @@ function WorkRow({ item }: { item: WorkSummary }) {
                         </div>
                     </div>
                 </div>
-                <Text as="div" variant="h3" className="mb-1 text-[18px]!">
+                <Text as="div" variant="h3" className="mb-1">
                     { pick(item.title) }
                 </Text>
-                <Text as="div" variant="body" tone="muted" className="leading-1.5">
+                <Text as="div" variant="body" tone="muted" className="leading-normal">
                     { pick(item.summary) }
                 </Text>
             </div>
 
             {/* sm and up: ledger row */ }
-            <div className={ cn("hidden sm:grid items-center gap-4 py-[26px] px-5", desktopRowGridCols) }>
+            <div className={ cn("hidden sm:grid items-center gap-md py-xl px-md", desktopRowGridCols) }>
                 { thumbnail }
                 <span className="font-mono text-caption text-text-faint">{ formatYear(item.date) }</span>
                 <div>
                     <Text as="div" variant="h3" className="mb-1">
                         { pick(item.title) }
                     </Text>
-                    <Text as="div" variant="body" tone="muted" className="leading-1.5">
+                    <Text as="div" variant="body" tone="muted" className="leading-normal">
                         { pick(item.summary) }
                     </Text>
                 </div>
@@ -131,20 +131,22 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
 
     return (
         <main>
+            {/* pb-10 already exact match (2xl). m-2 already exact match (xs). */ }
             <div
-                className="max-w-(--layout-content-standard) mx-auto pt-xl pb-10">
+                className="max-w-(--layout-content-standard) mx-auto pt-xl pb-2xl">
                 <Link href="/" className="font-bold text-caption text-text-accent">
                     ← { ln("button.backHome") }
                 </Link>
-                <Text variant={ "h2" } className="m-2">
+                <Text variant={ "h2" } className="m-xs">
                     { pick(workPage.heading) }
                 </Text>
-                <Text variant="body" tone="muted" className="m-2">
+                <Text variant="body" tone="muted" className="m-xs">
                     { pick(workPage.description) }
                 </Text>
 
+                {/* mt-5 (20px) tie md/lg, smaller preferred. */ }
                 { activeTech && (
-                    <div className="flex items-center gap-sm mt-5" role="status">
+                    <div className="flex items-center gap-sm mt-md" role="status">
                         <Text variant="caption" tone="faint" className="font-mono">
                             { ln("work.filter.activeLabel") }
                         </Text>
@@ -159,18 +161,24 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
                 ) }
             </div>
 
-            <div className="max-w-(--layout-content-standard) mx-auto pt-6 pb-4xl">
+            {/* pt-6/py-16 already exact matches (lg/4xl). */ }
+            <div className="max-w-(--layout-content-standard) mx-auto pt-lg pb-4xl">
                 { items.length === 0 && activeTech ? (
-                    <Text variant="body" tone="muted" className="py-16 text-center">
+                    <Text variant="body" tone="muted" className="py-4xl text-center">
                         { ln("work.filter.empty", { tech: activeTech.label }) }
                     </Text>
                 ) : (
                     <>
+                        {/* gap-4/pb-3 already exact matches (md/sm). px-5
+                            (20px) tie md/lg, smaller preferred. tracking-
+                            [0.08em] snapped to tracking-widest (0.1em,
+                            nearer than wider/0.05em) — same as elsewhere,
+                            no letter-spacing token category exists. */ }
                         <div
                             className={ cn(
-                                "hidden sm:grid gap-4 px-5 pb-3",
+                                "hidden sm:grid gap-md px-md pb-sm",
                                 desktopRowGridCols,
-                                "font-mono font-semibold text-micro tracking-[0.08em] text-text-faint",
+                                "font-mono font-semibold text-micro tracking-widest text-text-faint",
                                 "border-b border-border-subtle",
                             ) }
                         >

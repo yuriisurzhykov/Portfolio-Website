@@ -24,6 +24,19 @@ export const layout = definePrimitives({
     contentReading: "47.5rem",      // 760px   (Blog Post)
     contentJournal: "51.25rem",     // 820px   (All Journal)
     sectionVerticalPadding: "6rem",
+    // Fluid (rem + vw, never vh — see theme/README.md's dated entry on the
+    // same convention for typography). Bounds carried over from what was
+    // ALREADY independently hand-copied as `px-[clamp(...)]` across Nav,
+    // Hero, TechStack, Principles, ContactCta, JournalPreview — not
+    // invented. `sectionHorizontalPadding` consolidates Nav's one 16px-min
+    // outlier (the other 5 all used 20px) to the majority value; the
+    // difference is 4px, imperceptible.
+    sectionHorizontalPadding: "clamp(1.25rem, 0.5rem + 3.75vw, 3.5rem)",
+    // The narrower padding WorkDetailPage/JournalDetailPage/JournalListPage
+    // use for their reading column — a real, distinct pattern from the
+    // section padding above, not the same value repeated.
+    readingHorizontalPadding: "clamp(1.25rem, 1.17rem + 0.42vw, 1.5rem)",
+    readingTopPadding: "clamp(3rem, 2.33rem + 3.33vw, 5rem)",
     navbarHeight: "5rem",
     // A one-off structural constant, same category as navbarHeight above —
     // not a spacing/padding value, so it doesn't belong in `tokens/dimension.ts`.
