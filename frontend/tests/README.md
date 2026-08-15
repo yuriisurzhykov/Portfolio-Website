@@ -1362,3 +1362,34 @@ props — 18 components total now. `RelatedItemPicker` was deliberately NOT adde
 the existing `token-combobox` exclusion (see the manifest's own doc comment, updated to name it
 explicitly): it's admin-auth-only and its entire value is in interaction a static screenshot can't
 exercise, covered instead by its own `RelatedItemPicker.test.tsx`.
+
+### 2026-08-14 — Design-token migration invalidates every existing baseline (page-level, component-gallery, OG-image)
+
+**Why this entry exists.** The design-token architecture refactor
+(`packages/design-tokens` + `shared/ui/theme/{tokens,contracts,themes,components,composites}`,
+see that directory's own `README.md`) is a real, intentional pixel change, not
+noise: `statusDanger` is a genuinely new, distinct red (`status-error` used to
+alias `warning`/amber before this), and the brand accent's hue was corrected
+(`ARCHITECTURE.md`'s own note — an earlier export read OKLCH's hue angle as if
+it were HSL's). Every existing page-level, component-gallery, and OG-image
+baseline that touches a color token will diff after this lands.
+
+**Not regenerated as part of this change, deliberately.** This environment has
+no Linux Docker Playwright runner set up (checked: Docker itself is available
+locally — a Postgres and a `plantuml-server` container are already running for
+other purposes — but no Playwright browser image/compose service exists yet),
+and section 2's font-rendering rule is exactly why a raw Windows-local run
+would produce baselines that themselves need throwing away. Also added
+`design-tokens` (`{ id: "design-tokens", label: "DesignTokens" }`) to
+`component-gallery.manifest.ts` — a genuinely NEW component-gallery entry, not
+just a changed one, so it has no baseline at all yet, existing or otherwise.
+
+**What to actually do:** run this suite for real once, from CI or the
+`/update-snapshots` PR-comment mechanism (section 8) — never a local `npm run
+test:e2e:update:all` on this machine. Confirmed structurally sound short of
+that: `npm run build`, `npx tsc --noEmit`, and the full `npm test` (468 tests)
+all pass against the new token pipeline; `component-gallery.manifest.ts` and
+`DesignSystemPlayground.tsx`'s live `[data-component-id]` set were kept in
+sync by construction (one new entry added to both in the same change), so the
+suite's own guard test should pass without needing a real browser to check
+that specific claim.

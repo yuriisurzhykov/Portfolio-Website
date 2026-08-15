@@ -4,7 +4,8 @@
   "description": "Repo-level workspace root. Wires up the Next.js app (frontend/) and its backend package (backend/) as an npm workspace — the legacy Vite SPA that used to live at frontend/ has been fully retired; this is the renamed Next.js app that replaced it.",
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "packages/*"
   ],
   "overrides": {
     "react": "19.2.7",

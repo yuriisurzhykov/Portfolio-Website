@@ -1,0 +1,20 @@
+{
+    "ignoreFiles": [
+        "src/shared/ui/theme/generated/**"
+    ],
+    "rules": {
+        "at-rule-no-unknown": [true, {
+            "ignoreAtRules": ["theme", "utility", "apply", "config", "plugin", "layer", "variants", "responsive", "screen", "tailwind"]
+        }],
+        "color-no-hex": true,
+        "function-disallowed-list": ["rgb", "rgba", "hsl", "hsla", "oklch", "oklab", "lab", "lch"],
+        "declaration-property-value-disallowed-list": {
+            "/color|background|border|fill|stroke|outline/": [
+                "/^#[0-9a-f]{3,8}$/i",
+                "/^rgba?\\(/i",
+                "/^hsla?\\(/i",
+                "/^oklch\\(/i"
+            ]
+        }
+    }
+}

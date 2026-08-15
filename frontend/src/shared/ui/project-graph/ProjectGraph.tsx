@@ -7,6 +7,7 @@ import { usePrefersReducedMotion } from "@/shared/lib/usePrefersReducedMotion";
 import { useTranslation } from "@/shared/i18n";
 import { useTheme } from "@/shared/theme";
 import { cn } from "@/shared/lib/utils";
+import { projectGraphAccentRgb, projectGraphScenePalette } from "@/shared/ui/theme/adapters";
 import { useGraphScene } from "./useGraphScene";
 import type { GraphSceneOptions } from "./gl/GraphScene";
 
@@ -26,25 +27,6 @@ export interface ProjectGraphProps {
     className?: string;
 }
 
-/** `oklch(0.72 0.17 45)` (this design system's one brand accent, `tokens.ts`'s `palette.accent`) converted to sRGB — WebGL uniforms need a plain 0..1 RGB triple, not a CSS color function string. */
-const ACCENT_RGB: readonly [number, number, number] = [232 / 255, 116 / 255, 58 / 255];
-
-/**
- * `tokens.ts`'s `darkPalette.bg`/`lightPalette.bg` and `text`, converted to
- * sRGB 0..1 triples — the WebGL canvas clears to (and grids against) its
- * OWN copy of these, since it can't inherit a CSS background the way a
- * regular DOM element would. Missing this entirely was the actual bug: an
- * always-dark canvas reads as a broken opaque box the moment the page
- * itself is in light theme, not merely "a bit off".
- */
-const SCENE_PALETTE: Record<"light" | "dark", {
-    background: readonly [number, number, number];
-    ink: readonly [number, number, number]
-}> = {
-    dark: {background: [11 / 255, 11 / 255, 13 / 255], ink: [1, 1, 1]},
-    light: {background: [247 / 255, 245 / 255, 240 / 255], ink: [24 / 255, 22 / 255, 20 / 255]},
-};
-
 /**
  * Top-left, same convention as this repo's shadow/highlight direction
  * everywhere else on the page — see `project-graph/README.md`'s "почему
@@ -54,7 +36,7 @@ const SCENE_PALETTE: Record<"light" | "dark", {
 const DEFAULT_LIGHT_POSITION = {x: 0.18, y: 0.16};
 
 const BASE_SCENE_OPTIONS: Omit<GraphSceneOptions, "idleFloat" | "backgroundColor" | "inkColor"> = {
-    accentColor: ACCENT_RGB,
+    accentColor: projectGraphAccentRgb,
     lightPosition: DEFAULT_LIGHT_POSITION,
     lightIntensity: 0.5,
     indexOfRefraction: 1.5,
@@ -81,7 +63,7 @@ export function ProjectGraph({items, threshold, idleFloat, className}: ProjectGr
     const graph = React.useMemo(() => computeProjectGraph(items, threshold), [items, threshold]);
     const labels = React.useMemo(() => new Map(items.map((item) => [item.slug, pick(item.title)])), [items, pick]);
     const options = React.useMemo<GraphSceneOptions>(() => {
-        const palette = SCENE_PALETTE[theme];
+        const palette = projectGraphScenePalette[theme];
         return {
             ...BASE_SCENE_OPTIONS,
             backgroundColor: palette.background,

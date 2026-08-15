@@ -50,7 +50,17 @@ const nextConfig: NextConfig = {
   // only compiles its own app code by default, so packages outside it are
   // normally treated as pre-built JS. transpilePackages tells Next.js to run
   // its own compiler over this package's source too.
-  transpilePackages: ["@portfolio/backend"],
+  //
+  // @portfolio/design-tokens (packages/design-tokens) is, by design, never
+  // imported by anything the Next.js app actually bundles — its compiler is
+  // a build-time-only dependency of scripts/generate-design-tokens.ts (a
+  // plain `tsx` script), and every runtime adapter reads the generated,
+  // already-resolved output instead. Listed here anyway, defensively: the
+  // same "raw TS source, no build step" shape as @portfolio/backend, so if
+  // a future change ever does import it from app code, it transpiles
+  // correctly on the first try instead of failing with a confusing
+  // ESM/CJS or "cannot use import outside a module" error.
+  transpilePackages: ["@portfolio/backend", "@portfolio/design-tokens"],
   // `simple-icons` (frontend/src/shared/lib/tech-icons) is ~3450 brand SVG
   // icons — a few MB of path data nobody's browser needs to download. This
   // keeps it OUT of the Server Components/Route Handlers bundle Next.js

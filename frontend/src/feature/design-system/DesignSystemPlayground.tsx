@@ -29,6 +29,7 @@ import { TagList } from "@/shared/ui/tag-list";
 import { RelatedContentCallout, CompactRelatedLink } from "@/shared/ui/related-content-callout";
 import { WorkCoverImage } from "@/shared/ui/work-cover-image";
 import { useTranslation } from "@/shared/i18n";
+import { cn } from "@/shared/lib/utils";
 
 /**
  * Fixed, literal Block[] just for this demo — mirrors the shape `getPostBySlug`/`getWorkBySlug`
@@ -147,6 +148,38 @@ const CONTENT_BLOCKS_DEMO: Block[] = [
         data: { engine: "mermaid", source: "graph LR\n  A[Request] --> B[Service]\n  B --> C[(Database)]" },
     },
 ];
+
+/**
+ * Fixed, literal — the design-token showcase below only demos Tailwind
+ * classes already wired through `shared/ui/theme/adapters/tailwind.css`,
+ * never a raw token value: exactly what the storybook-registration rule's
+ * "no hardcoded value" spirit requires, and what actually proves the
+ * compiled output resolves to a real color/radius/etc, not a broken var().
+ */
+const DESIGN_TOKEN_COLOR_SWATCHES = [
+    { swatch: "bg-surface-base", label: "surface-base" },
+    { swatch: "bg-accent-solid", label: "accent-solid" },
+    { swatch: "bg-status-success", label: "status-success" },
+    { swatch: "bg-status-warning", label: "status-warning" },
+    { swatch: "bg-status-error", label: "status-error" },
+    { swatch: "bg-accent-purple", label: "decorative-accent" },
+] as const;
+
+const DESIGN_TOKEN_CODE_BLOCK_SWATCHES = [
+    { swatch: "text-code-keyword", label: "keyword" },
+    { swatch: "text-code-string", label: "string" },
+    { swatch: "text-code-number", label: "number" },
+    { swatch: "text-code-class-name", label: "className" },
+    { swatch: "text-code-function", label: "function" },
+] as const;
+
+const DESIGN_TOKEN_RADIUS_SWATCHES = ["rounded-xs", "rounded-sm", "rounded-md", "rounded-lg", "rounded-xl", "rounded-2xl", "rounded-pill"] as const;
+
+const DESIGN_TOKEN_TRANSITIONS = [
+    { name: "hover", duration: "duration-fast", easing: "ease-standard" },
+    { name: "enter", duration: "duration-normal", easing: "ease-entrance" },
+    { name: "exit", duration: "duration-fast", easing: "ease-exit" },
+] as const;
 
 export function DesignSystemPlayground() {
     const { ln } = useTranslation();
@@ -936,6 +969,76 @@ const unfold = (f, seed) => {
                     декоративный блюр (см. <code>shared/ui/project-graph/README.md</code>).
                 </Text>
                 <ProjectGraph items={PROJECT_GRAPH_DEMO_ITEMS} idleFloat={false} className="h-[360px] rounded-lg border border-border-subtle" />
+            </section>
+
+            {/* SECTION: DESIGN TOKENS */}
+            <section className="space-y-md" data-component-id="design-tokens">
+                <Text as="h2" variant="h2" className="font-semibold">
+                    Design Tokens
+                </Text>
+                <Text variant="body" tone="secondary">
+                    Живой срез скомпилированных токенов — <code>frontend/scripts/generate-design-tokens.ts</code>
+                    {" "}собирает <code>shared/ui/theme/{"{"}tokens,themes,components,composites{"}"}</code> в{" "}
+                    <code>generated/tokens.css</code>. Каждый свотч ниже — обычный Tailwind-класс,
+                    поддержанный сгенерированной переменной, не хардкод.
+                </Text>
+
+                <div className="space-y-sm">
+                    <Text variant="micro" tone="muted">Color — semantic roles</Text>
+                    <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                        {DESIGN_TOKEN_COLOR_SWATCHES.map((item) => (
+                            <div key={item.label} className="space-y-xs">
+                                <div className={cn("h-12 rounded-md border border-border-subtle", item.swatch)} />
+                                <Text variant="micro" tone="muted" className="font-mono">{item.label}</Text>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-sm">
+                    <Text variant="micro" tone="muted">Color — CodeBlock component tokens</Text>
+                    <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                        {DESIGN_TOKEN_CODE_BLOCK_SWATCHES.map((item) => (
+                            <div key={item.label} className="bg-code-panel-bg rounded-md p-sm text-center">
+                                <Text as="span" variant="caption" className={cn("font-mono", item.swatch)}>{item.label}</Text>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-sm">
+                    <Text variant="micro" tone="muted">Radius scale</Text>
+                    <div className="flex gap-sm flex-wrap">
+                        {DESIGN_TOKEN_RADIUS_SWATCHES.map((radiusClass) => (
+                            <div key={radiusClass} className={cn("h-12 w-12 flex items-center justify-center bg-surface-raised border border-border-default", radiusClass)}>
+                                <Text variant="micro" tone="muted">{radiusClass.replace("rounded-", "")}</Text>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-sm">
+                    <Text variant="micro" tone="muted">Typography scale</Text>
+                    <div className="space-y-xs">
+                        <Text as="p" variant="h1" className="font-semibold">Aa — h1</Text>
+                        <Text as="p" variant="h2" className="font-semibold">Aa — h2</Text>
+                        <Text as="p" variant="body">Aa — body</Text>
+                        <Text as="p" variant="caption" tone="muted">Aa — caption</Text>
+                    </div>
+                </div>
+
+                <div className="space-y-sm">
+                    <Text variant="micro" tone="muted">Motion — duration/easing pairings (composites/transitions.ts)</Text>
+                    <div className="flex gap-sm flex-wrap">
+                        {DESIGN_TOKEN_TRANSITIONS.map((transition) => (
+                            <div key={transition.name} className="rounded-md border border-border-subtle px-sm py-xs">
+                                <Text variant="caption" tone="secondary" className="font-mono">
+                                    {transition.name}: {transition.duration} / {transition.easing}
+                                </Text>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </section>
         </div>
     );

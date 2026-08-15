@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
 import "@/app/styles/index.css";
-import { themeVars } from "@/shared/ui/theme";
+import { legacyLayoutVars } from "@/shared/ui/theme";
 import { MainProviders } from "@/app/providers/MainProviders";
 import { getRequestLocale } from "@/shared/lib/get-request-locale";
 import { IS_INDEXABLE, SITE_URL } from "@/shared/lib/seo/site-url";
@@ -67,8 +67,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Root layout — html/body shell, design-token <style>, and the i18n/theme
- * providers. Deliberately has NO <Nav/>/<Footer/> here: the dev-only
+ * Root layout — html/body shell, the one remaining runtime-injected
+ * `<style>` (layout/z-index vars only — color/dimension/radius/typography/
+ * motion now come from the statically-imported `generated/tokens.css`,
+ * see `app/styles/index.css`), and the i18n/theme providers. Deliberately
+ * has NO <Nav/>/<Footer/> here: the dev-only
  * /storybook route sits outside the (site) route group and must not get
  * that chrome (see app/(site)/layout.tsx and app/storybook/page.tsx).
  *
@@ -86,7 +89,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     return (
         <html lang={locale} className="h-full">
             <head>
-                <style dangerouslySetInnerHTML={{ __html: themeVars }} />
+                <style dangerouslySetInnerHTML={{ __html: legacyLayoutVars }} />
             </head>
             <body className="min-h-full flex flex-col antialiased">
                 <MainProviders initialLanguage={locale}>

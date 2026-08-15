@@ -1,0 +1,207 @@
+/**
+ * The only Tailwind-aware file in this tree. Maps `generated/tokens.css`'s
+ * `--ds-*` variables onto the CSS custom-property names Tailwind's
+ * `@theme` actually reads.
+ *
+ * COLOR section is a deliberate BRIDGE, not a 1:1 passthrough: every
+ * class-facing name here (`--color-surface-base`, `--color-status-error`,
+ * ...) is the name dozens of existing components already call
+ * (`bg-surface-base`, `text-status-error`, ...) — renaming every one of
+ * those call sites in the SAME change that builds the compiler would be
+ * an enormous, high-risk, hard-to-visually-verify blast radius with no
+ * tooling in this environment to catch a mistake. So the NEW semantic
+ * role names (`surfaceElevated`, `statusDanger`, ...) exist as the real
+ * source of truth in `themes/dark.ts`/`light.ts`, and THIS file is where
+ * the translation to the OLD, still-in-use class-facing names happens —
+ * exactly the kind of naming translation an adapter exists to do. Migrating
+ * component call sites to the new names directly is documented, deliberate
+ * follow-up work (see `theme/README.md`), not silently skipped.
+ *
+ * Primitives are NEVER mapped here for color — only global-semantic,
+ * component, and composite output. Dimension/radius/typography/motion
+ * DO map their primitive tier directly (unchanged from before this
+ * migration — see the plan's "structure-first" scope: only color's raw-
+ * primitive-exposure got tightened this pass).
+ */
+@theme {
+    /* ------------------------------------------------------------------------
+     * COLOR — bridge to the new generated source, see file-level comment.
+     * ------------------------------------------------------------------------ */
+    --color-bg-app: var(--ds-color-surface-primary);
+    --color-bg-strip: var(--ds-color-surface-elevated);
+
+    --color-surface-base: var(--ds-color-surface-elevated);
+    --color-surface-raised: var(--ds-color-surface-raised);
+    --color-surface-icon: var(--ds-color-surface-icon);
+    --color-surface-row-hover: var(--ds-color-surface-row-hover);
+    --color-surface-placeholder-a: var(--ds-color-surface-placeholder-primary);
+    --color-surface-placeholder-b: var(--ds-color-surface-placeholder-secondary);
+
+    --color-border-subtle: var(--ds-color-border-subtle);
+    --color-border-default: var(--ds-color-border-default);
+    --color-border-strong: var(--ds-color-border-strong);
+    --color-border-connector: var(--ds-color-border-connector);
+    --color-border-highlight: var(--ds-color-border-focus);
+
+    --color-text-primary: var(--ds-color-text-primary);
+    --color-text-secondary: var(--ds-color-text-secondary);
+    --color-text-muted: var(--ds-color-text-muted);
+    --color-text-faint: var(--ds-color-text-faint);
+    --color-text-chip: var(--ds-color-text-chip);
+    --color-text-inverse: var(--ds-color-text-inverse);
+
+    --color-accent-solid: var(--ds-color-interactive-primary);
+    --color-accent-solid-hover: var(--ds-color-interactive-primary-hover);
+    --color-accent-on-solid: var(--ds-color-text-on-brand);
+    --color-accent-text: var(--ds-color-text-accent);
+    /* --color-accent-mesh-gradient deliberately NOT registered here — same
+     * Tailwind @utility-collision reason the pre-migration index.css
+     * documented; gradients.css's @utility reaches for --ds-gradient-mesh
+     * directly instead. */
+    --color-accent-tint-bg: var(--ds-color-interactive-primary-subtle);
+    /* --color-accent-magenta / --color-accent-blue dropped, not bridged —
+     * confirmed dead (no component actually uses `bg-accent-magenta` /
+     * `text-accent-blue`; only the plumbing referenced them). --color-accent-purple
+     * carried over: SkillCard's `TONE_ICON_COLOR.accent` really does use it. */
+    --color-accent-purple: var(--ds-color-decorative-accent);
+
+    --color-status-success: var(--ds-color-status-success);
+    --color-status-success-tint-bg: var(--ds-color-status-success-subtle);
+    --color-status-warning: var(--ds-color-status-warning);
+    --color-status-warning-tint-bg: var(--ds-color-status-warning-subtle);
+    /* A real, intentional value change (see tokens/color.ts's `danger` scale
+     * comment): the pre-migration design had no distinct danger color and
+     * aliased status-error to warning (amber). `statusDanger` is a genuinely
+     * new, distinct red — visual baselines using `bg-status-error`/
+     * `text-status-error` WILL diff after this lands; expected, not a bug. */
+    --color-status-error: var(--ds-color-status-danger);
+    --color-status-on-solid: var(--ds-color-status-foreground);
+
+    --color-code-keyword: var(--ds-component-code-block-keyword);
+    --color-code-string: var(--ds-component-code-block-string);
+    --color-code-number: var(--ds-component-code-block-number);
+    --color-code-class-name: var(--ds-component-code-block-class-name);
+    --color-code-function: var(--ds-component-code-block-function);
+    --color-code-property: var(--ds-component-code-block-property);
+    --color-code-punctuation: var(--ds-component-code-block-punctuation);
+    --color-code-comment: var(--ds-component-code-block-comment);
+
+    --color-code-panel-bg: var(--ds-component-code-block-background);
+    --color-code-panel-border: var(--ds-component-code-block-border);
+    --color-code-panel-hover-bg: var(--ds-component-code-block-hover-background);
+    --color-code-panel-title: var(--ds-component-code-block-title);
+    --color-code-panel-copy-text: var(--ds-component-code-block-copy-text);
+    --color-code-panel-copy-text-hover: var(--ds-component-code-block-copy-text-hover);
+    --color-code-panel-code: var(--ds-component-code-block-code);
+    --color-code-panel-line-number: var(--ds-component-code-block-line-number);
+
+    --color-overlay-scrim: var(--ds-color-surface-overlay);
+
+    /* ------------------------------------------------------------------------
+     * SPACING — same class-facing names as before (primitive tier unchanged).
+     * ------------------------------------------------------------------------ */
+    --spacing-none: var(--ds-dimension-none);
+    --spacing-xxs: var(--ds-dimension-xxs);
+    --spacing-xs: var(--ds-dimension-xs);
+    --spacing-sm: var(--ds-dimension-sm);
+    --spacing-md: var(--ds-dimension-md);
+    --spacing-lg: var(--ds-dimension-lg);
+    --spacing-xl: var(--ds-dimension-xl);
+    --spacing-2xl: var(--ds-dimension-2xl);
+    --spacing-3xl: var(--ds-dimension-3xl);
+    --spacing-4xl: var(--ds-dimension-4xl);
+
+    /* ------------------------------------------------------------------------
+     * WIDTH-FAMILY RECLAIM — unchanged; see index.css's original comment
+     * (Tailwind v4 checks --spacing-{key} before its own --container-{key}
+     * scale for w-.../max-w-.../min-w-.../basis-..., colliding with this
+     * design system's identically-named spacing keys).
+     * ------------------------------------------------------------------------ */
+    --width-xs: var(--container-xs);
+    --width-sm: var(--container-sm);
+    --width-md: var(--container-md);
+    --width-lg: var(--container-lg);
+    --width-xl: var(--container-xl);
+    --width-2xl: var(--container-2xl);
+    --width-3xl: var(--container-3xl);
+    --width-4xl: var(--container-4xl);
+
+    --min-width-xs: var(--container-xs);
+    --min-width-sm: var(--container-sm);
+    --min-width-md: var(--container-md);
+    --min-width-lg: var(--container-lg);
+    --min-width-xl: var(--container-xl);
+    --min-width-2xl: var(--container-2xl);
+    --min-width-3xl: var(--container-3xl);
+    --min-width-4xl: var(--container-4xl);
+
+    --max-width-xs: var(--container-xs);
+    --max-width-sm: var(--container-sm);
+    --max-width-md: var(--container-md);
+    --max-width-lg: var(--container-lg);
+    --max-width-xl: var(--container-xl);
+    --max-width-2xl: var(--container-2xl);
+    --max-width-3xl: var(--container-3xl);
+    --max-width-4xl: var(--container-4xl);
+
+    /* ------------------------------------------------------------------------
+     * RADII
+     * ------------------------------------------------------------------------ */
+    --radius-xs: var(--ds-radius-xs);
+    --radius-sm: var(--ds-radius-sm);
+    --radius-md: var(--ds-radius-md);
+    --radius-lg: var(--ds-radius-lg);
+    --radius-xl: var(--ds-radius-xl);
+    --radius-2xl: var(--ds-radius-2xl);
+    --radius-pill: var(--ds-radius-pill);
+
+    /* ------------------------------------------------------------------------
+     * SHADOWS — `softGlow` is a CSS keyword, not part of the compiled
+     * output; see composites/shadows.ts's own comment.
+     * ------------------------------------------------------------------------ */
+    --shadow-soft-glow: none;
+    --shadow-primary-button: var(--ds-shadow-primary-button);
+    --shadow-primary-button-hover: var(--ds-shadow-primary-button-hover);
+    --shadow-surface-deep: var(--ds-shadow-surface-deep);
+    --shadow-focus-ring: var(--ds-shadow-focus-ring);
+
+    /* ------------------------------------------------------------------------
+     * TYPOGRAPHY — usage: text-hero, text-display, text-body, ...
+     * ------------------------------------------------------------------------ */
+    --font-body: var(--ds-typography-family-body);
+    --font-mono: var(--ds-typography-family-mono);
+
+    --text-hero: var(--ds-typography-size-hero);
+    --text-display: var(--ds-typography-size-display);
+    --text-h1: var(--ds-typography-size-h1);
+    --text-h2: var(--ds-typography-size-h2);
+    --text-h3: var(--ds-typography-size-h3);
+    --text-body: var(--ds-typography-size-body);
+    --text-body-lg: var(--ds-typography-size-body-lg);
+    --text-caption: var(--ds-typography-size-caption);
+    --text-micro: var(--ds-typography-size-micro);
+
+    --leading-tight: var(--ds-typography-line-height-tight);
+    --leading-normal: var(--ds-typography-line-height-normal);
+    --leading-relaxed: var(--ds-typography-line-height-relaxed);
+
+    --font-weight-regular: var(--ds-typography-weight-regular);
+    --font-weight-medium: var(--ds-typography-weight-medium);
+    --font-weight-semibold: var(--ds-typography-weight-semibold);
+    --font-weight-bold: var(--ds-typography-weight-bold);
+
+    /* ------------------------------------------------------------------------
+     * MOTION
+     * ------------------------------------------------------------------------ */
+    --transition-duration-instant: var(--ds-motion-duration-instant);
+    --transition-duration-fast: var(--ds-motion-duration-fast);
+    --transition-duration-normal: var(--ds-motion-duration-normal);
+    --transition-duration-slow: var(--ds-motion-duration-slow);
+
+    --transition-easing-standard: var(--ds-motion-easing-standard);
+    --transition-easing-entrance: var(--ds-motion-easing-entrance);
+    --transition-easing-exit: var(--ds-motion-easing-exit);
+
+    --scale-press: var(--ds-motion-scale-press);
+    --scale-highlight: var(--ds-motion-scale-highlight);
+}

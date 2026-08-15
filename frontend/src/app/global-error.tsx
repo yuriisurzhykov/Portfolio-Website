@@ -1,7 +1,7 @@
 "use client";
 
 import "@/app/styles/index.css";
-import { themeVars } from "@/shared/ui/theme";
+import { legacyLayoutVars } from "@/shared/ui/theme";
 import { MainProviders } from "@/app/providers/MainProviders";
 import { StatusPage } from "@/shared/ui/status-page";
 
@@ -12,9 +12,9 @@ import { StatusPage } from "@/shared/ui/status-page";
  * through to Next's bare, unstyled default screen. Required by Next.js to
  * define its own `<html>`/`<body>` (it fully replaces `app/layout.tsx`,
  * including the shell that failed), so it re-imports the same global
- * stylesheet and `themeVars` `<style>` tag `RootLayout` normally provides
- * — without them, `StatusPage`'s Tailwind classes would resolve against
- * undefined CSS custom properties and render unstyled.
+ * stylesheet and `legacyLayoutVars` `<style>` tag `RootLayout` normally
+ * provides — without them, `StatusPage`'s Tailwind classes would resolve
+ * against undefined CSS custom properties and render unstyled.
  *
  * Reuses `MainProviders` (Theme + i18n) rather than a bare `I18nProvider`
  * — `Card`/`Button`/etc. don't currently read theme context themselves
@@ -30,7 +30,7 @@ export default function GlobalError({ reset }: { error: Error & { digest?: strin
     return (
         <html lang="en" className="h-full">
             <head>
-                <style dangerouslySetInnerHTML={{ __html: themeVars }} />
+                <style dangerouslySetInnerHTML={{ __html: legacyLayoutVars }} />
             </head>
             <body className="min-h-full flex flex-col antialiased">
                 <MainProviders>
