@@ -66,9 +66,9 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: Wo
                         <StatusBadge tone="accent" className="mb-3.5" style={ { backgroundColor: accentColorForHue(hue) } }>
                             { ln("eyebrow.caseStudy") }
                         </StatusBadge>
-                        <h1 className="m-0 font-extrabold text-[clamp(32px,4.5vw,48px)] leading-[1.1] tracking-tight text-text-primary">
+                        <Text as="h1" variant="h1" className="m-0">
                             { pick(item.title) }
-                        </h1>
+                        </Text>
                     </div>
                     <StatusBadge tone={ isShipped ? "success" : "warning" } className="whitespace-nowrap h-fit">
                         { ln(isShipped ? "status.shipped" : "status.inProgress") }

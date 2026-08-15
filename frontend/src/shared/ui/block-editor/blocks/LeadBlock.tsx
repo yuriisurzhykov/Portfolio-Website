@@ -14,10 +14,10 @@ export const LeadBlock = createReactBlockSpec(
         render: (props) => (
             <div className="w-full">
                 <p
-                    ref={props.contentRef}
-                    className="text-[1.125em] text-text-secondary leading-relaxed m-0"
+                    ref={ props.contentRef }
+                    className="text-body-lg text-text-secondary leading-relaxed m-0"
                 />
-                <hr className="border-t border-border-subtle mt-sm mb-0" />
+                <hr className="border-t border-border-subtle mt-sm mb-0"/>
             </div>
         ),
     },

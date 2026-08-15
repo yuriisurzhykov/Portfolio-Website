@@ -98,9 +98,13 @@ const THEME_SWITCHER_STYLES: Record<VariantKey, ThemeToggleStyles> = {
                 "data-[state=active]:shadow-soft-glow",
             ].join(" "),
         optionIcon:
+            // `h-md aspect-square w-auto`, not `w-md h-md` — see
+            // SkillCard.tsx's identical fix for both the `w-{key}` reclaim
+            // hijack and why `w-auto` is required alongside `aspect-square`.
             [
-                "w-md",
                 "h-md",
+                "aspect-square",
+                "w-auto",
                 "shrink-0",
                 "stroke-current",
                 "fill-none",

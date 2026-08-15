@@ -4,20 +4,23 @@ import { cn } from "@/shared/lib/utils";
 
 /**
  * TEXT VARIANTS
- * Match strictly with the names in typography.fontSize from tokens.ts
+ * Match strictly with the names in typography.fontSize from tokens.ts.
+ * `hero`/`h1` are fluid (`clamp()`); everything else is a fixed rem size —
+ * see `tokens/typography.ts` for the real, current values (these comments
+ * used to reference stale pre-migration pixel values).
  */
 export type TextVariant =
-    | "hero"       // 6rem / 96px
-    | "display"    // 3.75rem / 60px
-    | "h1"         // 3rem / 48px
-    | "h2"         // 2.25rem / 36px
-    | "h3"         // 1.5rem / 24px
-    | "h4"         // 1.5rem / 24px
-    | "h5"         // 1.5rem / 24px
-    | "body-lg"    // 1.25rem / 20px
-    | "body"       // 1rem / 16px
-    | "caption"    // 0.875rem / 14px
-    | "micro"      // 0.75rem / 12px
+    | "hero"
+    | "display"
+    | "h1"
+    | "h2"
+    | "h3"
+    | "h4"
+    | "h5"
+    | "body-lg"
+    | "body"
+    | "caption"
+    | "micro"
     | "mono";      // Code font
 
 /**
@@ -61,13 +64,19 @@ export interface TextProperties extends React.HTMLAttributes<HTMLElement> {
  */
 
 const variantClasses: Record<TextVariant, string> = {
-    hero: "text-hero font-bold tracking-tight leading-tight",
+    hero: "text-hero font-extrabold tracking-tight leading-tight",
     display: "text-display font-bold tracking-tight leading-tight",
-    h1: "text-h1 font-bold tracking-tight leading-tight",
+    h1: "text-h1 font-extrabold tracking-tight leading-tight",
     h2: "text-h2 font-semibold tracking-tight leading-normal",
     h3: "text-h3 font-semibold leading-normal",
-    h4: "text-2xl font-semibold leading-normal",
-    h5: "text-xl font-semibold leading-normal",
+    // h4/h5 have no token of their own — h5 is used for real (admin
+    // section headings) and its old raw size (text-xl, 20px) already
+    // exactly matched h3's token; h4 is unused outside the Storybook demo
+    // and its old raw size (text-2xl, 24px) was actually LARGER than h3 —
+    // backwards for a heading hierarchy. Both now alias h3 rather than
+    // inventing a new step; see theme/README.md's dated entry.
+    h4: "text-h3 font-semibold leading-normal",
+    h5: "text-h3 font-semibold leading-normal",
     "body-lg": "text-body-lg font-regular leading-relaxed",
     body: "text-body font-regular leading-normal",
     caption: "text-caption font-medium leading-normal",

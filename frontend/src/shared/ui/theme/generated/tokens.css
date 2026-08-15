@@ -113,9 +113,9 @@
     --ds-typography-weight-semibold: 600;
     --ds-typography-weight-bold: 700;
     --ds-typography-weight-extrabold: 800;
-    --ds-typography-size-hero: 4rem;
+    --ds-typography-size-hero: clamp(2.5rem, 2rem + 2.5vw, 4rem);
     --ds-typography-size-display: 3.25rem;
-    --ds-typography-size-h1: 2.75rem;
+    --ds-typography-size-h1: clamp(2rem, 1.67rem + 1.67vw, 3rem);
     --ds-typography-size-h2: 2rem;
     --ds-typography-size-h3: 1.25rem;
     --ds-typography-size-body-lg: 1.1875rem;

@@ -53,14 +53,14 @@ export function Hero({hero, role, items}: HeroProps) {
                     { pick(role) }
                 </Eyebrow>
 
-                <h1 className="m-0 mb-5.5 font-extrabold text-[clamp(40px,5.5vw,64px)] leading-[1.02] tracking-tight text-text-primary">
+                <Text as="h1" variant="hero" className="m-0 mb-5.5">
                     { hero.headline.map((line, index) => (
                         <React.Fragment key={ line }>
                             { index > 0 && <br/> }
                             { line }
                         </React.Fragment>
                     )) }
-                </h1>
+                </Text>
 
                 <Text as="p" variant="body-lg" tone="secondary" className="mb-7.5 max-w-[46ch]">
                     { pick(hero.subhead) }

@@ -110,6 +110,8 @@
     --spacing-2xl: var(--ds-dimension-2xl);
     --spacing-3xl: var(--ds-dimension-3xl);
     --spacing-4xl: var(--ds-dimension-4xl);
+    --spacing-5xl: var(--ds-dimension-5xl);
+    --spacing-6xl: var(--ds-dimension-6xl);
 
     /* ------------------------------------------------------------------------
      * WIDTH-FAMILY RECLAIM — unchanged; see index.css's original comment
@@ -189,6 +191,7 @@
     --font-weight-medium: var(--ds-typography-weight-medium);
     --font-weight-semibold: var(--ds-typography-weight-semibold);
     --font-weight-bold: var(--ds-typography-weight-bold);
+    --font-weight-extrabold: var(--ds-typography-weight-extrabold);
 
     /* ------------------------------------------------------------------------
      * MOTION

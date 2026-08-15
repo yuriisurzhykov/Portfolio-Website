@@ -63,9 +63,9 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }:
                     </Text>
                 </div>
 
-                <h1 className="m-0 mb-5 font-extrabold text-[clamp(30px,4.2vw,44px)] leading-[1.15] tracking-tight text-text-primary">
+                <Text as="h1" variant="h1" className="m-0 mb-5">
                     { pick(post.title) }
-                </h1>
+                </Text>
 
                 { post.cover && (
                     // This is the page's LCP element — `fetchPriority="high"`

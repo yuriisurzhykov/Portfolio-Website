@@ -53,6 +53,9 @@ export function LanguageSegmentedToggle() {
         ru: ln("label.button.language.ru"),
     };
 
+    // gap-0.5/p-0.75 (2px/3px) left as-is — too small to snap to xxs without
+    // losing the pixel-perfect pill-internal boundary; see theme/README.md's
+    // dated entry for the micro-spacing cluster decision.
     return (
         <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-0.75">
             { OPTIONS.map((option) => {
@@ -63,8 +66,10 @@ export function LanguageSegmentedToggle() {
                         href={ hrefFor(option, unprefixedPath) }
                         aria-current={ isActive ? "true" : undefined }
                         className={ cn(
-                            "rounded-pill px-2.5 py-1.25",
-                            "font-mono font-semibold text-xs uppercase",
+                            // px-2.5 (10px) snapped to xs (8px); py-1.25 (5px)
+                            // snapped to xxs (4px) — nearest steps.
+                            "rounded-pill px-xs py-xxs",
+                            "font-mono font-semibold text-micro uppercase",
                             "transition-colors duration-fast",
                             isActive ? "bg-text-primary text-bg-app" : "text-text-muted hover:text-text-primary",
                         ) }

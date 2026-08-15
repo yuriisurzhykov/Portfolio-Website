@@ -4,7 +4,7 @@ import { color, dimension, layout, motion, radius, typography, zIndex } from "./
 import { darkTheme, lightTheme } from "./themes";
 import { radiusRole, spacingRole } from "./semantic";
 import { codeBlockTokens, skillCardTokens } from "./components";
-import { gradients, shadows, transitions, typographyStyles } from "./composites";
+import { gradients, shadows, transitions } from "./composites";
 
 /**
  * Plain assembly — imports every module and hands the already-tagged
@@ -34,7 +34,7 @@ const compilerInput: CompilerInput = {
         spacing: spacingRole,
     },
     components: [codeBlockTokens, skillCardTokens],
-    composites: [gradients, shadows, typographyStyles, transitions],
+    composites: [gradients, shadows, transitions],
 };
 
 export default compilerInput;

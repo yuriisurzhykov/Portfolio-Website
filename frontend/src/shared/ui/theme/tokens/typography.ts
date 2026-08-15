@@ -17,10 +17,16 @@ export const typography = definePrimitives({
         bold: 700,
         extrabold: 800,
     },
+    // `hero`/`h1` are fluid (`clamp()`), not fixed — the ONLY two sizes this
+    // scale needs that for; see theme/README.md's dated entry for the exact
+    // bounds (carried over from real, already-shipping page headings, not
+    // invented) and the slope/intercept math. `display` stays fixed: no
+    // real page uses it outside the Storybook demo, so there's no existing
+    // bound to carry over and none was invented.
     size: {
-        hero: "4rem",
+        hero: "clamp(2.5rem, 2rem + 2.5vw, 4rem)",
         display: "3.25rem",
-        h1: "2.75rem",
+        h1: "clamp(2rem, 1.67rem + 1.67vw, 3rem)",
         h2: "2rem",
         h3: "1.25rem",
         bodyLg: "1.1875rem",
