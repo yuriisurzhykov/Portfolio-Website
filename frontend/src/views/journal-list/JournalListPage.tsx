@@ -58,7 +58,7 @@ function LogEntry({ post }: { post: PostSummary }) {
                     // width the wrapping text badly needs there instead.
                     <CoverImage
                         { ...post.cover }
-                        className="hidden sm:block w-[120px] h-[63px] shrink-0 rounded-md border border-border-subtle"
+                        className="hidden sm:block w-30 h-15.75 shrink-0 rounded-md border border-border-subtle"
                     />
                 ) }
             </div>

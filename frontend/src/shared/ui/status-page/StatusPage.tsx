@@ -82,8 +82,8 @@ export function StatusPage({ code, onRetry, retryAfterSeconds, from }: StatusPag
     }
 
     return (
-        <main className="min-h-[60vh] flex items-center justify-center px-[clamp(20px,4vw,56px)] py-2xl">
-            <Card variant="filled" className="w-full max-w-[480px] p-xl flex flex-col items-center text-center gap-md">
+        <main className="h-full flex-1 flex items-center justify-center px-[clamp(20px,4vw,56px)] py-2xl">
+            <Card variant="filled" className="w-full max-w-120 p-xl flex flex-col items-center text-center gap-md">
                 <IconBadge icon={content.icon} tone={content.tone} size="lg" />
                 <Eyebrow tone="accent">
                     {`HTTP ${code} · ${ln(`error.status.${code}.caption`)}`}

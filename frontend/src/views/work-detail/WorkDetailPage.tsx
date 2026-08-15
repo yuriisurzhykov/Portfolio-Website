@@ -56,7 +56,7 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: Wo
                 </div>
             ) }
             <div
-                className="max-w-(--layout-content-reading) mx-auto px-(--layout-reading-horizontal-padding) pt-(--layout-reading-top-padding) pb-[100px]">
+                className="max-w-(--layout-content-reading) mx-auto px-(--layout-reading-horizontal-padding) pt-(--layout-reading-top-padding) pb-25">
                 <Link href="/work" className="font-mono text-caption text-text-muted">
                     ← { ln("button.backToWork") }
                 </Link>
@@ -83,7 +83,7 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: Wo
                 </div>
 
                 <WorkCoverImage
-                    className="h-[280px] rounded-xl border border-border-subtle mb-2xl"
+                    className="h-70 rounded-xl border border-border-subtle mb-2xl"
                     override={ caseStudy.heroImage }
                     cover={ item.cover }
                     label={ `${ pick(item.title).toLowerCase() } — hero screenshot` }

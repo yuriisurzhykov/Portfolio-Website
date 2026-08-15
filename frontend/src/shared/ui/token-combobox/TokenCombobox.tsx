@@ -171,7 +171,7 @@ export function TokenCombobox({ id, label, hint, values, onChange, suggestions, 
                             // why `-raised` (a near-transparent tint meant to
                             // sit atop an already-opaque parent) is the wrong
                             // token for a floating popover's own backdrop.
-                            "flex flex-col gap-[2px] rounded-md border border-border-subtle bg-surface-base p-xs shadow-lg",
+                            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-base p-xs shadow-lg",
                         )}
                     >
                         {results.map((result, index) => (

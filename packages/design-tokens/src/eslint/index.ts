@@ -17,6 +17,8 @@
  *       rules: {
  *         "design-tokens/no-raw-color-value": "error",
  *         "design-tokens/no-arbitrary-color-class": "error",
+ *         "design-tokens/no-raw-dimension-value": "error",
+ *         "design-tokens/no-arbitrary-dimension-class": "error",
  *       },
  *     },
  *   ];
@@ -29,15 +31,19 @@
 // explicit extension on a relative specifier. Found live: `npm run
 // lint:tokens` failed with `ERR_MODULE_NOT_FOUND` without these.
 import noArbitraryColorClass from "./no-arbitrary-color-class.ts";
+import noArbitraryDimensionClass from "./no-arbitrary-dimension-class.ts";
 import noRawColorValue from "./no-raw-color-value.ts";
+import noRawDimensionValue from "./no-raw-dimension-value.ts";
 
 const plugin = {
     meta: { name: "@portfolio/design-tokens", version: "0.0.1" },
     rules: {
         "no-raw-color-value": noRawColorValue,
         "no-arbitrary-color-class": noArbitraryColorClass,
+        "no-raw-dimension-value": noRawDimensionValue,
+        "no-arbitrary-dimension-class": noArbitraryDimensionClass,
     },
 };
 
 export default plugin;
-export { noArbitraryColorClass, noRawColorValue };
+export { noArbitraryColorClass, noArbitraryDimensionClass, noRawColorValue, noRawDimensionValue };

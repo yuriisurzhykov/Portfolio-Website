@@ -198,7 +198,7 @@ export function TechStackQuickAdd({ existingNames, onAdd }: TechStackQuickAddPro
                         id={listboxId}
                         role="listbox"
                         aria-label="Matching logos"
-                        className="absolute left-0 right-0 top-full z-20 mt-xs flex flex-col gap-[2px] rounded-md border border-border-subtle bg-surface-raised p-xs shadow-lg"
+                        className="absolute left-0 right-0 top-full z-20 mt-xs flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-raised p-xs shadow-lg"
                     >
                         {results.map((result, index) => (
                             <li

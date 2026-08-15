@@ -50,7 +50,7 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }:
                 </div>
             ) }
             <div
-                className="max-w-(--layout-content-reading) mx-auto px-(--layout-reading-horizontal-padding) pt-(--layout-reading-top-padding) pb-[100px]">
+                className="max-w-(--layout-content-reading) mx-auto px-(--layout-reading-horizontal-padding) pt-(--layout-reading-top-padding) pb-25">
                 <Link href="/journal" className="font-mono text-caption text-text-muted">
                     ← { ln("button.backToJournal") }
                 </Link>

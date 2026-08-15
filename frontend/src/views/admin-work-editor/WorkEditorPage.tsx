@@ -20,9 +20,9 @@ import { type AutosaveStatus, useAutosaveDraft } from "@/shared/lib/use-autosave
 export interface WorkEditorPageProps {
     /** Absent for "create new"; present (already-saved) for "edit". */
     initialWork?: AdminWorkDetail;
-    /** `techStack[].name` from `SiteContent` — fuzzy-search suggestions for the Stack field's `TokenCombobox`, not a hard-enforced list (see `token-combobox/README.md` for why free text is still allowed). Defaults to `[]` so callers that don't have this yet (there are none today, but the type stays honest) don't crash. */
+    /** `techStack[].name` from `SiteContent` вЂ” fuzzy-search suggestions for the Stack field's `TokenCombobox`, not a hard-enforced list (see `token-combobox/README.md` for why free text is still allowed). Defaults to `[]` so callers that don't have this yet (there are none today, but the type stays honest) don't crash. */
     techStackSuggestions?: string[];
-    /** Every real Post, for `RelatedItemPicker`'s "Related journal post" field — same "hand the whole small list to the client" pattern as `techStackSuggestions`. Defaults to `[]` for the same reason. */
+    /** Every real Post, for `RelatedItemPicker`'s "Related journal post" field вЂ” same "hand the whole small list to the client" pattern as `techStackSuggestions`. Defaults to `[]` for the same reason. */
     postOptions?: RelatedItemOption[];
 }
 
@@ -48,28 +48,28 @@ interface FormState {
     heroImage: string;
 }
 
-/** Same shape/reasoning as `PostEditorPage`'s identical helper — see its comment. */
+/** Same shape/reasoning as `PostEditorPage`'s identical helper вЂ” see its comment. */
 function autosaveStatusLabel(status: AutosaveStatus): string | null {
     switch (status) {
         case "saving":
-            return "Saving draft…";
+            return "Saving draftвЂ¦";
         case "saved":
             return "Draft saved just now";
         case "error":
-            return "Save failed — retrying";
+            return "Save failed вЂ” retrying";
         case "idle":
             return null;
     }
 }
 
 /**
- * English-only title (`.en` — `Work.title` was localized 2026-08-11, same
+ * English-only title (`.en` вЂ” `Work.title` was localized 2026-08-11, same
  * shape as `Post.title`; translation happens on the separate "Add
- * translation" page, same as Post) — same reasoning as `PostEditorPage`'s
+ * translation" page, same as Post) вЂ” same reasoning as `PostEditorPage`'s
  * `toFormState`. `slug` reads `draftSlug` (the pending rename, if any), not
- * `slug` — same reasoning as `PostEditorPage`'s identical change, see
+ * `slug` вЂ” same reasoning as `PostEditorPage`'s identical change, see
  * `AdminWorkDetail.draftSlug`'s comment. `status` defaults to
- * `"in-progress"`, not `"shipped"` — a brand new item is a DRAFT
+ * `"in-progress"`, not `"shipped"` вЂ” a brand new item is a DRAFT
  * (`lifecycleState`) until explicitly published.
  */
 function toFormState(work?: AdminWorkDetail): FormState {
@@ -95,13 +95,13 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
     const router = useRouter();
     const isEditing = Boolean(initialWork);
 
-    // Same reasoning as `PostEditorPage`'s identical field — re-set
+    // Same reasoning as `PostEditorPage`'s identical field вЂ” re-set
     // wholesale by "Discard changes"/"Load into draft", read for
     // everything the form doesn't itself own (case-study blocks, in
     // particular).
     const [work, setWork] = React.useState<AdminWorkDetail | undefined>(initialWork);
     const [form, setForm] = React.useState<FormState>(() => toFormState(initialWork));
-    // Same reasoning as `PostEditorPage`'s `slugTouched` — an existing
+    // Same reasoning as `PostEditorPage`'s `slugTouched` вЂ” an existing
     // item's slug never follows title edits, only a brand new one's does,
     // and only until the admin edits the slug field directly.
     const [slugTouched, setSlugTouched] = React.useState(isEditing);
@@ -116,12 +116,12 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
     const [lifecyclePending, setLifecyclePending] = React.useState(false);
     /** Same reasoning as `PostEditorPage`'s identical field. */
     const [hasUnpublishedChanges, setHasUnpublishedChanges] = React.useState(initialWork?.hasUnpublishedChanges ?? false);
-    // Guards "Back to list"/"Add translation" — see `navigateAfterFlush` below.
+    // Guards "Back to list"/"Add translation" вЂ” see `navigateAfterFlush` below.
     const [navPending, setNavPending] = React.useState(false);
-    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical field — see its comment. */
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical field вЂ” see its comment. */
     const [currentSlug, setCurrentSlug] = React.useState<string | null>(initialWork?.slug ?? null);
 
-    /** Same hook, same reasoning as `PostEditorPage`'s identical field — see its comment and this slice's README. */
+    /** Same hook, same reasoning as `PostEditorPage`'s identical field вЂ” see its comment and this slice's README. */
     const autosave = useAutosaveDraft<WorkInput, WorkSummary>({
         slug: initialWork?.slug ?? null,
         buildInput: () => ({
@@ -130,7 +130,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
             date: form.date,
             status: form.status,
             summary: form.summary.trim(),
-            // Already an array of trimmed, deduped-by-TokenCombobox tokens —
+            // Already an array of trimmed, deduped-by-TokenCombobox tokens вЂ”
             // still `.filter(Boolean)` defensively at this boundary, same as
             // every other field here, rather than trusting the UI layer
             // never to hand back something empty.
@@ -152,7 +152,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
         create: (input) => adminApi.createWork(input),
         update: (slug, input) => adminApi.updateWork(slug, input),
         getSlug: (result) => result.slug,
-        // Same reasoning as `PostEditorPage.tsx`'s identical field — fires ONLY for the initial create.
+        // Same reasoning as `PostEditorPage.tsx`'s identical field вЂ” fires ONLY for the initial create.
         onSlugChanged: (result) => {
             setCurrentSlug(result.slug);
             router.replace(`/admin/work/${ result.slug }/edit`);
@@ -164,7 +164,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
                 setHasUnpublishedChanges(true);
             }
         },
-        onError: (err) => setError(err instanceof AdminApiError ? err.message : "Something went wrong while saving. Retrying automatically…"),
+        onError: (err) => setError(err instanceof AdminApiError ? err.message : "Something went wrong while saving. Retrying automaticallyвЂ¦"),
     });
 
     function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -186,7 +186,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
         update("slug", slug);
     }
 
-    /** Same reasoning as `PostEditorPage.tsx`'s identical function — see its comment. */
+    /** Same reasoning as `PostEditorPage.tsx`'s identical function вЂ” see its comment. */
     async function handlePublish() {
         if (!currentSlug) return;
         setError(null);
@@ -227,7 +227,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
         }
     }
 
-    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical function — see its comment on why this flushes before discarding. */
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical function вЂ” see its comment on why this flushes before discarding. */
     async function handleDiscard() {
         if (!currentSlug) return;
         if (!window.confirm("Discard every unpublished change and go back to what's currently live?")) return;
@@ -264,7 +264,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
         if (!window.confirm(`Delete "${ currentSlug }"? This can't be undone.`)) return;
 
         setDeleting(true);
-        // See PostEditorPage.tsx's identical comment — avoids the background
+        // See PostEditorPage.tsx's identical comment вЂ” avoids the background
         // blur-flush's `update()` landing on the server after this delete
         // already removed the row.
         await autosave.flush().catch(() => {});
@@ -278,7 +278,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
         }
     }
 
-    /** Same hook, same reasoning, same fix as `PostEditorPage.tsx`'s identical function — see its comment for why this flushes BEFORE navigating rather than relying on `useAutosaveDraft`'s own unmount cleanup. */
+    /** Same hook, same reasoning, same fix as `PostEditorPage.tsx`'s identical function вЂ” see its comment for why this flushes BEFORE navigating rather than relying on `useAutosaveDraft`'s own unmount cleanup. */
     async function navigateAfterFlush(path: string) {
         setError(null);
         setNavPending(true);
@@ -286,28 +286,28 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
             await autosave.flush();
             router.push(path);
         } catch {
-            setError("Your latest changes couldn't be saved yet — please try again before leaving this page.");
+            setError("Your latest changes couldn't be saved yet вЂ” please try again before leaving this page.");
             setNavPending(false);
         }
     }
 
     const autosaveLabel = autosaveStatusLabel(autosave.status);
 
-    /** See PostEditorPage.tsx's identical `flushOnBlur` comment — same reasoning, same fire-and-forget flush on any field (including the block editor) losing focus. */
+    /** See PostEditorPage.tsx's identical `flushOnBlur` comment вЂ” same reasoning, same fire-and-forget flush on any field (including the block editor) losing focus. */
     function flushOnBlur() {
         void autosave.flush().catch(() => {});
     }
 
     return (
-        // See PostEditorPage.tsx's identical `onSubmit` comment — swallows the browser's implicit submit-on-Enter, there's no real submit action anymore.
+        // See PostEditorPage.tsx's identical `onSubmit` comment вЂ” swallows the browser's implicit submit-on-Enter, there's no real submit action anymore.
         <form onSubmit={(e) => e.preventDefault()} onBlur={flushOnBlur} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-start justify-between gap-md flex-wrap">
                 <div className="flex flex-col gap-sm">
                     <Text as="h1" variant="h3">{isEditing ? `Edit work: ${ currentSlug }` : "New work item"}</Text>
                     <Text variant="caption" tone="faint" className="max-w-[52ch]">
-                        A project or system in the <code className="font-mono">/work</code> portfolio ledger —
-                        “what you built.” A journal post, by contrast, is a dated essay about it —
-                        “what you wrote.” The two sections below map to the two things a visitor actually sees:
+                        A project or system in the <code className="font-mono">/work</code> portfolio ledger вЂ”
+                        вЂњwhat you built.вЂќ A journal post, by contrast, is a dated essay about it вЂ”
+                        вЂњwhat you wrote.вЂќ The two sections below map to the two things a visitor actually sees:
                         the card everyone gets, and an optional deep-dive page only some items have.
                     </Text>
                     <div className="flex items-center gap-sm flex-wrap">
@@ -379,11 +379,11 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
             </div>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
-                <div className="flex flex-col gap-[2px]">
+                <div className="flex flex-col gap-0.5">
                     <Text as="h2" variant="h5">Portfolio card</Text>
                     <Text variant="caption" tone="faint">
-                        Every work item gets one of these — on the <code className="font-mono">/work</code> ledger,
-                        and (if “Featured” below) on the landing page’s “Selected Work” grid too.
+                        Every work item gets one of these вЂ” on the <code className="font-mono">/work</code> ledger,
+                        and (if вЂњFeaturedвЂќ below) on the landing pageвЂ™s вЂњSelected WorkвЂќ grid too.
                     </Text>
                 </div>
 
@@ -395,24 +395,24 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
                     htmlFor="slug"
                     hint={
                         isEditing
-                            ? `Auto-generated from the title — edit if you want a different URL. Currently live at /work/${ currentSlug }; a change here takes effect on Publish/Update.`
-                            : "Auto-generated from the title — edit if you want a different URL."
+                            ? `Auto-generated from the title вЂ” edit if you want a different URL. Currently live at /work/${ currentSlug }; a change here takes effect on Publish/Update.`
+                            : "Auto-generated from the title вЂ” edit if you want a different URL."
                     }
                 >
                     <Input id="slug" required value={form.slug} onChange={(e) => updateSlugManually(e.target.value)} />
                 </Field>
-                <Field label="Summary" htmlFor="summary" hint="One or two sentences — the blurb shown under the title on the card.">
+                <Field label="Summary" htmlFor="summary" hint="One or two sentences вЂ” the blurb shown under the title on the card.">
                     <Textarea id="summary" required rows={2} value={form.summary} onChange={(e) => update("summary", e.target.value)} />
                 </Field>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                    <Field label="Date" htmlFor="date" hint="Used to sort the /work ledger, newest first — edit freely, unlike a journal post's date.">
+                    <Field label="Date" htmlFor="date" hint="Used to sort the /work ledger, newest first вЂ” edit freely, unlike a journal post's date.">
                         <Input id="date" type="date" required value={form.date} onChange={(e) => update("date", e.target.value)} />
                     </Field>
                     <TokenCombobox
                         id="work-stack"
                         label="Stack"
-                        hint="Press Enter to add. Pick a suggestion, or type your own — it doesn't have to already exist in Tech Stack."
+                        hint="Press Enter to add. Pick a suggestion, or type your own вЂ” it doesn't have to already exist in Tech Stack."
                         values={form.stack}
                         onChange={(stack) => update("stack", stack)}
                         suggestions={techStackSuggestions}
@@ -421,7 +421,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
                     <Field
                         label="Cover image"
                         htmlFor="coverImage"
-                        hint={"Optional — only used on the landing page's \"Selected Work\" grid, not on the /work ledger itself."}
+                        hint={"Optional вЂ” only used on the landing page's \"Selected Work\" grid, not on the /work ledger itself."}
                     >
                         <Input id="coverImage" value={form.coverImage} onChange={(e) => update("coverImage", e.target.value)} />
                     </Field>
@@ -438,20 +438,20 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
                 <RelatedItemPicker
                     id="relatedPostSlug"
                     label="Related journal post"
-                    hint="Optional — the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."
+                    hint="Optional вЂ” the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."
                     value={form.relatedPostSlug || null}
                     onChange={(slug) => update("relatedPostSlug", slug ?? "")}
                     options={postOptions}
-                    placeholder="Search journal posts…"
+                    placeholder="Search journal postsвЂ¦"
                 />
             </Card>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
-                <div className="flex flex-col gap-[2px]">
+                <div className="flex flex-col gap-0.5">
                     <Text as="h2" variant="h5">Case study (optional)</Text>
                     <Text variant="caption" tone="faint">
-                        A full write-up page at <code className="font-mono">/work/{ form.slug || "…" }</code> — the
-                        project’s own detail page, separate from the journal. Most items don’t need one; a plain
+                        A full write-up page at <code className="font-mono">/work/{ form.slug || "вЂ¦" }</code> вЂ” the
+                        projectвЂ™s own detail page, separate from the journal. Most items donвЂ™t need one; a plain
                         card above is often enough.
                     </Text>
                 </div>
@@ -466,35 +466,35 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOpt
                 {form.hasCaseStudy && (
                     <>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                            <Field label="Started" htmlFor="startedLabel" hint={"Free-text, e.g. \"Jan 2023\" — not an exact date."}>
+                            <Field label="Started" htmlFor="startedLabel" hint={"Free-text, e.g. \"Jan 2023\" вЂ” not an exact date."}>
                                 <Input id="startedLabel" required value={form.startedLabel} onChange={(e) => update("startedLabel", e.target.value)} placeholder="e.g. Jan 2023" />
                             </Field>
                             <Field
                                 label={form.status === "in-progress" ? "Target" : "Shipped"}
                                 htmlFor="shippedLabel"
                                 hint={form.status === "in-progress"
-                                    ? "Free-text estimate, e.g. \"Q4 2026\" — shown as the target date while In progress."
-                                    : "Free-text, e.g. \"Aug 2023\" — shown as the ship date."}
+                                    ? "Free-text estimate, e.g. \"Q4 2026\" вЂ” shown as the target date while In progress."
+                                    : "Free-text, e.g. \"Aug 2023\" вЂ” shown as the ship date."}
                             >
                                 <Input id="shippedLabel" required value={form.shippedLabel} onChange={(e) => update("shippedLabel", e.target.value)} placeholder="e.g. Aug 2023" />
                             </Field>
                         </div>
-                        <Field label="Role" htmlFor="role" hint={"Your role on the project, e.g. \"Sole engineer\" or \"Lead architect\" — shown in the case study's meta row."}>
+                        <Field label="Role" htmlFor="role" hint={"Your role on the project, e.g. \"Sole engineer\" or \"Lead architect\" вЂ” shown in the case study's meta row."}>
                             <Input id="role" required value={form.role} onChange={(e) => update("role", e.target.value)} placeholder="e.g. Sole engineer" />
                         </Field>
                         <Field
                             label="Hero image"
                             htmlFor="heroImage"
-                            hint="Optional — the large banner image at the top of THIS case study page. Different from the small Cover image above, which is only used on the landing page grid."
+                            hint="Optional вЂ” the large banner image at the top of THIS case study page. Different from the small Cover image above, which is only used on the landing page grid."
                         >
                             <Input id="heroImage" value={form.heroImage} onChange={(e) => update("heroImage", e.target.value)} />
                         </Field>
 
                         <div className="flex flex-col gap-sm mt-sm">
-                            <div className="flex flex-col gap-[2px]">
+                            <div className="flex flex-col gap-0.5">
                                 <Text variant="h5" as="h2">Case study body</Text>
                                 <Text variant="caption" tone="faint">
-                                    The narrative itself — same block editor as a journal post’s body.
+                                    The narrative itself вЂ” same block editor as a journal postвЂ™s body.
                                 </Text>
                             </div>
                             <BlockEditor key={contentVersion} ref={blockEditorRef} initialBlocks={work?.caseStudy?.blocks ?? []} onChange={autosave.scheduleSave} />

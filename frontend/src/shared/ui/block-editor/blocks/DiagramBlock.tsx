@@ -38,7 +38,7 @@ interface SegmentedToggleProps<T extends string> {
  * */
 function SegmentedToggle<T extends string>({ options, value, onChange }: SegmentedToggleProps<T>) {
     return (
-        <div className="flex items-center gap-[2px] bg-surface-icon border border-border-subtle rounded-pill p-[3px]"
+        <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-xxs"
              contentEditable={ false }>
             { options.map((option) => {
                 const isActive = value === option.value;

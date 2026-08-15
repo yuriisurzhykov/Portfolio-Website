@@ -130,7 +130,7 @@ export function TechStackRow({
 
                 <span
                     className={ cn(
-                        "shrink-0 rounded-sm border px-sm py-[2px] font-mono text-micro",
+                        "shrink-0 rounded-sm border px-sm py-xxs font-mono text-micro",
                         statusToneClasses[status.tone],
                     ) }
                 >

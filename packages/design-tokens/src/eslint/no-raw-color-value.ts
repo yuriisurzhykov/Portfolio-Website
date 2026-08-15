@@ -1,21 +1,9 @@
-/**
- * DS001, inline `style={{}}` side. AST nodes typed loosely (`any`) for the
- * same reason as `no-arbitrary-color-class.ts` — see its top comment.
- */
+/** DS001, inline `style={{}}` side. */
 import type { Rule } from "eslint";
+import { isStyleAttribute, propertyKeyName } from "./ast-helpers.ts";
 
 const COLOR_PROPERTY = /^(color|background|backgroundColor|background(Color)?Image|border(Color)?|borderTop(Color)?|borderBottom(Color)?|borderLeft(Color)?|borderRight(Color)?|fill|stroke|outline(Color)?|boxShadow|textDecorationColor|caretColor|accentColor)$/;
 const RAW_COLOR_VALUE = /^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|oklch\(|oklab\(|lab\(|lch\()/;
-
-function isStyleAttribute(node: any): boolean {
-    return node.type === "JSXAttribute" && node.name?.name === "style";
-}
-
-function propertyKeyName(key: any): string | null {
-    if (key.type === "Identifier") return key.name;
-    if (key.type === "Literal" && typeof key.value === "string") return key.value;
-    return null;
-}
 
 const rule: Rule.RuleModule = {
     meta: {

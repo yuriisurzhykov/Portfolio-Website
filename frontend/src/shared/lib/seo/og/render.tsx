@@ -109,8 +109,8 @@ export function renderOgImage({ eyebrow, title, subtitle, footer, hue = DEFAULT_
                 (
                     <div
                         style={{
-                            width: "100%",
-                            height: "100%",
+                            width: OG_SIZE.width,
+                            height: OG_SIZE.height,
                             display: "flex",
                             position: "relative",
                             backgroundColor: ogTheme.surfacePrimary,

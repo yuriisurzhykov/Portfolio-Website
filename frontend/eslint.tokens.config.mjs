@@ -1,4 +1,4 @@
-import { globalIgnores } from "eslint/config";
+import {globalIgnores} from "eslint/config";
 import tseslintParser from "@typescript-eslint/parser";
 import designTokens from "@portfolio/design-tokens/eslint-plugin";
 
@@ -39,13 +39,17 @@ export default [
         ignores: ["src/shared/ui/theme/tokens/color.ts", "src/shared/ui/theme/generated/**"],
         languageOptions: {
             parser: tseslintParser,
-            parserOptions: { ecmaFeatures: { jsx: true } },
+            parserOptions: {
+                ecmaFeatures: {jsx: true}
+            },
         },
-        linterOptions: { noInlineConfig: true },
-        plugins: { "design-tokens": designTokens },
+        linterOptions: {noInlineConfig: true},
+        plugins: {"design-tokens": designTokens},
         rules: {
             "design-tokens/no-raw-color-value": "error",
             "design-tokens/no-arbitrary-color-class": "error",
+            "design-tokens/no-raw-dimension-value": "error",
+            "design-tokens/no-arbitrary-dimension-class": "error",
         },
     },
 ];
