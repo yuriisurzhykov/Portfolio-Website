@@ -98,6 +98,146 @@ change that built it*):
   — DS102, resolved by inlining the primitives directly into that
   composite instead.
 
+## 2026-08-14 — A real ReDoS finding (GitHub Advanced Security / CodeQL), fixed
+
+`no-arbitrary-color-class.ts`'s `COLOR_BEARING_ARBITRARY_CLASS` matched
+against the WHOLE className string with only a soft `(?:^|[\s"'`])`
+lookback — not a hard `^...$` anchor. `.match()` without the `g` flag
+retries at every position where that lookback succeeds, and at each one,
+the color-function alternatives' `[^)]*` scanned forward with no bound. A
+className with many repeated, never-closed prefixes made this genuinely
+O(n²): one scan attempt per candidate start position, each itself O(n) in
+the worst case. CodeQL flagged this correctly (6 separate alert entries,
+one per color-function alternative) — not a false positive to dismiss.
+
+Fixed by splitting the className on whitespace FIRST (a Tailwind class is
+inherently a whitespace-delimited token — this is also just the
+semantically correct unit to check, not only a performance fix) and
+matching each token against a fully `^...$`-anchored pattern with a
+bounded inner scan (`{0,100}`, not `*`). No per-token attempt can exceed
+O(1) work, so the whole check is O(n) in the string's total length.
+Verified live, not just reasoned about: added a regression test feeding
+the exact adversarial shape (`" accent-[rgb(".repeat(20000)`, ~260,000
+characters) and asserting a real wall-clock bound (`<500ms`) — a
+regression here shows up as a hung test, not a wrong answer. Also caught
+in the process: the existing hsl() test case
+(`text-[hsl(20 94% 61%)]`) used a literal space inside the arbitrary
+value, which isn't valid Tailwind syntax to begin with (Tailwind itself
+requires `_` in place of a space there, for the exact same "classes are
+whitespace-delimited" reason) — fixed to `text-[hsl(20_94%_61%)]`.
+
+**Correction, found the same day:** that check was wrong about one file.
+`references.ts`'s `TOKEN_REFERENCE = /\{([^}]+)}/g` has the exact same
+shape — `g` flag, no `^` anchor, so `.test()`/`.replace()`/`.matchAll()`
+(its 3 real call sites: `isReferenceLike`, `resolveString`,
+`collectReferences`) all retry at every character position on failure, and
+its `[^}]+` scanned unboundedly. CodeQL flagged all 3 call sites
+separately (reproduction: many repetitions of `"{{|"`). Fixed the same
+way — `[^}]{1,200}`, not `[^}]+` — and bounded `ALPHA_CALL` and
+`validate.ts`'s `REFERENCE_LIKE` too, even though both are fully
+`^...$`-anchored (a single whole-string attempt, never retried at another
+position, so never the same risk) — for one consistent "no unbounded scan
+inside braces" invariant across the package, not because they were
+independently flagged. Added a regression test for each of the 3 real call
+sites, feeding the exact adversarial shape (`"{{".repeat(50000)`) with a
+real wall-clock bound, same as the `no-arbitrary-color-class.ts` fix above.
+
+Every remaining regex in this package was checked against the same shape
+while investigating this (`RAW_COLOR_VALUE`, `HSL_PATTERN`,
+`THEME_OR_SEMANTIC`, `HSL_COLOR`, `COLOR_PROPERTY`, ...) — all of them are
+either fully `^...$`-anchored with no unbounded scan, or have no ambiguous
+alternation to begin with, so none of them share this risk.
+
+## 2026-08-14 — A real, live bug: Mermaid couldn't render `alpha()`-based colors
+
+Not a lint finding this time — an actual `Diagram render error: Unsupported
+color format: "color-mix(in srgb, hsl(20 94% 61%) 12%, transparent)"` from
+using the real app. Root cause: `alpha({color.X}, N%)` compiled to a CSS
+`color-mix()` call — valid CSS a browser renders fine, but Mermaid's "base"
+theme runs every `themeVariable` through its OWN color-math library (no CSS
+engine to lean on), which parses a plain `hsl()`/`rgb()`/hex string but not
+`color-mix()`.
+
+Fixed at the source, not with a Mermaid-specific workaround: every color
+primitive in this system is already validated as an `hsl()` string (DS001),
+and `hsl()` has its own native alpha syntax (`hsl(H S% L% / A%)`) —
+`color-mix(in srgb, hsl(H S% L%) A%, transparent)` and `hsl(H S% L% / A%)`
+are VISUALLY IDENTICAL (both mean "this hue/saturation/lightness at A%
+opacity"), but the latter is a plain literal every consumer can parse —
+exactly what `generated/resolved.ts` (read by every non-CSS adapter) needs.
+`references.ts`'s `resolveString()` now parses the resolved primitive and
+re-emits it with the requested alpha via `withAlpha()`; `color-mix()` is
+still there as a defensive fallback for a resolved value that somehow isn't
+plain `hsl()` despite DS001 — never silently wrong, just documented as a
+case that shouldn't occur in practice.
+
+`composites/gradients.ts` (`glow`/`mesh`)'s OWN, separate `color-mix()`
+usage for a gradient STOP's opacity (`serializers/gradient.ts`) is
+untouched, deliberately — those are CSS-only output (`--ds-gradient-*`),
+never read by Mermaid/OG-image/WebGL today. Worth remembering if a future
+adapter ever reads a gradient's resolved value directly: the same class of
+bug would resurface there.
+
+## 2026-08-14 — DS001's color validators existed, were unit-tested, and were never actually called by the compiler (found by a bot review comment)
+
+`validateColorPrimitiveFormat` and `validateNoRawColorLiterals` were real,
+tested functions, exposed via the frontend ESLint config against JSX call
+sites — but `compile.ts`'s `validateDesignTokens` only ever ran the
+reference-resolution graph checks (DS002/DS006/DS101/DS102/DS201/DS202).
+Neither DS001 color validator was invoked anywhere in the compile pipeline
+itself. A color primitive authored as `#0d0f14` instead of `hsl(...)`, or a
+theme/component color role authored as a raw literal instead of a
+`{reference}`, compiled without complaint — exactly the shape of value the
+frontend ESLint config is documented to reject, just never checked at the
+one point (`tokens:generate`/`tokens:check`) that actually produces the
+shipped CSS/data.
+
+Wiring both in turned out to need a third function, not a blind "run the
+existing validator on every tree": `validateNoRawColorLiterals` assumes
+every string leaf in the tree it's given must be a reference — true for a
+theme's `color` category or a (today, 100% color) component-token tree, but
+false for a composite recipe. `composites/gradients.ts`'s `Gradient` shape
+mixes real color references (`stops[].color`) with legitimate non-reference
+structural literals (`type: "radial"`, `position: "30% 30%"`) that were
+never meant to route through the token system — running the whole-tree
+validator there would have rejected valid, already-shipping data as a false
+positive. Added `validateColorFieldsDeep`: walks an arbitrary tree/array and
+runs `validateNoRawColorLiterals` only on values under a key literally
+named `"color"`, ignoring everything else — covers `Gradient`'s
+`stop.color` and `ShadowLayer`'s `layer.color` (both defined in this
+package) without hardcoding either shape by name, so a project's own custom
+composite kind gets the same coverage for free as long as it names its
+color field `color` too.
+
+`validateDesignTokens` now calls: `validateColorPrimitiveFormat` on
+`input.primitives.color`; `validateNoRawColorLiterals` on each theme's
+`color` category and on every component token tree; `validateColorFieldsDeep`
+on every composite. Verified against this repo's own real token source
+(`frontend/`'s `tokens:generate`) — no new DS001 errors, only the
+pre-existing DS101 warnings, confirming the real `tokens/color.ts`/
+`themes/*.ts`/`components/*.ts`/`composites/*.ts` were already compliant
+and this wasn't a live bug in THIS project, just an unenforced gap for any
+project (including a future one reusing this package) that wasn't.
+
+**Found by mutation testing, not by hand:** the first wiring guarded each
+call site (`if (input.primitives.color) { validateColorPrimitiveFormat(...) }`,
+`if (colorRoles) validateNoRawColorLiterals(...)`) the way several existing
+`compile.ts` checks already do. Both guards' mutants survived. Read what
+the mutant actually changed (this rule's own first step) instead of writing
+a test to force coverage: `validateNoRawColorLiterals` already returns
+immediately for `null`/`undefined` (`node == null`), so its guard was
+calling a no-op either way — genuinely equivalent code, not a real branch.
+`validateColorPrimitiveFormat`'s guard WAS load-bearing (it required a
+`Record<string, unknown>`, and would have thrown a `TypeError` from
+`Object.entries(undefined)` on a color-less project) — but the better fix
+was making the validator itself tolerate a missing/non-object `node`
+(matching the tolerance `validateNoRawColorLiterals` already had), the same
+"push a defensive check into the one function that needs it, not every call
+site" reasoning as everywhere else this package favors DRY over repeated
+ceremony. Removed both call-site guards entirely and added a real test — a
+radius-only project with no `color` category anywhere — proving a
+color-less project still compiles instead of crashing on either validator.
+
 ## How to use this in a NEW project
 
 1. Add this package as a workspace dependency (see `frontend/package.json`'s

@@ -15,8 +15,21 @@ export function getByPath(registry: Registry, path: string): unknown {
     return current;
 }
 
-const TOKEN_REFERENCE = /\{([^}]+)}/g;
-const ALPHA_CALL = /^alpha\(\{([^}]+)},\s*([\d.]+)%\)$/;
+/**
+ * `{1,200}`, not `+` — a real ReDoS finding (CodeQL/GitHub Advanced
+ * Security, "polynomial regular expression"), fixed here, not dismissed
+ * as a false positive: this pattern has the `g` flag and no `^` anchor,
+ * so `.test()`/`.replace()`/`.matchAll()` all retry the match at EVERY
+ * character position on failure. A string with many repeated, never-closed
+ * `{` characters (CodeQL's own reproduction: many repetitions of `"{{|"`)
+ * made the unbounded `[^}]+` scan to end-of-string at each one of those
+ * O(n) positions — genuinely O(n²). Bounding it caps the work per position
+ * to O(1); a real token reference path (`"theme.color.surfacePrimary"`) is
+ * nowhere close to 200 characters, so this changes no real behavior.
+ */
+const TOKEN_REFERENCE = /\{([^}]{1,200})}/g;
+/** Anchored `^...$` (a single whole-string match attempt, never retried at another position), so its own `[^}]+` was never the same risk — bounded anyway, for the same invariant everywhere in this file. */
+const ALPHA_CALL = /^alpha\(\{([^}]{1,200})},\s*([\d.]+)%\)$/;
 
 function resolveReference(path: string, registry: Registry, seen: ReadonlySet<string>): string {
     if (seen.has(path)) {
@@ -44,12 +57,47 @@ function resetLastIndex(pattern: RegExp, value: string): string {
     return value;
 }
 
+// Anchored `^...$`, single whole-string attempt — matches the shape every
+// primitive in this system is validated to have (DS001,
+// `validateColorPrimitiveFormat`), optionally already carrying its own
+// alpha component (e.g. `overlayWhite.8` = `hsl(0 0% 100% / 8%)`).
+const PLAIN_HSL = /^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*(?:\/\s*[\d.]+%\s*)?\)$/;
+
+/**
+ * `alpha({color.X}, 12%)` used to compile to `color-mix(in srgb, hsl(...) 12%,
+ * transparent)` — valid CSS, but a real, live bug (found running the actual
+ * app, not a lint finding): Mermaid's "base" theme runs every themeVariable
+ * through its OWN color-math library (it has no CSS engine to lean on), which
+ * can parse a plain `hsl()`/`rgb()`/hex string but not a `color-mix()` call —
+ * "Unsupported color format" the moment a diagram tried to use
+ * `interactivePrimarySubtle`.
+ *
+ * Fixed at the source, not by working around Mermaid specifically: every
+ * color primitive in this system is already an `hsl()` string (DS001), and
+ * `hsl()` has its OWN native alpha syntax (`hsl(H S% L% / A%)`) — setting
+ * that directly produces a color visually IDENTICAL to
+ * `color-mix(in srgb, hsl(H S% L%) A%, transparent)` (both mean "this hue/
+ * saturation/lightness, at A% opacity"), except it's a plain color literal
+ * every consumer (a browser, Mermaid, this package's own `hslStringToRgb01`)
+ * can parse directly — exactly the property `generated/resolved.ts` (read by
+ * every non-CSS adapter) needs and `color-mix()` never had.
+ * `color-mix()` stays as a defensive fallback for the one case this
+ * shouldn't ever hit in practice: a resolved value that ISN'T a plain
+ * `hsl()` string despite DS001 — never silently producing a wrong color.
+ */
+function withAlpha(resolvedColor: string, percent: string): string {
+    const match = resolvedColor.match(PLAIN_HSL);
+    if (!match) return `color-mix(in srgb, ${ resolvedColor } ${ percent }%, transparent)`;
+    const [, h, s, l] = match;
+    return `hsl(${ h } ${ s }% ${ l }% / ${ percent }%)`;
+}
+
 /** Resolves every `{path}` / `alpha({path}, N%)` occurrence inside a string, recursively (a semantic role's value can itself be another reference — the normal "theme role points at a primitive" case). */
 export function resolveString(value: string, registry: Registry, seen: ReadonlySet<string> = new Set()): string {
     const alphaMatch = value.match(ALPHA_CALL);
     if (alphaMatch) {
         const [, path, percent] = alphaMatch;
-        return `color-mix(in srgb, ${ resolveReference(path, registry, seen) } ${ percent }%, transparent)`;
+        return withAlpha(resolveReference(path, registry, seen), percent);
     }
     resetLastIndex(TOKEN_REFERENCE, value);
     return value.replace(TOKEN_REFERENCE, (_match, path: string) => resolveReference(path, registry, seen));

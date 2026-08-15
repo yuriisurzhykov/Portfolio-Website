@@ -1643,6 +1643,51 @@ to http...") сначала был написан неправильно — п�
 фикса и зелёный с ним (см. `mutation-testing.mdc`'s правило "докажи, что
 тест ловит баг, а не просто проходит").
 
+## 2026-08-14 — Реальный hydration mismatch на code-блоках, причина — глобальный автозапуск PrismJS
+
+Пользователь принёс реальную консольную ошибку React: "A tree hydrated but
+some attributes of the server rendered HTML didn't match the client
+properties" — лишний `tabindex="0"` на `<pre>` и лишний `class="language-*"`
+на `<code>`, которых `CodeBlockContent.tsx`'s JSX не задаёт вообще.
+
+Воспроизведено вживую (не по коду): чистый `npm run dev` без кеша + Playwright
+headless (без расширений браузера, чтобы исключить эту причину из списка
+React) на `/journal/rtsp-...` — ошибка стабильно повторяется.
+
+**Причина.** `import Prism from "prismjs"` сам по себе — не чистый импорт:
+если не выставлен `Prism.manual`, модуль планирует СВОЙ собственный
+`Prism.highlightAll()` (по `DOMContentLoaded` либо через `requestAnimationFrame`/
+`setTimeout`), который сканирует ВЕСЬ документ на `pre[class*="language-"]`/
+`code[class*="language-"]` и перекрашивает их напрямую в DOM — независимо от
+и одновременно с гидратацией React тех же самых элементов, которые этот же
+модуль уже подсветил через строковый API `Prism.highlight()`. Собственный
+`highlightElement` из `prism-core.js` при этом безусловно ставит
+`tabindex="0"` на родительский `<pre>`, если атрибута там ещё нет — отсюда
+именно такой, а не любой другой, диф атрибутов.
+
+**Исправлено** одной строкой в `codeHighlighter.ts` — `Prism.manual = true`
+сразу после импорта. Безопасно ставить именно там: планирование автозапуска
+всегда асинхронно (listener/rAF/setTimeout), а сам callback перечитывает
+`Prism.manual` в момент реального срабатывания, а не в момент планирования.
+Проверено вживую после фикса: тот же Playwright-прогон на холодном сервере —
+ошибок гидратации нет, подсветка синтаксиса (`<span class="token ...">`)
+работает как прежде.
+
+**Тест.** `codeHighlighter.test.ts` пинит `Prism.manual === true` через
+обычный top-level `import` — не `vi.resetModules()` + динамический `import()`
+(тот приём уже дважды сработал в этот же день для точно такого же
+`ignoreStatic`-случая на `shared/lib/seo/site-url.ts` и
+`shared/ui/theme/adapters/project-graph.ts`). Здесь он, наоборот, сломал
+Stryker'овскую per-test coverage-атрибуцию для ДРУГИХ тестов в том же файле:
+`vi.resetModules()` в одном тесте увёл прогон `languageMap`/`highlightCode`
+мутантов от тестов, которые их реально ловят (проверено руками: временная
+мутация `ts: "typescript"` → `ts: ""` красит "wraps recognized tokens" при
+прямом запуске, но Stryker с динамическим импортом в соседнем тесте
+показывал её как `Survived`). Откатил обратно на top-level import; мутант
+самого `Prism.manual = true` (единственная строка, которую это решение не
+покрывает) принят как `Ignored` под `ignoreStatic` — не стал жертвовать
+покрытием всего файла ради одной строки.
+
 ## Структура (целевая, будет заполняться по мере миграции)
 
 ```

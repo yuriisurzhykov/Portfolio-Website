@@ -6,6 +6,11 @@ import "prismjs/components/prism-jsx";
 import "prismjs/components/prism-tsx";
 import "prismjs/components/prism-kotlin";
 
+// Disables PrismJS's own auto-highlight-the-whole-document behavior, which
+// otherwise fights with React's hydration of the same elements — caused a
+// real hydration mismatch, see this package's README's dated entry.
+Prism.manual = true;
+
 /**
  * Supported languages for syntax highlighting.
  */

@@ -45,9 +45,17 @@ const config = {
     // genuinely lower-value to chase further than the structural bugs the
     // rest of this suite already caught live (DS201/DS102/DS007 taken
     // straight from a real build failure during this migration, not
-    // invented for the test). `break` set a bit below the measured number
-    // as headroom for new code, same reasoning as backend's/frontend's own
-    // configs — not at the ceiling, but a real regression still fails.
+    // invented for the test).
+    // Updated same day, same entry: wiring DS001's color validators into
+    // `compile.ts` (previously unit-tested but never actually called — see
+    // the README's dated entry) added real mutants there; two guard-clause
+    // mutants survived the first pass, one turned out genuinely equivalent
+    // (`validateNoRawColorLiterals` already no-ops on `null`/`undefined`)
+    // and was removed as dead ceremony rather than chased with a test, the
+    // other was closed with a real test. New total: 73.54%.
+    // `break` set a bit below the measured number as headroom for new code,
+    // same reasoning as backend's/frontend's own configs — not at the
+    // ceiling, but a real regression still fails.
     thresholds: {
         high: 85,
         low: 65,

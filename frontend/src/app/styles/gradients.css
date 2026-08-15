@@ -2,11 +2,23 @@
  * GRADIENT UTILITIES
  * ------------------
  * Tailwind's bg-* utility only ever sets background-color, which can't hold
- * a multi-stop gradient() value — so any gradient-valued token in tokens.ts
- * gets one @utility here instead. Consuming components just add the class
- * name; no inline `style` needed, and no copy-pasted gradient CSS per call site.
+ * a multi-stop gradient() value — so any gradient-valued token gets one
+ * @utility here instead. Consuming components just add the class name; no
+ * inline `style` needed, and no copy-pasted gradient CSS per call site.
+ *
+ * `--ds-gradient-mesh` (generated/tokens.css), not `--color-accent-mesh-gradient`
+ * — a real regression, caught in code review, not by any test: the design-token
+ * migration removed `--color-accent-mesh-gradient` from `adapters/tailwind.css`
+ * (deliberately — the same Tailwind @theme/@utility-collision reason documented
+ * there) but this file, never touched in that same change, kept referencing the
+ * now-nonexistent variable. `var()` against an undefined custom property doesn't
+ * fail the build — it silently computes to nothing, so `PlaceholderCover`'s mesh
+ * gradient quietly disappeared (falling back to the flat placeholder color) with
+ * zero build/type/test signal. Referencing `--ds-gradient-mesh` directly is safe
+ * here specifically because this is a plain CSS file, not an `@theme` block — no
+ * Tailwind utility-generation collision to worry about outside `@theme`.
  */
 @utility bg-accent-mesh-gradient {
     background-color: var(--color-surface-placeholder-a);
-    background-image: var(--color-accent-mesh-gradient);
+    background-image: var(--ds-gradient-mesh);
 }

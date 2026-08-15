@@ -28,10 +28,10 @@ export const projectGraphScenePalette: Record<"dark" | "light", {
 }> = {
     dark: {
         background: hslStringToRgb01(resolved.dark.color.surfacePrimary),
-        ink: hslStringToRgb01(resolved.dark.color.textInverse),
+        ink: hslStringToRgb01(resolved.dark.color.textPrimary),
     },
     light: {
         background: hslStringToRgb01(resolved.light.color.surfacePrimary),
-        ink: hslStringToRgb01(resolved.light.color.textInverse),
+        ink: hslStringToRgb01(resolved.light.color.textPrimary),
     },
 };

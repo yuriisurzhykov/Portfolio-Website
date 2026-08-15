@@ -63,8 +63,17 @@ export function checkOptionalKeyParity(trees: Readonly<Record<string, TokenTree>
 
 const HSL_COLOR = /^hsl\(/;
 
-/** DS001 (primitive side, color-specific) — every color primitive leaf must be a real `hsl()` string, never a hex/rgb/oklch literal or a bare number. */
-export function validateColorPrimitiveFormat(node: Record<string, unknown>, path: readonly string[] = []): void {
+/**
+ * DS001 (primitive side, color-specific) — every color primitive leaf must
+ * be a real `hsl()` string, never a hex/rgb/oklch literal or a bare number.
+ * `node` is `unknown`, not `Record<string, unknown>`, and silently returns
+ * for anything that isn't a plain object — a project with no color
+ * primitives at all (this pass only reviews color; a project could have
+ * none) shouldn't force every call site to guard first, the same tolerance
+ * `validateNoRawColorLiterals` below already has for `null`/`undefined`.
+ */
+export function validateColorPrimitiveFormat(node: unknown, path: readonly string[] = []): void {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return;
     for (const [key, value] of Object.entries(node)) {
         if (key.startsWith("__")) continue;
         const currentPath = [...path, key];
@@ -78,7 +87,11 @@ export function validateColorPrimitiveFormat(node: Record<string, unknown>, path
     }
 }
 
-const REFERENCE_LIKE = /^(\{[^}]+\}|alpha\(\{[^}]+\},\s*[\d.]+%\))$/;
+// Fully `^...$`-anchored (one whole-string attempt, never retried at another
+// position), so unlike `references.ts`'s `TOKEN_REFERENCE` this was never the
+// "many repeated positions" ReDoS shape — bounded to `{1,200}` anyway, for the
+// same "no unbounded scan inside braces" invariant everywhere in this package.
+const REFERENCE_LIKE = /^(\{[^}]{1,200}\}|alpha\(\{[^}]{1,200}\},\s*[\d.]+%\))$/;
 
 /**
  * DS001 (semantic/component/composite side, color-specific for this pass —
@@ -103,6 +116,37 @@ export function validateNoRawColorLiterals(node: unknown, path: readonly string[
         for (const [key, value] of Object.entries(node)) {
             if (key.startsWith("__")) continue;
             validateNoRawColorLiterals(value, [...path, key]);
+        }
+    }
+}
+
+/**
+ * DS001 (composite side) — walks an arbitrary tree/array and runs
+ * `validateNoRawColorLiterals` on every value found under a key literally
+ * named "color", ignoring everything else. A composite recipe (a gradient's
+ * `stops[].color`, a shadow layer's `layer.color`) mixes a real color
+ * reference with structural literals that are valid non-reference strings
+ * on purpose (`type: "radial"`, `position: "30% 30%"`) — walking the WHOLE
+ * recipe with `validateNoRawColorLiterals` would reject those as false
+ * positives. This targets only the field the color actually lives in, by
+ * name, which is the one thing every composite shape in this package
+ * (`Gradient`'s `stop.color`, `ShadowLayer`'s `layer.color`) has in common —
+ * a project's own custom composite kind gets the same coverage for free as
+ * long as it names its color field "color" too.
+ */
+export function validateColorFieldsDeep(node: unknown, path: readonly string[] = []): void {
+    if (Array.isArray(node)) {
+        node.forEach((item, index) => validateColorFieldsDeep(item, [...path, String(index)]));
+        return;
+    }
+    if (node && typeof node === "object") {
+        for (const [key, value] of Object.entries(node)) {
+            if (key.startsWith("__")) continue;
+            if (key === "color") {
+                validateNoRawColorLiterals(value, [...path, key]);
+            } else {
+                validateColorFieldsDeep(value, [...path, key]);
+            }
         }
     }
 }

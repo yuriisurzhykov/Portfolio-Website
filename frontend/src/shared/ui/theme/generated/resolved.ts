@@ -13,11 +13,11 @@ export const resolved = {
         "color": {
             "borderFocus": "hsl(20 94% 61%)",
             "interactivePrimary": "hsl(20 94% 61%)",
-            "interactivePrimarySubtle": "color-mix(in srgb, hsl(20 94% 61%) 12%, transparent)",
+            "interactivePrimarySubtle": "hsl(20 94% 61% / 12%)",
             "statusSuccess": "hsl(131 53% 67%)",
-            "statusSuccessSubtle": "color-mix(in srgb, hsl(131 53% 67%) 12%, transparent)",
+            "statusSuccessSubtle": "hsl(131 53% 67% / 12%)",
             "statusWarning": "hsl(37 75% 64%)",
-            "statusWarningSubtle": "color-mix(in srgb, hsl(37 75% 64%) 12%, transparent)",
+            "statusWarningSubtle": "hsl(37 75% 64% / 12%)",
             "statusDanger": "hsl(0 74% 60%)",
             "statusForeground": "hsl(219 25% 5%)",
             "textOnBrand": "hsl(219 25% 5%)",
@@ -49,7 +49,7 @@ export const resolved = {
             "codeBlock": {
                 "background": "hsl(219 20% 10%)",
                 "border": "hsl(0 0% 100% / 8%)",
-                "hoverBackground": "color-mix(in srgb, hsl(219 0% 100%) 6%, transparent)",
+                "hoverBackground": "hsl(219 0% 100% / 6%)",
                 "title": "hsl(219 20% 55%)",
                 "copyText": "hsl(219 20% 64%)",
                 "copyTextHover": "hsl(219 20% 91%)",
@@ -73,9 +73,9 @@ export const resolved = {
             "mesh": "radial-gradient(ellipse at 15% 20%, hsl(20 95% 66%) 0%, color-mix(in srgb, hsl(20 95% 66%) 0%, transparent) 50%), radial-gradient(ellipse at 82% 15%, hsl(316 55% 52%) 0%, color-mix(in srgb, hsl(316 55% 52%) 0%, transparent) 55%), radial-gradient(ellipse at 75% 70%, hsl(131 52% 75%) 0%, color-mix(in srgb, hsl(131 52% 75%) 0%, transparent) 55%), radial-gradient(ellipse at 15% 85%, hsl(255 100% 82%) 0%, color-mix(in srgb, hsl(255 100% 82%) 0%, transparent) 50%)"
         },
         "shadow": {
-            "primaryButton": "0px 0px 2px 0px color-mix(in srgb, hsl(20 94% 61%) 45%, transparent), 0px 4px 12px 0px color-mix(in srgb, hsl(20 94% 61%) 30%, transparent)",
-            "primaryButtonHover": "0px 0px 15px 6px color-mix(in srgb, hsl(20 94% 61%) 60%, transparent), 0px 6px 16px 0px color-mix(in srgb, hsl(20 94% 61%) 40%, transparent)",
-            "surfaceDeep": "0px 20px 40px 0px color-mix(in srgb, hsl(219 25% 5%) 60%, transparent)",
+            "primaryButton": "0px 0px 2px 0px hsl(20 94% 61% / 45%), 0px 4px 12px 0px hsl(20 94% 61% / 30%)",
+            "primaryButtonHover": "0px 0px 15px 6px hsl(20 94% 61% / 60%), 0px 6px 16px 0px hsl(20 94% 61% / 40%)",
+            "surfaceDeep": "0px 20px 40px 0px hsl(219 25% 5% / 60%)",
             "focusRing": "0px 0px 0px 2px hsl(20 94% 61%)"
         }
     },
@@ -83,11 +83,11 @@ export const resolved = {
         "color": {
             "borderFocus": "hsl(20 94% 61%)",
             "interactivePrimary": "hsl(20 94% 61%)",
-            "interactivePrimarySubtle": "color-mix(in srgb, hsl(20 94% 61%) 12%, transparent)",
+            "interactivePrimarySubtle": "hsl(20 94% 61% / 12%)",
             "statusSuccess": "hsl(131 53% 67%)",
-            "statusSuccessSubtle": "color-mix(in srgb, hsl(131 53% 67%) 12%, transparent)",
+            "statusSuccessSubtle": "hsl(131 53% 67% / 12%)",
             "statusWarning": "hsl(37 75% 64%)",
-            "statusWarningSubtle": "color-mix(in srgb, hsl(37 75% 64%) 12%, transparent)",
+            "statusWarningSubtle": "hsl(37 75% 64% / 12%)",
             "statusDanger": "hsl(0 74% 60%)",
             "statusForeground": "hsl(219 25% 5%)",
             "textOnBrand": "hsl(219 25% 5%)",
@@ -119,7 +119,7 @@ export const resolved = {
             "codeBlock": {
                 "background": "hsl(219 20% 10%)",
                 "border": "hsl(0 0% 100% / 8%)",
-                "hoverBackground": "color-mix(in srgb, hsl(219 0% 100%) 6%, transparent)",
+                "hoverBackground": "hsl(219 0% 100% / 6%)",
                 "title": "hsl(219 20% 55%)",
                 "copyText": "hsl(219 20% 64%)",
                 "copyTextHover": "hsl(219 20% 91%)",
@@ -143,9 +143,9 @@ export const resolved = {
             "mesh": "radial-gradient(ellipse at 15% 20%, hsl(20 95% 66%) 0%, color-mix(in srgb, hsl(20 95% 66%) 0%, transparent) 50%), radial-gradient(ellipse at 82% 15%, hsl(316 55% 52%) 0%, color-mix(in srgb, hsl(316 55% 52%) 0%, transparent) 55%), radial-gradient(ellipse at 75% 70%, hsl(131 52% 75%) 0%, color-mix(in srgb, hsl(131 52% 75%) 0%, transparent) 55%), radial-gradient(ellipse at 15% 85%, hsl(255 100% 82%) 0%, color-mix(in srgb, hsl(255 100% 82%) 0%, transparent) 50%)"
         },
         "shadow": {
-            "primaryButton": "0px 0px 2px 0px color-mix(in srgb, hsl(20 94% 61%) 45%, transparent), 0px 4px 12px 0px color-mix(in srgb, hsl(20 94% 61%) 30%, transparent)",
-            "primaryButtonHover": "0px 0px 15px 6px color-mix(in srgb, hsl(20 94% 61%) 60%, transparent), 0px 6px 16px 0px color-mix(in srgb, hsl(20 94% 61%) 40%, transparent)",
-            "surfaceDeep": "0px 20px 40px 0px color-mix(in srgb, hsl(219 25% 5%) 60%, transparent)",
+            "primaryButton": "0px 0px 2px 0px hsl(20 94% 61% / 45%), 0px 4px 12px 0px hsl(20 94% 61% / 30%)",
+            "primaryButtonHover": "0px 0px 15px 6px hsl(20 94% 61% / 60%), 0px 6px 16px 0px hsl(20 94% 61% / 40%)",
+            "surfaceDeep": "0px 20px 40px 0px hsl(219 25% 5% / 60%)",
             "focusRing": "0px 0px 0px 2px hsl(20 94% 61%)"
         }
     }

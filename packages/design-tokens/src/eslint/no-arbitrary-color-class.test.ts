@@ -22,8 +22,17 @@ describe("no-arbitrary-color-class", () => {
     });
 
     it("flags an hsl()/rgb() color across other color-bearing prefixes", () => {
-        expect(lint('const x = <span className="text-[hsl(20 94% 61%)]" />;')).toHaveLength(1);
+        // `_` not a literal space — real Tailwind syntax; a raw space would split
+        // into two "class tokens", which is exactly why classes can't contain one.
+        expect(lint('const x = <span className="text-[hsl(20_94%_61%)]" />;')).toHaveLength(1);
         expect(lint('const x = <div className="border-[rgb(0,0,0)]" />;')).toHaveLength(1);
+    });
+
+    it("flags 2 offending classes independently when a className string has both, rather than only the first", () => {
+        const messages = lint('const x = <div className="bg-[#fff] text-[#000]" />;');
+        expect(messages).toHaveLength(2);
+        expect(messages.map((m) => m.message).join(" ")).toContain('"bg-[#fff]"');
+        expect(messages.map((m) => m.message).join(" ")).toContain('"text-[#000]"');
     });
 
     it("does NOT flag a legitimate fluid/responsive arbitrary value — the audit's real 75-occurrence case", () => {
@@ -43,5 +52,21 @@ describe("no-arbitrary-color-class", () => {
 
     it("ignores a non-className attribute even with the same-looking string", () => {
         expect(lint('const x = <div data-token="bg-[#fff]" />;')).toHaveLength(0);
+    });
+
+    it("does not blow up on the exact adversarial shape CodeQL flagged — many repeated, never-closed color-function prefixes", () => {
+        // The real finding: a whole-string scan with an unanchored lookback + an
+        // unbounded `[^)]*` was O(n²) on input like this (many candidate start
+        // positions, each scanning to end-of-string before failing). Asserting a
+        // real wall-clock bound, not just "it returns something" — a regression
+        // here would show up as this test timing out, not as a wrong answer.
+        // Leading space on each repeated unit, deliberately — that's what made the
+        // OLD (unanchored, lookback-based) regex retry the expensive scan at every
+        // single one of these 20,000 positions; a variant with no internal
+        // whitespace wouldn't actually have reproduced the original bug.
+        const adversarial = " accent-[rgb(".repeat(20000);
+        const start = performance.now();
+        expect(lint(`const x = <div className="${adversarial}" />;`)).toHaveLength(0);
+        expect(performance.now() - start).toBeLessThan(500);
     });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defineComponentTokens, defineComposite, defineContract, definePrimitives, defineTheme } from "./authoring";
-import { compileDesignTokens, DesignTokenBuildError, type CompilerInput } from "./compile";
+import { compileDesignTokens, DesignTokenBuildError, validateDesignTokens, type CompilerInput } from "./compile";
+import { TokenValidationError } from "./validate";
 
 /** A minimal, real primitive set mirroring this project's actual reviewed palette (ARCHITECTURE.md). */
 const color = definePrimitives({
@@ -166,5 +167,69 @@ describe("compileDesignTokens — generic output shape", () => {
         const result = compileDesignTokens(input);
         expect(result.resolved.dark.gradient.brand).toBe("linear-gradient(135deg, hsl(20 94% 61%) 0%, hsl(255 100% 82%) 100%)");
         expect(result.css).toContain("--ds-gradient-brand: linear-gradient(135deg, hsl(20 94% 61%) 0%, hsl(255 100% 82%) 100%);");
+    });
+});
+
+describe("compileDesignTokens — DS001, wired into the actual compile pipeline (found by a bot review comment)", () => {
+    // Previously `validateColorPrimitiveFormat`/`validateNoRawColorLiterals`
+    // existed, were unit-tested in isolation, and were exposed via the
+    // frontend ESLint config — but `compile.ts` never called them, so a
+    // color literal authored directly in a `tokens/`/`themes/`/`components/`/
+    // `composites/` source file compiled without complaint.
+
+    it("rejects a color primitive step that isn't a real hsl() string", () => {
+        const badColor = definePrimitives({ neutral: { 950: "#0d0f14" } });
+        const input = baseInput([]);
+        expect(() => validateDesignTokens({ ...input, primitives: { ...input.primitives, color: badColor } })).toThrow(
+            /DS001 color primitive "neutral\.950" is not a valid hsl\(\) string: "#0d0f14"/,
+        );
+    });
+
+    it("rejects a raw color literal authored directly in a theme role instead of a {reference}", () => {
+        const input = baseInput([]);
+        const darkTheme = defineTheme(colorContract, { surfacePrimary: "hsl(219 25% 5%)", interactivePrimary: "{color.brand.500}" });
+        expect(() => validateDesignTokens({ ...input, themes: { ...input.themes, dark: { color: darkTheme } } })).toThrow(
+            /DS001 raw color literal outside a primitive layer at "theme\.dark\.color\.surfacePrimary"/,
+        );
+    });
+
+    it("rejects a raw color literal authored directly in a component token", () => {
+        const input = baseInput([defineComponentTokens("codeBlock", { keyword: "#a78bfa" })]);
+        expect(() => validateDesignTokens(input)).toThrow(TokenValidationError);
+        expect(() => validateDesignTokens(input)).toThrow(/DS001 raw color literal outside a primitive layer at "component\.codeBlock\.keyword"/);
+    });
+
+    it("rejects a raw color literal inside a composite's color field, without rejecting the composite's real structural literals", () => {
+        // type/angle/position are legitimate non-reference literals here.
+        const input = baseInput([]);
+        const badGradient = defineComposite("gradient", {
+            brand: { type: "linear", angle: 135, stops: [{ color: "hsl(20 94% 61%)", position: 0 }, { color: "{color.accent.purple}", position: 100 }] },
+        });
+        expect(() => validateDesignTokens({ ...input, composites: [badGradient] })).toThrow(
+            /DS001 raw color literal outside a primitive layer at "composite\.gradient\.brand\.stops\.0\.color"/,
+        );
+    });
+
+    it("still compiles a real, valid gradient composite whose non-color fields are plain literals, not references", () => {
+        const goodGradient = defineComposite("gradient", {
+            brand: { type: "linear", angle: 135, stops: [{ color: "{theme.color.interactivePrimary}", position: 0 }, { color: "{color.accent.purple}", position: 100 }] },
+        });
+        const input = baseInput([]);
+        expect(() => compileDesignTokens({ ...input, composites: [goodGradient] })).not.toThrow();
+    });
+
+    it("doesn't require a color category at all — a project with no color primitives or color theme axis compiles fine", () => {
+        const radiusPrimitives = definePrimitives({ sm: "0.25rem", md: "0.5rem" });
+        const radiusContract = defineContract({ category: "radius", required: [] });
+        const radiusTheme = defineTheme(radiusContract, { control: "{radius.md}" });
+        const input: CompilerInput = {
+            primitives: { radius: radiusPrimitives },
+            contracts: { radius: radiusContract },
+            themes: { default: { radius: radiusTheme } },
+            flatSemantics: {},
+            components: [],
+            composites: [],
+        };
+        expect(() => compileDesignTokens(input)).not.toThrow();
     });
 });

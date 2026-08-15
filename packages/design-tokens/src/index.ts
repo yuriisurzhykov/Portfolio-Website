@@ -23,6 +23,7 @@ export {
     assertRequiredKeys,
     checkOptionalKeyParity,
     TokenValidationError,
+    validateColorFieldsDeep,
     validateColorPrimitiveFormat,
     validateNoRawColorLiterals,
     validateNoSemanticToSemanticRefs,

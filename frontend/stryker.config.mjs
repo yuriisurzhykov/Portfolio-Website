@@ -49,6 +49,16 @@ const config = {
         "src/views/admin-settings-editor/tech-stack/parse-tech-input.ts",
         "src/views/admin-settings-editor/tech-stack/reorder.ts",
         "src/views/admin-settings-editor/tech-stack/icon-status.ts",
+        // 2026-08-14, fixed Mermaid's color-mix() bug: pure function, own
+        // dedicated test. See theme/README.md's dated entry.
+        "src/shared/ui/theme/adapters/mermaid.ts",
+        // 2026-08-14, fixed a bot-flagged `ink === background` bug: pure
+        // function, own dedicated test. See theme/README.md's dated entry.
+        "src/shared/ui/theme/adapters/project-graph.ts",
+        // 2026-08-14, fixed a hydration mismatch (PrismJS's global
+        // auto-highlight vs React): own dedicated test. See
+        // frontend/README.md's dated entry.
+        "src/shared/lib/highlight/codeHighlighter.ts",
     ],
     // "json" alongside the HTML report: `scripts/survived-mutants.mjs` reads
     // it to list surviving mutants with their source line. Scraping the
@@ -65,10 +75,17 @@ const config = {
     // time, crashing the whole test file instead of failing one test, so
     // per-mutant analysis can't isolate it).
     ignoreStatic: true,
-    // Real baseline (2026-07-27, see frontend/README.md's dated entry): 100%
-    // (131/131 non-ignored mutants killed, 23 documented-equivalent/static
-    // mutants ignored). `break` set a bit below that as real headroom, not
-    // at 100 — see backend/stryker.config.mjs's identical reasoning.
+    // First baseline (2026-07-27): 100% (131/131 non-ignored mutants
+    // killed). Scope grew since (SEO, admin-login, tech-stack, hue-accent,
+    // mermaid.ts, project-graph.ts, ...) — most recent real run
+    // (2026-08-14, see src/shared/ui/theme/README.md's dated entry):
+    // 97.15% (574 killed, 2 survived — both pre-existing in
+    // block-editor/convert.ts, unrelated to any of these additions —
+    // 6 timeouts, 47 ignored, out of 644 total). `break` deliberately left
+    // well below the real number, not raised to ~97 or 100 — see
+    // backend/stryker.config.mjs's identical reasoning: raising it would
+    // turn any future non-100% file red without a dedicated decision about
+    // that file.
     thresholds: {
         high: 90,
         low: 75,

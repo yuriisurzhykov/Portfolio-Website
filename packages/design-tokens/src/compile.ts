@@ -22,7 +22,14 @@ import {
     findUnusedGlobalSemantics,
     type NamespacedTree,
 } from "./usage-graph";
-import { checkOptionalKeyParity, validateReferences, validateUniqueVariableNames } from "./validate";
+import {
+    checkOptionalKeyParity,
+    validateColorFieldsDeep,
+    validateColorPrimitiveFormat,
+    validateNoRawColorLiterals,
+    validateReferences,
+    validateUniqueVariableNames,
+} from "./validate";
 import type { ComponentLayer, CompositeLayer, Contract, PrimitiveLayer, SemanticLayer, TokenTree } from "./types";
 
 export interface CompilerInput {
@@ -109,6 +116,20 @@ export function validateDesignTokens(input: CompilerInput): { readonly warnings:
     const warnings: string[] = [];
     const themeNames = Object.keys(input.themes);
     const consumers = collectConsumers(input);
+
+    // DS001, color-specific for this pass — see README.md's dated entry for
+    // why this wasn't wired in until now. Both validators no-op on a
+    // missing/undefined category, so no "does this project have color?" guard.
+    validateColorPrimitiveFormat(input.primitives.color);
+    for (const themeName of themeNames) {
+        validateNoRawColorLiterals(input.themes[themeName].color, ["theme", themeName, "color"]);
+    }
+    for (const component of input.components) {
+        validateNoRawColorLiterals(component, ["component", component.__namespace]);
+    }
+    for (const composite of input.composites) {
+        validateColorFieldsDeep(composite, ["composite", composite.__compositeKind]);
+    }
 
     const roots: TokenTree[] = [...Object.values(input.flatSemantics), ...input.components, ...input.composites];
     for (const themeName of themeNames) {
