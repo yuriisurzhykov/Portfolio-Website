@@ -162,14 +162,15 @@ function LandingPreview({ views }: { views: (TechIconView | null)[] }) {
             <Text variant="micro" tone="faint" className="normal-case tracking-normal">
                 On the landing page
             </Text>
-            <div className="flex flex-wrap items-center gap-x-[26px] gap-y-[16px] text-text-muted">
+            <div className="flex flex-wrap items-center gap-x-lg gap-y-md text-text-muted">
                 {visible.map((view, index) => (
                     // The size lives on this wrapper, never on `TechIcon`'s own
                     // `className` — see `TechIcon.tsx`'s comment on why a width
                     // utility passed in there doesn't override its internal
-                    // `w-full`. Same 26px the real section uses.
+                    // `w-full`. Same size the real section uses. `aspect-square
+                    // w-auto`, not `w-lg`, since `lg` is a reclaimed width key.
                     // eslint-disable-next-line react/no-array-index-key -- a resolved view has no identity of its own; this list is presentational and never reordered in place.
-                    <span key={index} className="block w-[26px] h-[26px]">
+                    <span key={index} className="block h-lg aspect-square w-auto">
                         <TechIconRenderer icon={view} />
                     </span>
                 ))}
