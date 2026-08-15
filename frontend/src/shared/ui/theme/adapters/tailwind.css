@@ -213,6 +213,7 @@
      * ------------------------------------------------------------------------ */
     --layout-content-max-width: var(--ds-layout-content-max-width);
     --layout-content-max-width-wide: var(--ds-layout-content-max-width-wide);
+    --layout-content-standard: var(--ds-layout-content-standard);
     --layout-content-narrow: var(--ds-layout-content-narrow);
     --layout-content-reading: var(--ds-layout-content-reading);
     --layout-content-journal: var(--ds-layout-content-journal);

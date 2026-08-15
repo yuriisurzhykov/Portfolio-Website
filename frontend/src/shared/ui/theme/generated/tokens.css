@@ -116,7 +116,7 @@
     --ds-typography-size-hero: 4rem;
     --ds-typography-size-display: 3.25rem;
     --ds-typography-size-h1: 2.75rem;
-    --ds-typography-size-h2: 1.5rem;
+    --ds-typography-size-h2: 2rem;
     --ds-typography-size-h3: 1.25rem;
     --ds-typography-size-body-lg: 1.1875rem;
     --ds-typography-size-body: 1rem;
@@ -134,9 +134,9 @@
     --ds-motion-easing-exit: cubic-bezier(0.4, 0.0, 0.6, 1);
     --ds-motion-scale-press: 0.97;
     --ds-motion-scale-highlight: 1.02;
-    --ds-layout-content-max-width: 80rem;
+    --ds-layout-content-max-width: 75rem;
     --ds-layout-content-max-width-wide: 90rem;
-    --ds-layout-content-standard: 75rem;
+    --ds-layout-content-standard: 60rem;
     --ds-layout-content-narrow: 68.75rem;
     --ds-layout-content-reading: 47.5rem;
     --ds-layout-content-journal: 51.25rem;
@@ -176,7 +176,7 @@
     --ds-color-surface-elevated: hsl(219 20% 10%);
     --ds-color-surface-raised: hsl(0 0% 100% / 4%);
     --ds-color-surface-subtle: hsl(0 0% 100% / 4%);
-    --ds-color-surface-icon: hsl(0 0% 100% / 8%);
+    --ds-color-surface-icon: hsl(0 0% 100% / 4%);
     --ds-color-surface-row-hover: hsl(0 0% 100% / 4%);
     --ds-color-surface-overlay: hsl(219 25% 5% / 85%);
     --ds-color-surface-inverse: hsl(219 0% 100%);
@@ -236,7 +236,7 @@
     --ds-color-surface-elevated: hsl(219 0% 96%);
     --ds-color-surface-raised: hsl(0 0% 0% / 4%);
     --ds-color-surface-subtle: hsl(0 0% 0% / 4%);
-    --ds-color-surface-icon: hsl(0 0% 0% / 8%);
+    --ds-color-surface-icon: hsl(0 0% 0% / 4%);
     --ds-color-surface-row-hover: hsl(0 0% 0% / 4%);
     --ds-color-surface-overlay: hsl(219 0% 100% / 85%);
     --ds-color-surface-inverse: hsl(219 25% 5%);
@@ -248,7 +248,7 @@
     --ds-color-text-faint: hsl(219 20% 37%);
     --ds-color-text-chip: hsl(219 20% 19%);
     --ds-color-text-inverse: hsl(219 0% 100%);
-    --ds-color-text-accent: hsl(20 90% 52%);
+    --ds-color-text-accent: hsl(20 85% 33%);
     --ds-color-border-subtle: hsl(0 0% 0% / 8%);
     --ds-color-border-default: hsl(0 0% 0% / 12%);
     --ds-color-border-strong: hsl(0 0% 0% / 24%);

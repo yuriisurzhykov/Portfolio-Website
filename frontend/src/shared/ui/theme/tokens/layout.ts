@@ -17,9 +17,9 @@ import { definePrimitives } from "@portfolio/design-tokens";
  * call site needed to change.
  */
 export const layout = definePrimitives({
-    contentMaxWidth: "80rem",       // 1280px
+    contentMaxWidth: "75rem",       // 1280px
     contentMaxWidthWide: "90rem",   // 1440px  (unused by this design, kept for future pages)
-    contentStandard: "75rem",       // 1200px  (to be used by any page that falls back to standard sizing)
+    contentStandard: "60rem",       // 960px  (to be used by any page that falls back to standard sizing)
     contentNarrow: "68.75rem",      // 1100px  (All Work ledger)
     contentReading: "47.5rem",      // 760px   (Blog Post)
     contentJournal: "51.25rem",     // 820px   (All Journal)

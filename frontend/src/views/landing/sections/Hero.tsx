@@ -48,7 +48,7 @@ export function Hero({hero, role, items}: HeroProps) {
                 "flex items-center gap-8",
             ) }
         >
-            <div className="relative max-w-(--layout-content-reading)">
+            <div className="relative max-w-(--layout-content-standard)">
                 <Eyebrow tone="accent" className="mb-4.5">
                     { pick(role) }
                 </Eyebrow>

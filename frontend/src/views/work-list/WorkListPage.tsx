@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import type { WorkPageContent, WorkSummary } from "@portfolio/backend";
-import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { Tag } from "@/shared/ui/tag";
@@ -55,7 +54,7 @@ function WorkRow({ item }: { item: WorkSummary }) {
     const trailingIndicator = caseStudyHref
         ? <span className="text-text-muted">→</span>
         : relatedPostHref
-            ? <CompactRelatedLink href={ relatedPostHref } label={ ln("work.ledger.relatedPost") } />
+            ? <CompactRelatedLink href={ relatedPostHref } label={ ln("work.ledger.relatedPost") }/>
             : null;
 
     const thumbnail = (
@@ -107,7 +106,7 @@ function WorkRow({ item }: { item: WorkSummary }) {
                         { pick(item.summary) }
                     </Text>
                 </div>
-                <TagList items={ item.stack } maxVisible={ 2 } size="sm" variant="neutral" className="self-center" />
+                <TagList items={ item.stack } maxVisible={ 2 } size="sm" variant="neutral" className="self-center"/>
                 <div className="flex items-center gap-sm self-center">
                     { statusBadge }
                     { trailingIndicator }
@@ -133,22 +132,14 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
     return (
         <main>
             <div
-                className="max-w-(--layout-content-narrow) mx-auto px-[clamp(20px,4vw,56px)] pt-[clamp(48px,7vw,80px)] pb-10">
-                <Link href="/" className="font-mono text-caption text-text-muted">
+                className="max-w-(--layout-content-standard) mx-auto pt-xl pb-10">
+                <Link href="/" className="font-bold text-caption text-text-accent">
                     ← { ln("button.backHome") }
                 </Link>
-                <Eyebrow tone="accent" className="mt-6 mb-3.5">
-                    { ln("eyebrow.allWork") }
-                </Eyebrow>
-                <h1 className="m-0 mb-4 font-extrabold text-[clamp(32px,4.5vw,52px)] leading-[1.08] tracking-tight text-text-primary">
-                    { pick(workPage.heading).map((line, index) => (
-                        <React.Fragment key={ line }>
-                            { index > 0 && <br className="hidden sm:inline"/> }{ " " }
-                            { line }
-                        </React.Fragment>
-                    )) }
-                </h1>
-                <Text variant="body" tone="muted" className="max-w-[64ch]">
+                <Text variant={ "h2" } className="m-2">
+                    { pick(workPage.heading) }
+                </Text>
+                <Text variant="body" tone="muted" className="m-2">
                     { pick(workPage.description) }
                 </Text>
 
@@ -168,7 +159,7 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
                 ) }
             </div>
 
-            <div className="max-w-(--layout-content-narrow) mx-auto px-[clamp(20px,4vw,56px)] pt-6 pb-[100px]">
+            <div className="max-w-(--layout-content-standard) mx-auto pt-6 pb-4xl">
                 { items.length === 0 && activeTech ? (
                     <Text variant="body" tone="muted" className="py-16 text-center">
                         { ln("work.filter.empty", { tech: activeTech.label }) }
@@ -183,7 +174,7 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
                                 "border-b border-border-subtle",
                             ) }
                         >
-                            <span aria-hidden="true" />
+                            <span aria-hidden="true"/>
                             <span>{ ln("work.ledger.year") }</span>
                             <span>{ ln("work.ledger.system") }</span>
                             <span>{ ln("work.ledger.stack") }</span>

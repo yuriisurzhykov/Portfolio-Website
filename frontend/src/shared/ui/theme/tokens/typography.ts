@@ -21,7 +21,7 @@ export const typography = definePrimitives({
         hero: "4rem",
         display: "3.25rem",
         h1: "2.75rem",
-        h2: "1.5rem",
+        h2: "2rem",
         h3: "1.25rem",
         bodyLg: "1.1875rem",
         body: "1rem",

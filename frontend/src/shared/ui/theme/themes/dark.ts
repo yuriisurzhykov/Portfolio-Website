@@ -15,7 +15,7 @@ export const darkTheme = defineTheme(colorContract, mergeTokenTree(sharedColorRo
     surfaceElevated: "{color.neutral.900}",
     surfaceRaised: "{color.overlayWhite.4}",
     surfaceSubtle: "{color.overlayWhite.4}",
-    surfaceIcon: "{color.overlayWhite.8}",
+    surfaceIcon: "{color.overlayWhite.4}",
     surfaceRowHover: "{color.overlayWhite.4}",
     surfaceOverlay: "{color.scrim.dark}",
     surfaceInverse: "{color.neutral.0}",

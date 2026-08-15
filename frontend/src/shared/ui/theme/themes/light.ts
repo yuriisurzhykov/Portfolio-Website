@@ -8,7 +8,7 @@ export const lightTheme = defineTheme(colorContract, mergeTokenTree(sharedColorR
     surfaceElevated: "{color.neutral.20}",
     surfaceRaised: "{color.overlayBlack.4}",
     surfaceSubtle: "{color.overlayBlack.4}",
-    surfaceIcon: "{color.overlayBlack.8}",
+    surfaceIcon: "{color.overlayBlack.4}",
     surfaceRowHover: "{color.overlayBlack.4}",
     surfaceOverlay: "{color.scrim.light}",
     surfaceInverse: "{color.neutral.950}",
@@ -21,10 +21,10 @@ export const lightTheme = defineTheme(colorContract, mergeTokenTree(sharedColorR
     textFaint: "{color.neutral.600}",
     textChip: "{color.neutral.800}",
     textInverse: "{color.neutral.0}",
-    // WCAG AA fix carried over from the pre-migration palette: a darker step than
-    // `interactivePrimary`, since this role has no fill to lean on (plain inline links,
-    // Eyebrow labels) — see frontend/README.md's dated color-contrast entry.
-    textAccent: "{color.brand.600}",
+    // AA-fix step per ARCHITECTURE.md's own reviewed light theme — a real
+    // live a11y test caught this at `{color.brand.600}` (contrast 3.23,
+    // needs 4.5) instead. See frontend/README.md's dated entry.
+    textAccent: "{color.brand.800}",
 
     borderSubtle: "{color.overlayBlack.8}",
     borderDefault: "{color.overlayBlack.12}",

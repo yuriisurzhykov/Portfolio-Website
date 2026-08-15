@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import type { JournalPageContent, PostSummary } from "@portfolio/backend";
-import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
@@ -41,7 +40,8 @@ function LogEntry({ post }: { post: PostSummary }) {
                             </Text>
                         ) }
                     </div>
-                    <Text as="div" variant="h3" tone={ isPublished ? "primary" : "muted" } className="mb-1.5 text-[21px]!">
+                    <Text as="div" variant="h3" tone={ isPublished ? "primary" : "muted" }
+                          className="mb-1.5 text-[21px]!">
                         { pick(post.title) }
                     </Text>
                     <Text as="div" variant="caption" tone={ isPublished ? "muted" : "faint" }
@@ -88,23 +88,20 @@ export function JournalListPage({ entries, journalPage }: JournalListPageProps) 
     return (
         <main>
             <div
-                className="max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-[clamp(48px,7vw,80px)] pb-10">
-                <Link href="/" className="font-mono text-caption text-text-muted">
+                className="max-w-(--layout-content-standard) mx-auto pt-xl pb-10">
+                <Link href="/" className="text-caption text-text-accent font-bold">
                     ← { ln("button.backHome") }
                 </Link>
-                <Eyebrow tone="accent" className="mt-6 mb-3.5">
-                    { ln("eyebrow.journal") }
-                </Eyebrow>
-                <h1 className="m-0 mb-4 font-extrabold text-[clamp(30px,4vw,44px)] leading-1 tracking-tight text-text-primary">
+                <Text variant={ "h2" } className="m-2">
                     { pick(journalPage.heading) }
-                </h1>
-                <Text variant="body" tone="muted">
+                </Text>
+                <Text variant="body" tone="muted" className="m-2">
                     { pick(journalPage.description) }
                 </Text>
             </div>
 
             <div
-                className="relative max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-md">
+                className="relative max-w-(--layout-content-standard) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-md">
                 <div
                     className="absolute left-[calc(clamp(20px,4vw,24px)+5px)] top-2 bottom-25 w-0.5 bg-border-subtle"/>
                 { entries.map((post) => (

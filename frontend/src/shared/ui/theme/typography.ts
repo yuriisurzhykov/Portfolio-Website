@@ -14,9 +14,9 @@ export type TextVariant =
 
 export const typography: Record<TextVariant, { fontSize: string; lineHeight: string; weightVar: string }>
     = {
-    display: { fontSize: "clamp(2.5rem, 6vw, 4rem)", lineHeight: "1.1", weightVar: "var(--fw-extrabold)" },
-    h1:      { fontSize: "clamp(2rem, 5vw, 3rem)",    lineHeight: "1.15", weightVar: "var(--fw-bold)" },
-    h2:      { fontSize: "clamp(1.5rem, 3.5vw, 2.25rem)", lineHeight: "1.2", weightVar: "var(--fw-semibold)" },
+    display: { fontSize: "clamp(2.5rem, 6vh, 4rem)", lineHeight: "1.1", weightVar: "var(--fw-extrabold)" },
+    h1:      { fontSize: "clamp(2rem, 5vh, 3rem)",    lineHeight: "1.15", weightVar: "var(--fw-bold)" },
+    h2:      { fontSize: "clamp(1.75rem, 3.5vh, 2.25rem)", lineHeight: "1.2", weightVar: "var(--fw-semibold)" },
     h3:      { fontSize: "1.25rem", lineHeight: "1.25", weightVar: "var(--fw-semibold)" },
     lead:    { fontSize: "1.125rem", lineHeight: "1.5", weightVar: "var(--fw-regular)" },
     body:    { fontSize: "1rem",     lineHeight: "1.6", weightVar: "var(--fw-regular)" },
