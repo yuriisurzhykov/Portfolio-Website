@@ -1,3 +1,5 @@
+// noinspection HtmlUnknownAttribute
+
 import { Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 import rule from "./no-arbitrary-color-class";

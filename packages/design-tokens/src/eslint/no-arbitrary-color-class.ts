@@ -16,7 +16,7 @@
 import type { Rule } from "eslint";
 
 const COLOR_BEARING_ARBITRARY_CLASS =
-    /(?:^|[\s"'`])((?:bg|text|border|fill|stroke|outline|ring|decoration|divide|from|via|to|caret|accent|shadow)-\[(?:#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|lab\([^)]*\)|lch\([^)]*\))\])/;
+    /(?:^|[\s"'`])((?:bg|text|border|fill|stroke|outline|ring|decoration|divide|from|via|to|caret|accent|shadow)-\[(?:#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|lab\([^)]*\)|lch\([^)]*\))])/;
 
 function isClassNameAttribute(node: any): boolean {
     return node.type === "JSXAttribute" && node.name?.name === "className";

@@ -1,3 +1,5 @@
+// noinspection TypeScriptMissingConfigOption
+
 import { Linter } from "eslint";
 import { describe, expect, it } from "vitest";
 import rule from "./no-raw-color-value";

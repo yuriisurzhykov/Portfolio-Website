@@ -54,10 +54,42 @@ export const gradients = defineComposite("gradient", {
     mesh: {
         type: "layered",
         layers: [
-            { type: "radial", position: "15% 20%", stops: [{ color: "{color.brand.400}", position: 0 }, { color: "{color.brand.400}", position: 50, opacity: 0 }] },
-            { type: "radial", position: "82% 15%", stops: [{ color: "{color.accent.magenta}", position: 0 }, { color: "{color.accent.magenta}", position: 55, opacity: 0 }] },
-            { type: "radial", position: "75% 70%", stops: [{ color: "{color.success.300}", position: 0 }, { color: "{color.success.300}", position: 55, opacity: 0 }] },
-            { type: "radial", position: "15% 85%", stops: [{ color: "{color.accent.purple}", position: 0 }, { color: "{color.accent.purple}", position: 50, opacity: 0 }] },
+            {
+                type: "radial",
+                position: "15% 20%",
+                stops: [{ color: "{color.brand.400}", position: 0 }, {
+                    color: "{color.brand.400}",
+                    position: 50,
+                    opacity: 0
+                }]
+            },
+            {
+                type: "radial",
+                position: "82% 15%",
+                stops: [{ color: "{color.accent.magenta}", position: 0 }, {
+                    color: "{color.accent.magenta}",
+                    position: 55,
+                    opacity: 0
+                }]
+            },
+            {
+                type: "radial",
+                position: "75% 70%",
+                stops: [{ color: "{color.success.300}", position: 0 }, {
+                    color: "{color.success.300}",
+                    position: 55,
+                    opacity: 0
+                }]
+            },
+            {
+                type: "radial",
+                position: "15% 85%",
+                stops: [{ color: "{color.accent.purple}", position: 0 }, {
+                    color: "{color.accent.purple}",
+                    position: 50,
+                    opacity: 0
+                }]
+            },
         ],
     },
 });

@@ -4,14 +4,13 @@
 @import "./gradients.css";
 
 /*
- * Color/dimension/radius/typography/motion `--ds-*` variables — a static,
- * generated, committed file (see frontend/scripts/generate-design-tokens.ts),
- * never hand-edited. Replaces this file's own hand-written `@theme` color
- * block from before this migration, and the `theme.css.ts`-built,
- * runtime-injected `<style>` tag that used to be the ONLY source for these
- * variables (see app/layout.tsx's `legacyLayoutVars` comment for the one
- * piece — layout/z-index — still injected that way, deliberately out of
- * this migration's scope).
+ * Every design-token category's `--ds-*` variables (color, dimension,
+ * radius, typography, motion, layout, z-index) — a static, generated,
+ * committed file (see frontend/scripts/generate-design-tokens.ts), never
+ * hand-edited. Replaces this file's own hand-written `@theme` block from
+ * before this migration, and the `theme.css.ts`/`legacy-layout-vars.ts`-built,
+ * runtime-injected `<style>` tags that used to be the ONLY source for
+ * these variables — nothing is injected at runtime anymore.
  */
 @import "../../shared/ui/theme/generated/tokens.css";
 
@@ -22,31 +21,3 @@
  * bridge to the pre-migration class-facing names, not a 1:1 passthrough.
  */
 @import "../../shared/ui/theme/adapters/tailwind.css";
-
-/*
- * `layout`/`z-index` — unrelated to this migration (see
- * `legacy-layout-vars.ts`'s comment: not one of this architecture's
- * categories). Preserved exactly as it worked before: the actual VALUES
- * are injected at runtime via `legacyLayoutVars`'s `<style>` tag; Tailwind
- * only needs each key to exist inside a real `@theme` block at BUILD time
- * to generate the matching utility class (`z-navbar`, ...) at all — this
- * self-referencing `var(--z-navbar)` is a build-time placeholder Tailwind
- * scans, resolved to a real value by the LATER runtime-injected
- * declaration of the same custom-property name.
- */
-@theme {
-    --layout-content-max-width: var(--layout-content-max-width);
-    --layout-content-max-width-wide: var(--layout-content-max-width-wide);
-    --layout-content-narrow: var(--layout-content-narrow);
-    --layout-content-reading: var(--layout-content-reading);
-    --layout-content-journal: var(--layout-content-journal);
-    --layout-section-vertical-padding: var(--layout-section-vertical-padding);
-    --layout-navbar-height: var(--layout-navbar-height);
-    --layout-hero-graph-height: var(--layout-hero-graph-height);
-
-    --z-background: var(--z-background);
-    --z-content: var(--z-content);
-    --z-snackbar: var(--z-snackbar);
-    --z-navbar: var(--z-navbar);
-    --z-overlay: var(--z-overlay);
-}

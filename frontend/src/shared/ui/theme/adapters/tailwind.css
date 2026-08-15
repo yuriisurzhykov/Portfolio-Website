@@ -204,4 +204,30 @@
 
     --scale-press: var(--ds-motion-scale-press);
     --scale-highlight: var(--ds-motion-scale-highlight);
+
+    /* ------------------------------------------------------------------------
+     * LAYOUT — read via Tailwind's arbitrary-value var() syntax
+     * (`max-w-(--layout-content-max-width)`) across a dozen+ views, never a
+     * generated utility class — the bridge just needs the class-facing name
+     * to resolve to something real, not to sit inside a specific at-rule.
+     * ------------------------------------------------------------------------ */
+    --layout-content-max-width: var(--ds-layout-content-max-width);
+    --layout-content-max-width-wide: var(--ds-layout-content-max-width-wide);
+    --layout-content-narrow: var(--ds-layout-content-narrow);
+    --layout-content-reading: var(--ds-layout-content-reading);
+    --layout-content-journal: var(--ds-layout-content-journal);
+    --layout-section-vertical-padding: var(--ds-layout-section-vertical-padding);
+    --layout-navbar-height: var(--ds-layout-navbar-height);
+    --layout-hero-graph-height: var(--ds-layout-hero-graph-height);
+
+    /* ------------------------------------------------------------------------
+     * Z-INDEX — unlike layout above, these back REAL Tailwind utility
+     * classes (`z-navbar`, ...), so they must sit inside this `@theme` block
+     * for Tailwind to generate `.z-navbar { z-index: ... }` at all.
+     * ------------------------------------------------------------------------ */
+    --z-background: var(--ds-z-background);
+    --z-content: var(--ds-z-content);
+    --z-snackbar: var(--ds-z-snackbar);
+    --z-navbar: var(--ds-z-navbar);
+    --z-overlay: var(--ds-z-overlay);
 }
