@@ -1,5 +1,24 @@
 import { THEME_STORAGE_KEY } from "@/shared/theme";
 
+const SCRIPT_ESCAPE_MAP: Record<string, string> = {
+    "<": "\\u003C",
+    ">": "\\u003E",
+    "/": "\\u002F",
+    "\\": "\\\\",
+    "\b": "\\b",
+    "\f": "\\f",
+    "\n": "\\n",
+    "\r": "\\r",
+    "\t": "\\t",
+    "\0": "\\0",
+    "\u2028": "\\u2028",
+    "\u2029": "\\u2029",
+};
+
+function escapeUnsafeScriptChars(str: string): string {
+    return str.replace(/[<>\/\\\b\f\n\r\t\0\u2028\u2029]/g, (ch) => SCRIPT_ESCAPE_MAP[ch] ?? ch);
+}
+
 /**
  * Renders a synchronous, blocking `<script>` that runs during HTML
  * parsing — before hydration even starts, before the browser's first
@@ -29,7 +48,7 @@ import { THEME_STORAGE_KEY } from "@/shared/theme";
  * function's logic changes, this needs the same change by hand.
  */
 export function ThemeInitScript() {
-    const script = `(function(){try{var k=${JSON.stringify(THEME_STORAGE_KEY)};var s=localStorage.getItem(k);var t=(s==="light"||s==="dark")?s:(s==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):"dark");var c=document.documentElement.classList;c.remove("theme-dark","theme-light");c.add(t==="dark"?"theme-dark":"theme-light")}catch(e){}})()`;
+    const script = `(function(){try{var k=${escapeUnsafeScriptChars(JSON.stringify(THEME_STORAGE_KEY))};var s=localStorage.getItem(k);var t=(s==="light"||s==="dark")?s:(s==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):"dark");var c=document.documentElement.classList;c.remove("theme-dark","theme-light");c.add(t==="dark"?"theme-dark":"theme-light")}catch(e){}})()`;
 
     return (
         <script
