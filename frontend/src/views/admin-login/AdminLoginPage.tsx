@@ -54,7 +54,7 @@ export function AdminLoginPage() {
 
     return (
         <main className="min-h-screen flex items-center justify-center px-[clamp(20px,4vw,56px)]">
-            <Card variant="filled" className="w-full max-w-[380px] p-xl flex flex-col gap-lg">
+            <Card variant="filled" className="w-full max-w-95 p-xl flex flex-col gap-lg">
                 <div className="flex flex-col gap-xs">
                     <Text as="h1" variant="h3">Admin sign in</Text>
                     <Text variant="caption" tone="muted">Journal and work content management.</Text>

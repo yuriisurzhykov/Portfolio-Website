@@ -106,10 +106,13 @@ const config = {
     // `break` set a bit below the real number as headroom for future code,
     // not at 100 — a single new line of untested logic shouldn't fail
     // every PR outright, but a real regression should still fail the build.
+    // Raised 85 -> 95 (2026-08-15) after re-measuring a fresh 96.29% real
+    // score — not a guessed bump, a real run against the code as it stood
+    // that day (see backend/README.md's dated entry).
     thresholds: {
         high: 95,
-        low: 85,
-        break: 85,
+        low: 90,
+        break: 95,
     },
 };
 

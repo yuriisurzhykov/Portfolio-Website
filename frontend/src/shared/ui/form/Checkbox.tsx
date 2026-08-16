@@ -18,7 +18,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
     function Checkbox({ label, hint, className, checked, ...rest }, ref) {
         return (
             <label className={cn("inline-flex items-start gap-sm cursor-pointer select-none", className)}>
-                <span className="relative inline-flex shrink-0 mt-[1px]">
+                <span className="relative inline-flex shrink-0 mt-px">
                     <input ref={ref} type="checkbox" checked={checked} className="peer sr-only" {...rest} />
                     <span
                         className={cn(
@@ -31,7 +31,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
                         {checked && <Check className="w-3.5 h-3.5 text-accent-on-solid" aria-hidden="true" />}
                     </span>
                 </span>
-                <span className="flex flex-col gap-[2px]">
+                <span className="flex flex-col gap-0.5">
                     <span className="text-body text-text-primary">{label}</span>
                     {hint && <span className="text-micro normal-case tracking-normal text-text-faint">{hint}</span>}
                 </span>

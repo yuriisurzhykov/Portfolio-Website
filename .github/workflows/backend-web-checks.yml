@@ -90,6 +90,40 @@ jobs:
         working-directory: backend
         run: npm run test:mutation
 
+      - name: Typecheck design-tokens engine
+        working-directory: packages/design-tokens
+        run: npm run typecheck
+
+      - name: Run design-tokens engine test suite
+        working-directory: packages/design-tokens
+        run: npx vitest run
+
+      - name: Run design-tokens engine mutation tests
+        working-directory: packages/design-tokens
+        run: npm run test:mutation
+
+      - name: Lint frontend styles (Stylelint)
+        working-directory: frontend
+        run: npm run lint:css
+
+      # Its own script/step, deliberately not folded into a general `npm run
+      # lint` — `eslint-config-next` is pinned to a stale, effectively-unrelated
+      # package here (see frontend/eslint.tokens.config.mjs's own comment),
+      # a separate pre-existing issue this refactor doesn't take on. This
+      # rule set has a clean, zero-baseline history and is meant to actually
+      # block a PR, not ride along inside a step with a 56-error backlog.
+      - name: Lint design tokens (no raw colors outside primitives)
+        working-directory: frontend
+        run: npm run lint:tokens
+
+      # Regenerates generated/tokens.css + generated/resolved.ts and fails
+      # if the committed output doesn't match what the current token
+      # source actually compiles to — the same staleness guard this repo
+      # already uses for other generated artifacts (e.g. pages.manifest.ts).
+      - name: Verify design tokens are up to date
+        working-directory: frontend
+        run: npm run tokens:check
+
       - name: Run frontend test suite
         working-directory: frontend
         run: npm test

@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import type { JournalPageContent, PostSummary } from "@portfolio/backend";
-import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useTranslation } from "@/shared/i18n";
@@ -24,7 +23,7 @@ function LogEntry({ post }: { post: PostSummary }) {
         <>
             <div
                 className={ cn(
-                    "absolute left-0 top-[29px] w-3 h-3 rounded-full",
+                    "absolute left-0 top-xl h-sm aspect-square w-auto rounded-full",
                     isPublished ? "bg-accent-solid" : "bg-text-faint",
                 ) }
             />
@@ -41,11 +40,15 @@ function LogEntry({ post }: { post: PostSummary }) {
                             </Text>
                         ) }
                     </div>
-                    <Text as="div" variant="h3" tone={ isPublished ? "primary" : "muted" } className="mb-1.5 text-[21px]!">
+                    {/* Dropped the `text-[21px]!` override (only 1px from
+                        h3's real 20px) — real h3 instead. mb-1.5 (6px) tie
+                        xxs/xs, smaller preferred. */ }
+                    <Text as="div" variant="h3" tone={ isPublished ? "primary" : "muted" }
+                          className="mb-xxs">
                         { pick(post.title) }
                     </Text>
                     <Text as="div" variant="caption" tone={ isPublished ? "muted" : "faint" }
-                          className="max-w-[60ch] leading-[1.6]">
+                          className="max-w-[60ch] leading-relaxed">
                         { pick(post.excerpt) }
                     </Text>
                 </div>
@@ -55,16 +58,18 @@ function LogEntry({ post }: { post: PostSummary }) {
                     // width the wrapping text badly needs there instead.
                     <CoverImage
                         { ...post.cover }
-                        className="hidden sm:block w-[120px] h-[63px] shrink-0 rounded-md border border-border-subtle"
+                        className="hidden sm:block w-30 h-15.75 shrink-0 rounded-md border border-border-subtle"
                     />
                 ) }
             </div>
         </>
     );
 
+    // py-6 already exact match (lg). pl-[34px] has no exact step (between
+    // xl/32 and 2xl/40) — snapped to xl (nearer).
     if (isPublished) {
         return (
-            <Link href={ `/journal/${ post.slug }` } className="relative block py-6 pl-[34px]">
+            <Link href={ `/journal/${ post.slug }` } className="relative block py-lg pl-xl">
                 { inner }
             </Link>
         );
@@ -76,7 +81,7 @@ function LogEntry({ post }: { post: PostSummary }) {
     // README.md, section 11: to stay compliant, the opacity would need to go from
     // 0.45 to ~0.9, which defeats the purpose of dimming it at all).
     return (
-        <div className="relative block py-6 pl-[34px]">
+        <div className="relative block py-lg pl-xl">
             { inner }
         </div>
     );
@@ -87,26 +92,27 @@ export function JournalListPage({ entries, journalPage }: JournalListPageProps) 
 
     return (
         <main>
+            {/* pb-10/m-2 already exact matches (2xl/xs). */ }
             <div
-                className="max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-[clamp(48px,7vw,80px)] pb-10">
-                <Link href="/" className="font-mono text-caption text-text-muted">
+                className="max-w-(--layout-content-standard) mx-auto pt-xl pb-2xl">
+                <Link href="/" className="text-caption text-text-accent font-bold">
                     ← { ln("button.backHome") }
                 </Link>
-                <Eyebrow tone="accent" className="mt-6 mb-3.5">
-                    { ln("eyebrow.journal") }
-                </Eyebrow>
-                <h1 className="m-0 mb-4 font-extrabold text-[clamp(30px,4vw,44px)] leading-1 tracking-tight text-text-primary">
+                <Text variant={ "h2" } className="m-xs">
                     { pick(journalPage.heading) }
-                </h1>
-                <Text variant="body" tone="muted">
+                </Text>
+                <Text variant="body" tone="muted" className="m-xs">
                     { pick(journalPage.description) }
                 </Text>
             </div>
 
+            {/* pt-2 already exact match (xs). bottom-25 (100px) is closer to
+                6xl (96) than anything else. w-0.5 (2px) left as-is, same
+                too-small-to-snap reasoning as elsewhere. */ }
             <div
-                className="relative max-w-(--layout-content-journal) mx-auto px-[clamp(20px,4vw,24px)] pt-2 pb-md">
+                className="relative max-w-(--layout-content-standard) mx-auto px-(--layout-reading-horizontal-padding) pt-xs pb-md">
                 <div
-                    className="absolute left-[calc(clamp(20px,4vw,24px)+5px)] top-2 bottom-25 w-0.5 bg-border-subtle"/>
+                    className="absolute left-[calc(var(--layout-reading-horizontal-padding)+5px)] top-xs bottom-6xl w-0.5 bg-border-subtle"/>
                 { entries.map((post) => (
                     <LogEntry key={ post.slug } post={ post }/>
                 )) }

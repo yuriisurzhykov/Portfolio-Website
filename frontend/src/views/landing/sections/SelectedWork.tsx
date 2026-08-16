@@ -15,8 +15,8 @@ export interface SelectedWorkProps {
     items: WorkSummary[];
 }
 
-function WorkCard({item}: { item: WorkSummary }) {
-    const {ln, pick} = useTranslation();
+function WorkCard({ item }: { item: WorkSummary }) {
+    const { ln, pick } = useTranslation();
     const isShipped = item.status === "shipped";
     const detailHref = item.hasCaseStudy
         ? `/work/${ item.slug }`
@@ -34,8 +34,8 @@ function WorkCard({item}: { item: WorkSummary }) {
                 label={ `${ pick(item.title).toLowerCase() } — cover image` }
                 alt={ pick(item.title) }
             />
-            <div className="p-6 flex flex-col flex-1">
-                <div className="flex justify-between items-center gap-sm mb-2.5">
+            <div className="p-lg flex flex-col flex-1">
+                <div className="flex justify-between items-center gap-sm mb-xs">
                     <Text as="h3" variant="h3">
                         { pick(item.title) }
                     </Text>
@@ -43,14 +43,14 @@ function WorkCard({item}: { item: WorkSummary }) {
                         { ln(isShipped ? "status.shipped" : "status.inProgress") }
                     </StatusBadge>
                 </div>
-                <Text as="div" variant="caption" tone="muted" className="mb-4 flex-1">
+                <Text as="div" variant="caption" tone="muted" className="mb-md flex-1">
                     { pick(item.summary) }
                 </Text>
                 <div className="flex justify-between items-center gap-sm flex-wrap">
                     <TagList items={ item.stack } maxVisible={ 3 } size="sm" variant="neutral"/>
                 </div>
                 { detailHref && (
-                    <span className="mt-2 font-semibold align-bottom text-caption whitespace-nowrap text-accent-text">
+                    <span className="mt-xs font-semibold align-bottom text-caption whitespace-nowrap text-accent-text">
                         { detailLabel } →
                     </span>
                 ) }
@@ -70,21 +70,22 @@ function WorkCard({item}: { item: WorkSummary }) {
     );
 }
 
-export function SelectedWork({items}: SelectedWorkProps) {
-    const {ln} = useTranslation();
+export function SelectedWork({ items }: SelectedWorkProps) {
+    const { ln } = useTranslation();
 
     return (
         <section
             id="work"
-            className="max-w-(--layout-content-max-width) mx-auto px-2xl py-2 scroll-mt-20"
+            className="max-w-(--layout-content-max-width) mx-auto px-2xl py-xs scroll-mt-20"
         >
-            <Text variant={ "body-lg" } className="mb-5 text-accent-text font-bold">{ ln("eyebrow.selectedWork") }</Text>
-            <div className="grid gap-6" style={ {gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))"} }>
+            <Text variant={ "body-lg" }
+                  className="mb-md text-accent-text font-bold">{ ln("eyebrow.selectedWork") }</Text>
+            <div className="grid gap-lg" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(18.75rem, 1fr))" } }>
                 { items.map((item) => (
                     <WorkCard key={ item.slug } item={ item }/>
                 )) }
             </div>
-            <div className="py-5 flex justify-center items-center">
+            <div className="py-md flex justify-center items-center">
                 <LinkButton href={ "/work" } variant={ "secondary" }
                             className="">
                     { ln("button.viewAllWork") }

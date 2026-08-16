@@ -163,7 +163,7 @@ export function RelatedItemPicker({ id, label, hint, value, onChange, options, p
                             // page underneath bleeds straight through the option
                             // text, found live from a real screenshot, not by
                             // reading the token's value in isolation.
-                            "flex flex-col gap-[2px] rounded-md border border-border-subtle bg-surface-base p-xs shadow-lg",
+                            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-base p-xs shadow-lg",
                         )}
                     >
                         {results.map((result, index) => (

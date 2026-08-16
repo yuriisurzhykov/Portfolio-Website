@@ -2,9 +2,8 @@
 
 import type { JSX } from "react";
 import * as React from "react";
+import { THEME_STORAGE_KEY as STORAGE_KEY } from "./constants";
 import type { ThemeContextValue, ThemeId, ThemePreference } from "./theme.types";
-
-const STORAGE_KEY = "portfolio.theme-preference";
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
@@ -81,7 +80,26 @@ export function ThemeProvider(props: { children: React.ReactNode }): JSX.Element
     // just happen during the initial render anymore. Runs once; the
     // effect below reacts to the resulting `preference` change the same
     // way it reacts to a manual setPreference() call.
-    React.useEffect(() => {
+    //
+    // `useLayoutEffect`, not `useEffect`, on BOTH this and the theme-sync
+    // effect below — together they're the fallback path, not the primary
+    // fix. The actual fix for "flash of wrong theme" is
+    // `app/theme-init-script.tsx`'s inline <script>, which runs during
+    // HTML parsing, before hydration even starts, and already applies the
+    // correct `.theme-*` class before first paint — `waitForLoadState
+    // ("networkidle")` never waits for a React effect, which is exactly
+    // what made this a recurring, timing-dependent Playwright flake (see
+    // `shared/theme/README.md`'s dated entry). These two effects staying
+    // `useLayoutEffect` (not `useEffect`) closes a SEPARATE, real gap the
+    // inline script can't: React's Strict Mode intentionally remounts once
+    // in development and resets `<html>`/`<head>`/`<body>` to only the
+    // attributes/classes THEY manage from JSX — wiping the class the
+    // inline script set. `useLayoutEffect` re-applies it before the
+    // browser paints the remounted tree; a plain `useEffect` would let
+    // that flash back in, dev-mode only (Strict Mode's double-render
+    // never happens in production, so this doesn't affect the CI flake
+    // itself — only local `npm run dev`).
+    React.useLayoutEffect(() => {
         const stored = readStoredPreference();
         if (stored && stored !== preference) {
             setPreferenceState(stored);
@@ -89,8 +107,12 @@ export function ThemeProvider(props: { children: React.ReactNode }): JSX.Element
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally once-on-mount only
     }, []);
 
-    // Sync theme with preference and system changes
-    React.useEffect(() => {
+    // Sync theme with preference and system changes. `useLayoutEffect`,
+    // not `useEffect` — see the comment above; this is the effect that
+    // actually calls `applyThemeClass`, so IT has to be the one that runs
+    // before paint for the Strict-Mode-remount case to be fully closed,
+    // not just the one that corrects `preference` above it.
+    React.useLayoutEffect(() => {
         const resolved = resolveTheme(preference);
         setTheme(resolved);
         applyThemeClass(resolved);

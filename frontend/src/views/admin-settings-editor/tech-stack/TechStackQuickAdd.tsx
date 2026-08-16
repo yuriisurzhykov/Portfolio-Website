@@ -157,7 +157,7 @@ export function TechStackQuickAdd({ existingNames, onAdd }: TechStackQuickAddPro
             <div className="relative">
                 <div className="flex items-center gap-sm">
                     <div className="relative flex-1">
-                        <Search aria-hidden className="pointer-events-none absolute left-sm top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
+                        <Search aria-hidden className="pointer-events-none absolute left-sm top-1/2 -translate-y-1/2 h-md aspect-square w-auto text-text-faint" />
                         <input
                             ref={inputRef}
                             id="tech-quick-add"
@@ -185,10 +185,10 @@ export function TechStackQuickAdd({ existingNames, onAdd }: TechStackQuickAddPro
                             }}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
-                            className={cn(inputBaseStyles, "pl-9")}
+                            className={cn(inputBaseStyles, "pl-xl")}
                         />
                     </div>
-                    <Button type="button" variant="secondary" size="md" onClick={addTyped} disabled={!query.trim()} iconLeft={<Plus className="w-4 h-4" />}>
+                    <Button type="button" variant="secondary" size="md" onClick={addTyped} disabled={!query.trim()} iconLeft={<Plus className="h-md aspect-square w-auto" />}>
                         Add
                     </Button>
                 </div>
@@ -198,7 +198,7 @@ export function TechStackQuickAdd({ existingNames, onAdd }: TechStackQuickAddPro
                         id={listboxId}
                         role="listbox"
                         aria-label="Matching logos"
-                        className="absolute left-0 right-0 top-full z-20 mt-xs flex flex-col gap-[2px] rounded-md border border-border-subtle bg-surface-raised p-xs shadow-lg"
+                        className="absolute left-0 right-0 top-full z-20 mt-xs flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-raised p-xs shadow-lg"
                     >
                         {results.map((result, index) => (
                             <li
@@ -218,7 +218,7 @@ export function TechStackQuickAdd({ existingNames, onAdd }: TechStackQuickAddPro
                                     index === activeIndex ? "bg-accent-tint-bg text-accent-text" : "text-text-primary hover:bg-surface-base",
                                 )}
                             >
-                                <span className="w-4 h-4 shrink-0">
+                                <span className="h-md aspect-square w-auto shrink-0">
                                     <TechIconRenderer icon={{ kind: "path", d: result.path, title: result.title }} />
                                 </span>
                                 <span className="flex-1">{result.title}</span>

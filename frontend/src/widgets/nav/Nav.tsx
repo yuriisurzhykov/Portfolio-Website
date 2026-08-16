@@ -49,8 +49,8 @@ export interface NavProps {
     config: ConfigContent;
 }
 
-export function Nav({config: site}: NavProps) {
-    const {ln} = useTranslation();
+export function Nav({ config: site }: NavProps) {
+    const { ln } = useTranslation();
     const pathname = usePathname();
     const hash = useUrlHash();
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -86,7 +86,7 @@ export function Nav({config: site}: NavProps) {
             className={ cn(
                 "sticky top-0 z-navbar",
                 "flex items-center justify-between gap-sm",
-                "px-[clamp(16px,4vw,56px)] py-lg",
+                "px-(--layout-section-horizontal-padding) py-lg",
                 "bg-overlay-scrim backdrop-blur-md",
                 "border-b border-border-subtle",
                 // Stays put through the hero (useHideOnScroll only starts
@@ -105,7 +105,7 @@ export function Nav({config: site}: NavProps) {
                 { site.initials }
             </Link>
 
-            <nav className="hidden sm:flex items-center gap-4 sm:gap-7">
+            <nav className="hidden sm:flex items-center gap-md sm:gap-lg">
                 { navLinks }
             </nav>
 
@@ -124,7 +124,7 @@ export function Nav({config: site}: NavProps) {
                 aria-label={ ln("label.aria.mobileMenu.open") }
                 aria-expanded={ mobileMenuOpen }
             >
-                <Menu className="w-5 h-5" aria-hidden="true"/>
+                <Menu className="h-lg aspect-square w-auto" aria-hidden="true"/>
             </button>
 
             <Drawer
@@ -140,7 +140,7 @@ export function Nav({config: site}: NavProps) {
                         className="p-xs rounded-md text-text-primary hover:bg-surface-raised transition-colors duration-fast"
                         aria-label={ ln("label.aria.mobileMenu.close") }
                     >
-                        <X className="w-5 h-5" aria-hidden="true"/>
+                        <X className="h-lg aspect-square w-auto" aria-hidden="true"/>
                     </button>
                 </div>
 

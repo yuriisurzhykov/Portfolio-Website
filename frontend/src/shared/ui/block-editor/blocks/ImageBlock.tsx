@@ -30,7 +30,7 @@ export const ImageBlock = createReactBlockSpec(
                 <div className="w-full flex flex-col gap-sm p-sm rounded-md border border-border-subtle bg-surface-raised/50" contentEditable={false}>
                     {src && (
                         // eslint-disable-next-line @next/next/no-img-element -- admin-authored preview of an arbitrary URL, same reasoning as ContentBlocks.tsx's public renderer
-                        <img src={src} alt={alt} className="rounded-md border border-border-subtle max-h-[240px] object-contain" />
+                        <img src={src} alt={alt} className="rounded-md border border-border-subtle max-h-60 object-contain" />
                     )}
                     <Field label="Image URL">
                         <Input value={src} onChange={(e) => update({ src: e.target.value })} placeholder="/images/foo.png" />

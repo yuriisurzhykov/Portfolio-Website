@@ -18,8 +18,8 @@ const OPTIONS: ThemeId[] = ["dark", "light"];
  * the export's `background:var(--text);color:var(--bg)`.
  */
 export function ThemeSegmentedToggle() {
-    const {theme, setPreference} = useTheme();
-    const {ln} = useTranslation();
+    const { theme, setPreference } = useTheme();
+    const { ln } = useTranslation();
 
     const labels: Record<ThemeId, string> = {
         dark: ln("label.button.theme.switch.dark"),
@@ -27,7 +27,7 @@ export function ThemeSegmentedToggle() {
     };
 
     return (
-        <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-1">
+        <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-xxs">
             { OPTIONS.map((option) => {
                 const isActive = theme === option;
                 return (
@@ -37,8 +37,8 @@ export function ThemeSegmentedToggle() {
                         onClick={ () => setPreference(option) }
                         aria-pressed={ isActive }
                         className={ cn(
-                            "rounded-pill px-2.5 py-1.25",
-                            "font-mono font-semibold text-xs uppercase",
+                            "rounded-pill px-xs py-xxs",
+                            "font-mono font-semibold text-micro uppercase",
                             "transition-colors duration-fast",
                             isActive ? "bg-text-primary text-bg-app" : "text-text-muted hover:text-text-primary",
                         ) }

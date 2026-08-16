@@ -49,40 +49,41 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: Wo
 
     return (
         <main>
-            {isPreview && (
-                <div className="sticky top-0 z-50 bg-status-warning-tint-bg text-status-warning border-b border-border-subtle py-2 px-4 text-center text-caption font-medium">
+            { isPreview && (
+                <div
+                    className="sticky top-0 z-50 bg-status-warning-tint-bg text-status-warning border-b border-border-subtle py-2 px-4 text-center text-caption font-medium">
                     Preview — showing unpublished draft content, not what's currently live.
                 </div>
-            )}
+            ) }
             <div
-                className="max-w-(--layout-content-reading) mx-auto px-[clamp(20px,4vw,24px)] pt-[clamp(48px,7vw,80px)] pb-[100px]">
+                className="max-w-(--layout-content-reading) mx-auto px-(--layout-reading-horizontal-padding) pt-(--layout-reading-top-padding) pb-25">
                 <Link href="/work" className="font-mono text-caption text-text-muted">
                     ← { ln("button.backToWork") }
                 </Link>
 
-                <div className="flex justify-between items-end gap-md mt-7 mb-6 flex-wrap">
+                <div className="flex justify-between items-end gap-md mt-lg mb-lg flex-wrap">
                     <div>
-                        {/* Fill+ink, not colored text on the page bg — see frontend/README.md's dated a11y entry for why. */}
-                        <StatusBadge tone="accent" className="mb-3.5" style={ { backgroundColor: accentColorForHue(hue) } }>
+                        <StatusBadge tone="accent" className="mb-sm"
+                                     style={ { backgroundColor: accentColorForHue(hue) } }>
                             { ln("eyebrow.caseStudy") }
                         </StatusBadge>
-                        <h1 className="m-0 font-extrabold text-[clamp(32px,4.5vw,48px)] leading-[1.1] tracking-tight text-text-primary">
+                        <Text as="h1" variant="h1" className="m-0">
                             { pick(item.title) }
-                        </h1>
+                        </Text>
                     </div>
                     <StatusBadge tone={ isShipped ? "success" : "warning" } className="whitespace-nowrap h-fit">
                         { ln(isShipped ? "status.shipped" : "status.inProgress") }
                     </StatusBadge>
                 </div>
 
-                <div className="flex flex-wrap gap-6 mb-8 font-mono text-caption text-text-muted">
+                <div className="flex flex-wrap gap-lg mb-xl font-mono text-caption text-text-muted">
                     <span>{ ln("work.caseStudy.started", { date: pick(caseStudy.startedLabel) }) }</span>
                     <span>{ ln(isShipped ? "work.caseStudy.shipped" : "work.caseStudy.target", { date: pick(caseStudy.shippedLabel) }) }</span>
                     <span>{ ln("work.caseStudy.role", { role: pick(caseStudy.role) }) }</span>
                 </div>
 
                 <WorkCoverImage
-                    className="h-[280px] rounded-xl border border-border-subtle mb-10"
+                    className="h-70 rounded-xl border border-border-subtle mb-2xl"
                     override={ caseStudy.heroImage }
                     cover={ item.cover }
                     label={ `${ pick(item.title).toLowerCase() } — hero screenshot` }
@@ -93,10 +94,10 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: Wo
 
                 <ContentBlocks blocks={ caseStudy.blocks }/>
 
-                <Text as="h2" variant="h2" className="mb-3.5">
+                <Text as="h2" variant="h2" className="mb-sm">
                     { ln("work.caseStudy.stackHeading") }
                 </Text>
-                <TagList items={ item.stack } size="md" variant="neutral" className="gap-2.5 mb-10" />
+                <TagList items={ item.stack } size="md" variant="neutral" className="gap-xs mb-2xl"/>
 
                 { relatedPost && (
                     <RelatedContentCallout

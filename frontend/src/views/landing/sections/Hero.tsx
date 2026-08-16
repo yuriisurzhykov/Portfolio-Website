@@ -44,23 +44,23 @@ export function Hero({hero, role, items}: HeroProps) {
             className={ cn(
                 "relative overflow-hidden",
                 "max-w-(--layout-content-max-width) mx-auto",
-                "px-[clamp(20px,4vw,56px)] pt-14 pb-[clamp(64px,8vw,96px)]",
+                "px-(--layout-section-horizontal-padding) pt-14 pb-[clamp(64px,8vw,96px)]",
                 "flex items-center gap-8",
             ) }
         >
-            <div className="relative max-w-(--layout-content-reading)">
+            <div className="relative max-w-(--layout-content-standard)">
                 <Eyebrow tone="accent" className="mb-4.5">
                     { pick(role) }
                 </Eyebrow>
 
-                <h1 className="m-0 mb-5.5 font-extrabold text-[clamp(40px,5.5vw,64px)] leading-[1.02] tracking-tight text-text-primary">
+                <Text as="h1" variant="hero" className="m-0 mb-5.5">
                     { hero.headline.map((line, index) => (
                         <React.Fragment key={ line }>
                             { index > 0 && <br/> }
                             { line }
                         </React.Fragment>
                     )) }
-                </h1>
+                </Text>
 
                 <Text as="p" variant="body-lg" tone="secondary" className="mb-7.5 max-w-[46ch]">
                     { pick(hero.subhead) }

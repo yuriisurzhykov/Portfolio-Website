@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
 import "@/app/styles/index.css";
-import { themeVars } from "@/shared/ui/theme";
+import { jetbrainsMono, publicSans } from "@/app/fonts";
+import { ThemeInitScript } from "@/app/theme-init-script";
 import { MainProviders } from "@/app/providers/MainProviders";
 import { getRequestLocale } from "@/shared/lib/get-request-locale";
 import { IS_INDEXABLE, SITE_URL } from "@/shared/lib/seo/site-url";
@@ -67,8 +68,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Root layout — html/body shell, design-token <style>, and the i18n/theme
- * providers. Deliberately has NO <Nav/>/<Footer/> here: the dev-only
+ * Root layout — html/body shell and the i18n/theme providers. Every
+ * design token (color/dimension/radius/typography/motion/layout/z-index)
+ * comes from the statically-imported `generated/tokens.css` (see
+ * `app/styles/index.css`) — no runtime-injected `<style>` tag anymore.
+ * Deliberately has NO <Nav/>/<Footer/> here: the dev-only
  * /storybook route sits outside the (site) route group and must not get
  * that chrome (see app/(site)/layout.tsx and app/storybook/page.tsx).
  *
@@ -84,9 +88,16 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     const locale = await getRequestLocale();
 
     return (
-        <html lang={locale} className="h-full">
+        // `suppressHydrationWarning` is required here, not optional — see
+        // `ThemeInitScript`'s doc comment: it mutates this element's
+        // classList before React ever hydrates, which is EXACTLY the kind
+        // of "client changed the DOM before I got here" React's hydration
+        // diff would otherwise flag as an error and recover from (a full,
+        // visible re-render of the subtree) rather than an intentional,
+        // one-element exception.
+        <html lang={locale} className={`h-full ${publicSans.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
             <head>
-                <style dangerouslySetInnerHTML={{ __html: themeVars }} />
+                <ThemeInitScript />
             </head>
             <body className="min-h-full flex flex-col antialiased">
                 <MainProviders initialLanguage={locale}>
