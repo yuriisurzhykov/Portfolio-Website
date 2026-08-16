@@ -1,7 +1,17 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    // "DOM" is required despite this config's files running in Node.js
+    // (the Playwright test-runner itself) — a callback passed to
+    // `page.evaluate()`/`page.addInitScript()` (e.g. `utils/theme.ts`'s
+    // `seedTheme()`) is serialized and actually EXECUTED IN THE BROWSER,
+    // where `window`/`document`/`localStorage` genuinely exist, even
+    // though it's written as a plain function in this Node-context file.
+    // Found live: `npx tsc --noEmit -p tests/tsconfig.json` (the real
+    // config for this directory, not the root frontend/tsconfig.json an
+    // IDE may resolve instead) reported `Cannot find name 'window'` on
+    // exactly that line without this.
+    "lib": ["ES2022", "DOM"],
     "module": "commonjs",
     "moduleResolution": "node",
     "esModuleInterop": true,
