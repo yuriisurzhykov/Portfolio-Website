@@ -39,7 +39,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@upstash/redis": "^1.38.0",
+    "@upstash/redis": "^1.38.2",
     "argon2": "^0.45.0",
     "fontkit": "^2.0.4",
     "jose": "^6.2.3",
