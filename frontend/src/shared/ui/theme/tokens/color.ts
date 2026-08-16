@@ -17,19 +17,19 @@ export const color = definePrimitives({
     // inconsistency in the original design export, not intentional. One
     // hue, both themes, fixes it.
     neutral: {
-        0: "hsl(219 0% 100%)",
-        20: "hsl(219 0% 96%)",
-        50: "hsl(219 20% 91%)",
-        100: "hsl(219 20% 82%)",
-        200: "hsl(219 20% 73%)",
-        300: "hsl(219 20% 64%)",
-        400: "hsl(219 20% 55%)",
-        500: "hsl(219 20% 46%)",
-        600: "hsl(219 20% 37%)",
-        700: "hsl(219 20% 28%)",
-        800: "hsl(219 20% 19%)",
-        900: "hsl(219 20% 10%)",
-        950: "hsl(219 25% 5%)",
+        0: "hsl(30 10% 98%)",
+        20: "hsl(30 7% 96%)",
+        50: "hsl(30 5% 91%)",
+        100: "hsl(30 4% 82%)",
+        200: "hsl(30 3% 73%)",
+        300: "hsl(30 2% 64%)",
+        400: "hsl(30 2% 55%)",
+        500: "hsl(30 2% 46%)",
+        600: "hsl(30 2% 37%)",
+        700: "hsl(30 2% 28%)",
+        800: "hsl(30 2% 19%)",
+        900: "hsl(240 4% 10%)",
+        950: "hsl(240 8% 5%)",
     },
     // BRAND — hue 20°, 500 = the real brand accent. (Originally miscomputed
     // as hue 45° by reading OKLCH's hue angle as if it were HSL's — the two

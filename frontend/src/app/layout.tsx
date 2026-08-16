@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
 import "@/app/styles/index.css";
+import { jetbrainsMono, publicSans } from "@/app/fonts";
+import { ThemeInitScript } from "@/app/theme-init-script";
 import { MainProviders } from "@/app/providers/MainProviders";
 import { getRequestLocale } from "@/shared/lib/get-request-locale";
 import { IS_INDEXABLE, SITE_URL } from "@/shared/lib/seo/site-url";
@@ -86,7 +88,17 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     const locale = await getRequestLocale();
 
     return (
-        <html lang={locale} className="h-full">
+        // `suppressHydrationWarning` is required here, not optional — see
+        // `ThemeInitScript`'s doc comment: it mutates this element's
+        // classList before React ever hydrates, which is EXACTLY the kind
+        // of "client changed the DOM before I got here" React's hydration
+        // diff would otherwise flag as an error and recover from (a full,
+        // visible re-render of the subtree) rather than an intentional,
+        // one-element exception.
+        <html lang={locale} className={`h-full ${publicSans.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+            <head>
+                <ThemeInitScript />
+            </head>
             <body className="min-h-full flex flex-col antialiased">
                 <MainProviders initialLanguage={locale}>
                     {children}

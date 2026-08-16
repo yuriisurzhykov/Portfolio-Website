@@ -6,9 +6,19 @@ import { definePrimitives } from "@portfolio/design-tokens";
  * `Text.tsx`'s own variant names one-to-one — a generic scale would be a regression here, not an improvement.
  * */
 export const typography = definePrimitives({
+    // `var(--font-public-sans)`/`var(--font-jetbrains-mono)`, not a quoted
+    // font-family name — those two custom properties are set by
+    // `next/font/google` on `<html>` (`app/fonts.ts`, applied in
+    // `app/layout.tsx` and `app/global-error.tsx`), and already carry
+    // next/font's own generated fallback chain (a metric-matched fallback
+    // face, then the real system default) baked into their value. Found
+    // live, not assumed: neither font had ever actually been loaded before
+    // this — every page had silently rendered in the `system-ui`/
+    // `monospace` fallback instead of the fonts these tokens named. See
+    // `theme/README.md`'s dated entry for how this was found.
     family: {
-        body: "'Public Sans', system-ui, sans-serif",
-        mono: "'JetBrains Mono', monospace",
+        body: "var(--font-public-sans), system-ui, sans-serif",
+        mono: "var(--font-jetbrains-mono), monospace",
     },
     weight: {
         regular: 400,

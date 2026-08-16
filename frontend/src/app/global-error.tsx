@@ -1,6 +1,8 @@
 "use client";
 
 import "@/app/styles/index.css";
+import { jetbrainsMono, publicSans } from "@/app/fonts";
+import { ThemeInitScript } from "@/app/theme-init-script";
 import { MainProviders } from "@/app/providers/MainProviders";
 import { StatusPage } from "@/shared/ui/status-page";
 
@@ -27,7 +29,13 @@ import { StatusPage } from "@/shared/ui/status-page";
  */
 export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
     return (
-        <html lang="en" className="h-full">
+        // `suppressHydrationWarning` — see `app/layout.tsx`'s identical
+        // comment; `ThemeInitScript` mutates this element's classList
+        // before hydration, on this file's own separate `<html>` too.
+        <html lang="en" className={ `h-full ${ publicSans.variable } ${ jetbrainsMono.variable }` } suppressHydrationWarning>
+        <head>
+            <ThemeInitScript />
+        </head>
         <body className="min-h-full flex flex-col antialiased">
         <MainProviders>
             <StatusPage code={ 500 } onRetry={ reset }/>
