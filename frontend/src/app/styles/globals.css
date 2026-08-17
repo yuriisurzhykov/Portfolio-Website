@@ -3,6 +3,23 @@
         height: 100%;
     }
 
+    /*
+     * Safety net, not a fix for any specific component — a narrow-viewport
+     * or large-root-font-size overflow anywhere on the page (a CSS Grid
+     * `minmax()` floor that can't shrink, a decorative row whose items grow
+     * with text-size preference, a future regression) otherwise drags the
+     * ENTIRE page into horizontal scroll, since nothing else clips it.
+     * `overflow-x: hidden` degrades that to "the overflowing element's edge
+     * is clipped" instead of "the whole page scrolls sideways and needs a
+     * manual pinch-zoom to see" — clearly wrong-looking (so the real
+     * layout bug still gets noticed and fixed at its source), but no longer
+     * capable of making unrelated content on the same page look misaligned
+     * once a visitor zooms out trying to reach the clipped part.
+     */
+    html, body {
+        overflow-x: hidden;
+    }
+
     body {
         background: var(--color-bg-app);
     }
