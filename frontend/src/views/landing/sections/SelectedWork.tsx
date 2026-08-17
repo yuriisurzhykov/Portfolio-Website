@@ -76,7 +76,7 @@ export function SelectedWork({ items }: SelectedWorkProps) {
     return (
         <section
             id="work"
-            className="max-w-(--layout-content-max-width) mx-auto px-(--layout-section-horizontal-padding) py-xs scroll-mt-20"
+            className="max-w-(--layout-content-max-width) mx-auto px-2xl py-xs scroll-mt-20"
         >
             <Text variant={ "body-lg" }
                   className="mb-md text-accent-text font-bold">{ ln("eyebrow.selectedWork") }</Text>

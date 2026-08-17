@@ -78,7 +78,7 @@ export function TechStack({ techStack }: TechStackProps) {
             <div className="flex flex-col sm:flex-row sm:items-center gap-md sm:gap-lg">
                 <Eyebrow className="shrink-0">{ ln("eyebrow.stack") }</Eyebrow>
                 <span aria-hidden className="hidden sm:block h-lg w-px bg-border-subtle shrink-0"/>
-                <ul className="flex flex-wrap items-center gap-x-[min(1.5rem,20px)] gap-y-[min(1rem,16px)] list-none m-0 p-0">
+                <ul className="flex flex-wrap items-center gap-x-[min(1.5rem,24px)] gap-y-[min(1rem,16px)] list-none m-0 p-0">
                     { techStack.map((item) => (
                         <li key={ item.name }>
                             <Tooltip label={ item.name }>

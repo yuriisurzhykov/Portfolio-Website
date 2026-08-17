@@ -21,7 +21,7 @@ export function JournalPreview({ post }: JournalPreviewProps) {
     return (
         <section
             id="journal"
-            className="max-w-(--layout-content-max-width) mx-auto px-(--layout-section-horizontal-padding) pb-[clamp(64px,8vw,96px)] scroll-mt-20"
+            className="max-w-(--layout-content-max-width) mx-auto px-2xl pb-[clamp(64px,8vw,96px)] scroll-mt-20"
         >
             <Text variant="body-lg" className="mb-md text-text-primary">{ ln("eyebrow.fromJournal") }</Text>
             <Link
