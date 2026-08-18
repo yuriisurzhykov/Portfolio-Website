@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { BlockNoteEditor, getBlockInfoFromTransaction } from "@blocknote/core";
+import { BlockNoteEditor, getBlockInfoFromSelection } from "@blocknote/core";
 import { TextSelection, type Transaction } from "prosemirror-state";
 import { blockNoteSchema } from "./schema";
 import { splitPastedMarkdown, smartPasteHandler, normalizeLineEndings } from "./paste-handler";
 
-/** Places the cursor at a character offset within `block`'s own inline content — same `getBlockInfoFromTransaction` technique `paste-handler.ts`'s own split logic uses, so these tests exercise the exact position math it relies on. */
+/** Places the cursor at a character offset within `block`'s own inline content — same `getBlockInfoFromSelection` technique `paste-handler.ts`'s own split logic uses, so these tests exercise the exact position math it relies on. */
 function placeCursorAt(editor: ReturnType<typeof BlockNoteEditor.create>, block: { id: string }, offset: number) {
     editor.setTextCursorPosition(block, "start");
     editor.transact((tr: Transaction) => {
-        const blockInfo = getBlockInfoFromTransaction(tr);
+        const blockInfo = getBlockInfoFromSelection(tr);
         if (!blockInfo.isBlockContainer) {
             throw new Error("expected a block-container block in this test");
         }
