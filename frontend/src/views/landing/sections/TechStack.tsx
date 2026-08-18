@@ -35,8 +35,26 @@ export interface TechStackProps {
  * practice, most of the viewport). See `TechIcon.tsx`'s own comment for
  * the same rule from the component's side.
  */
+/**
+ * `h-[min(1.5rem,28px)]`, not the plain `h-lg` token (`1.5rem`) this
+ * otherwise matches — every Tailwind spacing utility, `h-lg` included,
+ * resolves through `rem`, which scales with the user's OS/browser text-size
+ * preference (iOS's "Larger Accessibility Sizes" can multiply the root
+ * font-size several times over). Reproduced live: forcing a large root
+ * `font-size` collapses this row from several logos per line down to a
+ * single logo per line — each icon's footprint (its own box, `gap-x-lg`
+ * between them) grows right along with body text, so fewer fit per row,
+ * down to one at the extreme end, which reads as "a column, not a row."
+ * `min(1.5rem, 28px)` keeps today's exact rendered size at a normal
+ * (16px-root) setting untouched, but stops this one decorative logo row
+ * from growing past a small px ceiling no matter how far text-size
+ * preference is pushed — reasonable here specifically because these are
+ * brand marks, not body copy a low-vision user actually needs to read
+ * larger; `gap-x-lg`/`gap-y-md` on the `<ul>` below get the same treatment
+ * so the per-icon footprint (box + gap) stays bounded, not just the box.
+ */
 const iconInteractiveClasses = cn(
-    "block h-lg aspect-square w-auto rounded-sm text-text-muted",
+    "block h-[min(1.5rem,28px)] aspect-square w-auto rounded-sm text-text-muted",
     "transition-colors duration-fast ease-standard motion-reduce:transition-none",
     "hover:text-accent-solid",
     "active:text-accent-solid-hover active:scale-press",
@@ -60,7 +78,7 @@ export function TechStack({ techStack }: TechStackProps) {
             <div className="flex flex-col sm:flex-row sm:items-center gap-md sm:gap-lg">
                 <Eyebrow className="shrink-0">{ ln("eyebrow.stack") }</Eyebrow>
                 <span aria-hidden className="hidden sm:block h-lg w-px bg-border-subtle shrink-0"/>
-                <ul className="flex flex-wrap items-center gap-x-lg gap-y-md list-none m-0 p-0">
+                <ul className="flex flex-wrap items-center gap-x-[min(1.5rem,24px)] gap-y-[min(1rem,16px)] list-none m-0 p-0">
                     { techStack.map((item) => (
                         <li key={ item.name }>
                             <Tooltip label={ item.name }>

@@ -910,7 +910,7 @@ const unfold = (f, seed) => {
                     сгенерированная обложка, иначе декоративный плейсхолдер.
                 </Text>
 
-                <div className="grid gap-md" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                <div className="grid gap-md" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))" }}>
                     <div className="space-y-sm">
                         <Text variant="micro" tone="muted">
                             manual override (wins over a generated cover)
@@ -985,7 +985,7 @@ const unfold = (f, seed) => {
 
                 <div className="space-y-sm">
                     <Text variant="micro" tone="muted">Color - semantic roles</Text>
-                    <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                    <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))" }}>
                         {DESIGN_TOKEN_COLOR_SWATCHES.map((item) => (
                             <div key={item.label} className="space-y-xs">
                                 <div className={cn("h-12 rounded-md border border-border-subtle", item.swatch)} />
@@ -997,7 +997,7 @@ const unfold = (f, seed) => {
 
                 <div className="space-y-sm">
                     <Text variant="micro" tone="muted">Color - CodeBlock component tokens</Text>
-                    <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                    <div className="grid gap-sm" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))" }}>
                         {DESIGN_TOKEN_CODE_BLOCK_SWATCHES.map((item) => (
                             <div key={item.label} className="bg-code-panel-bg rounded-md p-sm text-center">
                                 <Text as="span" variant="caption" className={cn("font-mono", item.swatch)}>{item.label}</Text>
