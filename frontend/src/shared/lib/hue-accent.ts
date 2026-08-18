@@ -12,8 +12,18 @@
  * comment). A real browser rendering this site's own pages does, so there
  * is nothing to convert here.
  */
-const ACCENT_LIGHTNESS = 0.72;
-const ACCENT_CHROMA = 0.17;
+/**
+ * Exported (not module-private) specifically so `shared/lib/seo/og/render.tsx`
+ * can share this exact source instead of hand-copying the same two numbers —
+ * a real, found-live duplication this design-token migration's audit
+ * flagged: two independent copies of "the brand accent's OKLCH lightness/
+ * chroma," silently able to drift apart. Deliberately still not derived
+ * from `theme/tokens/color.ts`'s `brand.500` (an `hsl()` string) — that
+ * would need a real HSL→OKLCH conversion, a separate, legitimate follow-up
+ * (see this file's own module doc comment), not invented here.
+ */
+export const ACCENT_LIGHTNESS = 0.72;
+export const ACCENT_CHROMA = 0.17;
 
 /**
  * A CSS color string for `hue` (0-360) at the site's brand accent

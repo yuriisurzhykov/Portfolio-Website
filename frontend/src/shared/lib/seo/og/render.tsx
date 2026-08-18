@@ -1,20 +1,8 @@
 import { ImageResponse } from "next/og";
 import { oklchToSrgbHex } from "@portfolio/backend";
-import { darkPalette } from "@/shared/ui/theme/tokens";
+import { ACCENT_CHROMA, ACCENT_LIGHTNESS } from "@/shared/lib/hue-accent";
+import { ogTheme } from "@/shared/ui/theme/adapters";
 import { ogFonts } from "./fonts";
-
-/**
- * Same lightness/chroma the site's own brand accent is authored at
- * (`palette.accent = oklch(0.72 0.17 45)`, `theme/tokens.ts`) — only the HUE
- * varies per caller, via `oklchToSrgbHex` (the exact gamut-clipping OKLCH-to-
- * sRGB conversion the procedural post cover generator itself uses,
- * `backend/src/media/cover-hue.ts`), not `oklch()` directly: satori does not
- * understand that colour space, and it does not report that failure — it
- * silently paints the element near-black, found by looking at a real
- * rendered PNG rather than by any test failing.
- */
-const ACCENT_LIGHTNESS = 0.72;
-const ACCENT_CHROMA = 0.17;
 
 /**
  * The hue every caller with no real item to resolve one from falls back
@@ -33,7 +21,7 @@ const DEFAULT_HUE = 45;
  * than the procedural post cover's own palette (`cover-palette.ts`'s
  * `SPOT_LIGHTNESS`/`SPOT_CHROMA`): this background sits behind real text
  * across the ENTIRE card, not just in an empty corner, so contrast against
- * `darkPalette.text`/`text2` has to hold up everywhere at once.
+ * `ogTheme.textPrimary`/`textSecondary` has to hold up everywhere at once.
  */
 const BG_SPOT_LIGHTNESS = 0.55;
 const BG_SPOT_CHROMA = 0.14;
@@ -121,11 +109,11 @@ export function renderOgImage({ eyebrow, title, subtitle, footer, hue = DEFAULT_
                 (
                     <div
                         style={{
-                            width: "100%",
-                            height: "100%",
+                            width: OG_SIZE.width,
+                            height: OG_SIZE.height,
                             display: "flex",
                             position: "relative",
-                            backgroundColor: darkPalette.bg,
+                            backgroundColor: ogTheme.surfacePrimary,
                             fontFamily: "Noto Sans",
                         }}
                     >
@@ -174,7 +162,7 @@ export function renderOgImage({ eyebrow, title, subtitle, footer, hue = DEFAULT_
                                         fontSize: 66,
                                         fontWeight: 700,
                                         lineHeight: 1.15,
-                                        color: darkPalette.text,
+                                        color: ogTheme.textPrimary,
                                     }}
                                 >
                                     {title}
@@ -182,16 +170,16 @@ export function renderOgImage({ eyebrow, title, subtitle, footer, hue = DEFAULT_
                             </div>
 
                             <div style={{ display: "flex", flexDirection: "column" }}>
-                                <div style={{ fontSize: 30, lineHeight: 1.4, color: darkPalette.text2 }}>{subtitle}</div>
+                                <div style={{ fontSize: 30, lineHeight: 1.4, color: ogTheme.textSecondary }}>{subtitle}</div>
                                 <div
                                     style={{
                                         display: "flex",
                                         alignItems: "center",
                                         marginTop: 36,
                                         paddingTop: 28,
-                                        borderTop: `2px solid ${ darkPalette.borderStrong }`,
+                                        borderTop: `2px solid ${ ogTheme.borderStrong }`,
                                         fontSize: 26,
-                                        color: darkPalette.muted,
+                                        color: ogTheme.textMuted,
                                     }}
                                 >
                                     {footer}

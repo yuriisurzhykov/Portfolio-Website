@@ -26,20 +26,30 @@ export interface RelatedContentCalloutProps {
  * linking to and has already `pick()`'d the localized strings, this
  * component only ever needs to lay them out.
  */
-export function RelatedContentCallout({ eyebrow, title, body, href, buttonLabel, className }: RelatedContentCalloutProps) {
+export function RelatedContentCallout(
+    {
+        eyebrow,
+        title,
+        body,
+        href,
+        buttonLabel,
+        className
+    }: RelatedContentCalloutProps
+) {
     return (
-        <div className={cn("bg-surface-base border border-border-subtle rounded-xl p-6 flex justify-between items-center gap-md flex-wrap", className)}>
+        <div
+            className={ cn("bg-surface-base border border-border-subtle rounded-xl p-lg flex justify-between items-center gap-md flex-wrap", className) }>
             <div>
-                <Eyebrow className="mb-1.5">{eyebrow}</Eyebrow>
-                <Text as="div" variant="h3" className="text-[17px]!">
-                    {title}
+                <Eyebrow className="mb-xs">{ eyebrow }</Eyebrow>
+                <Text as="div" variant="h3">
+                    { title }
                 </Text>
                 <Text as="div" variant="caption" tone="muted">
-                    {body}
+                    { body }
                 </Text>
             </div>
-            <LinkButton href={href} variant="primary">
-                {buttonLabel} →
+            <LinkButton href={ href } variant="primary">
+                { buttonLabel } →
             </LinkButton>
         </div>
     );

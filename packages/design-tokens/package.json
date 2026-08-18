@@ -1,0 +1,27 @@
+{
+  "name": "@portfolio/design-tokens",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Project-agnostic design-token engine: an authoring API (definePrimitives/defineContract/defineTheme/defineComponentTokens/defineComposite) plus a compiler (reference resolution, cycle detection, usage-graph promotion analysis, CSS/resolved-data serialization) and a custom ESLint rule set. Ships zero color/role names of its own — see README.md for how a project (e.g. frontend/src/shared/ui/theme/) supplies those and consumes this package.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./eslint-plugin": "./src/eslint/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:mutation": "stryker run"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@types/estree": "^1.0.8",
+    "@types/node": "^26",
+    "eslint": "^10.8.0",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

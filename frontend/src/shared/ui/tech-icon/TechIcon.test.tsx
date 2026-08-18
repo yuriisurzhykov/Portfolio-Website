@@ -9,7 +9,7 @@ describe("TechIcon", () => {
     });
 
     it("renders an <svg><path> with fill=currentColor for kind: 'path'", () => {
-        const { container } = render(<TechIcon icon={{ kind: "path", d: "M1 2 3 4", title: "Docker" }} />);
+        const { container } = render(<TechIcon icon={{ kind: "path", rawSvg: "M1 2 3 4", title: "Docker" }} />);
 
         const svg = container.querySelector("svg");
         expect(svg).not.toBeNull();

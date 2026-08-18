@@ -43,18 +43,19 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }:
 
     return (
         <main>
-            {isPreview && (
-                <div className="sticky top-0 z-50 bg-status-warning-tint-bg text-status-warning border-b border-border-subtle py-2 px-4 text-center text-caption font-medium">
+            { isPreview && (
+                <div
+                    className="sticky top-0 z-50 bg-status-warning-tint-bg text-status-warning border-b border-border-subtle py-2 px-4 text-center text-caption font-medium">
                     Preview — showing unpublished draft content, not what's currently live.
                 </div>
-            )}
+            ) }
             <div
-                className="max-w-(--layout-content-reading) mx-auto px-[clamp(20px,4vw,24px)] pt-[clamp(48px,7vw,80px)] pb-[100px]">
+                className="max-w-(--layout-content-reading) mx-auto px-(--layout-reading-horizontal-padding) pt-(--layout-reading-top-padding) pb-25">
                 <Link href="/journal" className="font-mono text-caption text-text-muted">
                     ← { ln("button.backToJournal") }
                 </Link>
 
-                <div className="flex gap-sm items-center mt-7 mb-[18px] flex-wrap">
+                <div className="flex gap-sm items-center mt-lg mb-md flex-wrap">
                     <StatusBadge tone="accent" style={ { backgroundColor: accentColorForHue(hue) } }>
                         { pick(post.category) }
                     </StatusBadge>
@@ -63,9 +64,9 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }:
                     </Text>
                 </div>
 
-                <h1 className="m-0 mb-5 font-extrabold text-[clamp(30px,4.2vw,44px)] leading-[1.15] tracking-tight text-text-primary">
+                <Text as="h1" variant="h1" className="m-0 mb-md">
                     { pick(post.title) }
-                </h1>
+                </Text>
 
                 { post.cover && (
                     // This is the page's LCP element — `fetchPriority="high"`
@@ -75,7 +76,7 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }:
                         { ...post.cover }
                         fetchPriority="high"
                         loading="eager"
-                        className="w-full h-auto mb-8 rounded-xl border border-border-subtle"
+                        className="w-full h-auto mb-xl rounded-xl border border-border-subtle"
                     />
                 ) }
 
@@ -83,7 +84,7 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }:
 
                 { relatedWork && relatedWork.caseStudy && (
                     <RelatedContentCallout
-                        className="mt-10"
+                        className="mt-2xl"
                         eyebrow={ ln("eyebrow.relatedProject") }
                         title={ pick(relatedWork.title) }
                         body={ pick(relatedWork.summary) }

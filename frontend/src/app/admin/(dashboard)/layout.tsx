@@ -26,7 +26,7 @@ export default async function AdminDashboardLayout({ children }: Readonly<{ chil
         <div className="min-h-screen flex flex-col">
             <SessionKeepAlive />
             <AdminNav />
-            <div className="flex-1 px-[clamp(16px,4vw,56px)] py-xl max-w-(--layout-content-max-width-wide) w-full mx-auto">
+            <div className="flex-1 px-lg py-xl max-w-(--layout-content-max-width-wide) w-full mx-auto">
                 {children}
             </div>
         </div>

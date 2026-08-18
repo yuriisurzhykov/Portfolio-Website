@@ -41,6 +41,9 @@ export default defineConfig({
             "src/views/admin-settings-editor/tech-stack/parse-tech-input.test.ts",
             "src/views/admin-settings-editor/tech-stack/reorder.test.ts",
             "src/views/admin-settings-editor/tech-stack/icon-status.test.ts",
+            "src/shared/ui/theme/adapters/mermaid.test.ts",
+            "src/shared/ui/theme/adapters/project-graph.test.ts",
+            "src/shared/lib/highlight/codeHighlighter.test.ts",
         ],
     },
     resolve: {

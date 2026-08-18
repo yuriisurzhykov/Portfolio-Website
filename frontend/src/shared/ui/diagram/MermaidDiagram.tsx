@@ -2,37 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/shared/theme";
-import { colors, colorsLight } from "@/shared/ui/theme/tokens";
+import { createMermaidTheme } from "@/shared/ui/theme/adapters";
 import { DiagramSurface } from "@/shared/ui/diagram/DiagramSurface";
 
 export interface MermaidDiagramProps {
     source: string;
-}
-
-type PortfolioColors = typeof colors;
-
-/**
- * Real color VALUES per theme, not CSS `var(...)` references. Found live,
- * not assumed: Mermaid's "base" theme runs every themeVariable through its
- * own color-math library to derive borders/hover shades, and that library
- * parses the literal string it's given as an actual CSS color (hex/rgb/hsl)
- * — it has no access to the browser's CSS engine, so `var(--foo)` fails
- * with "Unsupported color format" instead of ever resolving. This means a
- * diagram must be RE-RENDERED on theme change (see the `theme` dependency
- * in the effect below) rather than repainting for free via CSS cascade.
- */
-function themeVariablesFor(c: PortfolioColors) {
-    return {
-        background: "transparent",
-        primaryColor: c.surface.raised,
-        primaryTextColor: c.text.primary,
-        primaryBorderColor: c.border.default,
-        lineColor: c.border.strong,
-        secondaryColor: c.surface.base,
-        tertiaryColor: c.accent.tintBg,
-        fontFamily: "'JetBrains Mono', monospace",
-        edgeLabelBackground: c.surface.base,
-    };
 }
 
 let idCounter = 0;
@@ -55,7 +29,7 @@ export function MermaidDiagram({source}: MermaidDiagramProps) {
         async function render() {
             try {
                 const {default: mermaid} = await import("mermaid");
-                const themeVariables = themeVariablesFor(theme === "dark" ? colors : colorsLight);
+                const {theme: mermaidTheme, themeVariables} = createMermaidTheme(theme);
                 // Pinned explicitly rather than relied on as a dependency
                 // default: Mermaid 11 already defaults to "strict" (verified
                 // live — a hand-crafted malicious node label produces no
@@ -65,7 +39,7 @@ export function MermaidDiagram({source}: MermaidDiagramProps) {
                 // independent layer that holds even if this one regresses.
                 mermaid.initialize({
                     startOnLoad: false,
-                    theme: "base",
+                    theme: mermaidTheme,
                     themeVariables: themeVariables,
                     securityLevel: "strict",
                 });

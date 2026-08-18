@@ -16,20 +16,21 @@ export function Principles({ principles }: PrinciplesProps) {
     const { ln, pick } = useTranslation();
 
     return (
-        <section className="max-w-[var(--layout-content-max-width)] mx-auto px-[clamp(20px,4vw,56px)] pb-[clamp(64px,8vw,96px)]">
-            <Eyebrow className="mb-[20px]">{ln("eyebrow.howIWork")}</Eyebrow>
-            <div className="grid gap-[20px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-                {principles.map((principle) => (
-                    <Card key={pick(principle.title)} className="p-[28px]">
-                        <IconRefPreview icon={principle.icon} className="w-[34px] h-[34px] mb-[16px]" />
-                        <Text as="h3" variant="h3" className="mb-[10px]">
-                            {pick(principle.title)}
+        <section
+            className="max-w-(--layout-content-max-width) mx-auto px-(--layout-section-horizontal-padding) pb-[clamp(64px,8vw,96px)]">
+            <Eyebrow className="mb-md">{ ln("eyebrow.howIWork") }</Eyebrow>
+            <div className="grid gap-md" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))" } }>
+                { principles.map((principle) => (
+                    <Card key={ pick(principle.title) } className="p-lg">
+                        <IconRefPreview icon={ principle.icon } className="h-xl aspect-square w-auto mb-md"/>
+                        <Text as="h3" variant="h3" className="mb-xs">
+                            { pick(principle.title) }
                         </Text>
-                        <Text variant="caption" tone="muted" className="leading-[1.6]">
-                            {pick(principle.description)}
+                        <Text variant="caption" tone="muted" className="leading-relaxed">
+                            { pick(principle.description) }
                         </Text>
                     </Card>
-                ))}
+                )) }
             </div>
         </section>
     );

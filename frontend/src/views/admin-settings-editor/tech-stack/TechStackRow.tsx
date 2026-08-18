@@ -50,20 +50,20 @@ const statusToneClasses = {
  * which is why the grip is a real `<button>` and not a decorative span.
  */
 export function TechStackRow({
-    index,
-    item,
-    view,
-    expanded,
-    dropEdge,
-    onToggleExpanded,
-    onChange,
-    onRemove,
-    onMoveBy,
-    onDragStart,
-    onDragEnter,
-    onDragEnd,
-    onDrop,
-}: TechStackRowProps) {
+                                 index,
+                                 item,
+                                 view,
+                                 expanded,
+                                 dropEdge,
+                                 onToggleExpanded,
+                                 onChange,
+                                 onRemove,
+                                 onMoveBy,
+                                 onDragStart,
+                                 onDragEnter,
+                                 onDragEnd,
+                                 onDrop,
+                             }: TechStackRowProps) {
     const [draggable, setDraggable] = React.useState(false);
     const status = describeIconStatus(item.icon, view);
     const label = item.name.trim() || `row ${ index + 1 }`;
@@ -81,102 +81,103 @@ export function TechStackRow({
 
     return (
         <li
-            draggable={draggable}
-            onDragStart={onDragStart}
-            onDragEnter={onDragEnter}
-            onDragOver={(event) => event.preventDefault()}
-            onDragEnd={() => {
+            draggable={ draggable }
+            onDragStart={ onDragStart }
+            onDragEnter={ onDragEnter }
+            onDragOver={ (event) => event.preventDefault() }
+            onDragEnd={ () => {
                 setDraggable(false);
                 onDragEnd();
-            }}
-            onDrop={(event) => {
+            } }
+            onDrop={ (event) => {
                 event.preventDefault();
                 setDraggable(false);
                 onDrop();
-            }}
-            className={cn(
+            } }
+            className={ cn(
                 "rounded-md border border-border-subtle bg-surface-base",
                 dropEdge === "top" && "border-t-2 border-t-accent-solid",
                 dropEdge === "bottom" && "border-b-2 border-b-accent-solid",
                 draggable && "opacity-60",
-            )}
+            ) }
         >
-            <div className="flex items-center gap-sm pl-xs pr-sm h-12">
+            <div className="flex items-center gap-sm pl-xs pr-sm h-3xl">
                 <button
                     type="button"
-                    aria-label={`Reorder ${ label }. Press arrow up or arrow down to move it.`}
-                    onPointerDown={() => setDraggable(true)}
-                    onPointerUp={() => setDraggable(false)}
-                    onKeyDown={handleGripKeyDown}
-                    className="shrink-0 cursor-grab rounded-sm p-1 text-text-faint hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-highlight"
+                    aria-label={ `Reorder ${ label }. Press arrow up or arrow down to move it.` }
+                    onPointerDown={ () => setDraggable(true) }
+                    onPointerUp={ () => setDraggable(false) }
+                    onKeyDown={ handleGripKeyDown }
+                    className="shrink-0 cursor-grab rounded-sm p-xxs text-text-faint hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-highlight"
                 >
-                    <GripVertical aria-hidden className="w-4 h-4" />
+                    <GripVertical aria-hidden className="h-md aspect-square w-auto"/>
                 </button>
 
                 <span
                     aria-hidden
-                    className="grid place-items-center shrink-0 w-8 h-8 rounded-sm bg-surface-icon p-1.5 text-text-primary"
+                    className="grid place-items-center shrink-0 h-xl aspect-square w-auto rounded-sm bg-surface-icon p-xxs text-text-primary"
                 >
-                    <TechIconRenderer icon={view ?? { kind: "none" }} />
+                    <TechIconRenderer icon={ view ?? { kind: "none" } }/>
                 </span>
 
                 <input
-                    aria-label={`Name of ${ label }`}
-                    value={item.name}
-                    onChange={(event) => onChange({ name: event.target.value })}
+                    aria-label={ `Name of ${ label }` }
+                    value={ item.name }
+                    onChange={ (event) => onChange({ name: event.target.value }) }
                     placeholder="Technology name"
                     className="min-w-0 flex-1 bg-transparent text-body text-text-primary outline-none placeholder:text-text-faint"
                 />
 
                 <span
-                    className={cn(
-                        "shrink-0 rounded-sm border px-sm py-[2px] font-mono text-micro",
+                    className={ cn(
+                        "shrink-0 rounded-sm border px-sm py-xxs font-mono text-micro",
                         statusToneClasses[status.tone],
-                    )}
+                    ) }
                 >
-                    {status.label}
+                    { status.label }
                 </span>
 
                 <button
                     type="button"
-                    aria-expanded={expanded}
-                    aria-controls={detailsId}
-                    aria-label={`Icon and note for ${ label }`}
-                    onClick={onToggleExpanded}
-                    className="shrink-0 rounded-sm p-1 text-text-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-highlight"
+                    aria-expanded={ expanded }
+                    aria-controls={ detailsId }
+                    aria-label={ `Icon and note for ${ label }` }
+                    onClick={ onToggleExpanded }
+                    className="shrink-0 rounded-sm p-xxs text-text-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-highlight"
                 >
-                    <ChevronDown aria-hidden className={cn("w-4 h-4 transition-transform duration-fast", expanded && "rotate-180")} />
+                    <ChevronDown aria-hidden
+                                 className={ cn("h-md aspect-square w-auto transition-transform duration-fast", expanded && "rotate-180") }/>
                 </button>
 
                 <button
                     type="button"
-                    aria-label={`Remove ${ label }`}
-                    onClick={onRemove}
-                    className="shrink-0 rounded-sm p-1 text-text-faint hover:text-status-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-highlight"
+                    aria-label={ `Remove ${ label }` }
+                    onClick={ onRemove }
+                    className="shrink-0 rounded-sm p-xxs text-text-faint hover:text-status-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-highlight"
                 >
-                    <X aria-hidden className="w-4 h-4" />
+                    <X aria-hidden className="h-md aspect-square w-auto"/>
                 </button>
             </div>
 
-            {expanded && (
-                <div id={detailsId} className="flex flex-col gap-md border-t border-border-subtle px-md py-md">
+            { expanded && (
+                <div id={ detailsId } className="flex flex-col gap-md border-t border-border-subtle px-md py-md">
                     <TechIconPickerField
-                        idPrefix={`tech-icon-${ index }`}
-                        value={item.icon}
-                        onChange={(icon) => onChange({ icon })}
+                        idPrefix={ `tech-icon-${ index }` }
+                        value={ item.icon }
+                        onChange={ (icon) => onChange({ icon }) }
                     />
                     <BilingualField
                         label="Note"
                         hint="Not shown anywhere on the site — kept for your own reference."
-                        required={false}
-                        idPrefix={`tech-note-${ index }`}
-                        en={item.note.en}
-                        ru={item.note.ru}
-                        onEnChange={(value) => onChange({ note: { ...item.note, en: value } })}
-                        onRuChange={(value) => onChange({ note: { ...item.note, ru: value } })}
+                        required={ false }
+                        idPrefix={ `tech-note-${ index }` }
+                        en={ item.note.en }
+                        ru={ item.note.ru }
+                        onEnChange={ (value) => onChange({ note: { ...item.note, en: value } }) }
+                        onRuChange={ (value) => onChange({ note: { ...item.note, ru: value } }) }
                     />
                 </div>
-            )}
+            ) }
         </li>
     );
 }

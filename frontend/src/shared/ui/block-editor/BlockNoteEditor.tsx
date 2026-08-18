@@ -87,7 +87,7 @@ export const BlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
     // module graph is even evaluated until the browser is definitely
     // present.
     if (!mounted) {
-        return <div className="rounded-md border border-border-strong bg-surface-base h-[240px] animate-pulse" aria-hidden="true" />;
+        return <div className="rounded-md border border-border-strong bg-surface-base h-60 animate-pulse" aria-hidden="true" />;
     }
 
     return <MountedBlockEditor {...props} ref={ref} />;
