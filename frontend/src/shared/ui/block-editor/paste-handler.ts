@@ -1,4 +1,4 @@
-import { getBlockInfoFromTransaction } from "@blocknote/core";
+import { getBlockInfoFromSelection } from "@blocknote/core";
 import type { PortfolioBlock } from "./convert";
 import { markdownToInlineContent } from "./convert";
 import { blockNoteSchema, type PortfolioBlockNoteEditor } from "./schema";
@@ -171,7 +171,7 @@ function splitAnchorAtCursor(editor: PortfolioBlockNoteEditor, anchor: Portfolio
     }
 
     const cursorInfo = editor.transact((tr) => {
-        const blockInfo = getBlockInfoFromTransaction(tr);
+        const blockInfo = getBlockInfoFromSelection(tr);
         // Always true for a block with `content: "inline"` (the only kind
         // this function is ever called with — guarded above) — narrowed
         // explicitly since `blockContent` only exists on this branch of
