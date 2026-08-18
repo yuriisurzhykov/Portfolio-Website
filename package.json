@@ -7,6 +7,12 @@
     "backend",
     "packages/*"
   ],
+  "scripts": {
+    "verify": "node scripts/verify-ci.mjs",
+    "verify:backend": "node scripts/verify-ci.mjs --only=backend",
+    "verify:visual": "node scripts/verify-ci.mjs --only=visual",
+    "verify:quick": "node scripts/verify-ci.mjs --skip-mutation --skip-install"
+  },
   "overrides": {
     "react": "19.2.8",
     "react-dom": "19.2.8"
