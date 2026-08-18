@@ -17,8 +17,8 @@ export interface ListEditorProps<T> {
 
 /**
  * Generic repeatable-row editor shared by every array-shaped settings
- * section (`principles`, `techStack`, `hero.graphNodes`) — one
- * add/remove/move-up/move-down implementation instead of three near-copies.
+ * section (`principles`, `techStack`) — one add/remove/move-up/move-down
+ * implementation instead of near-copies per section.
  * Reorder is up/down buttons, not drag-and-drop, matching the same
  * reasoning the admin block editor's predecessor used before BlockNote
  * replaced it (see `shared/ui/block-editor/README.md`): no extra

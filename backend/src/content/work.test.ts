@@ -4,8 +4,8 @@ import { prisma } from "../db/client";
 import { getAllWork, getFeaturedWork, getPublishedTechSlugs, getWorkBySlug } from "./work";
 
 const baseWorkData = {
-    title: "Test Project",
-    year: 2026,
+    title: { en: "Test Project", ru: "" },
+    date: "2026-01-01",
     status: "shipped",
     summary: { en: "s", ru: "s" },
     stack: ["Kotlin"],
@@ -20,9 +20,9 @@ beforeEach(async () => {
 });
 
 describe("getAllWork / getFeaturedWork", () => {
-    it("getAllWork returns everything, newest year first", async () => {
-        await prisma.work.create({ data: { ...baseWorkData, slug: "old", year: 2020 } });
-        await prisma.work.create({ data: { ...baseWorkData, slug: "new", year: 2025 } });
+    it("getAllWork returns everything, newest date first", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "old", date: "2020-01-01" } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "new", date: "2025-01-01" } });
 
         const all = await getAllWork();
         expect(all.map((w) => w.slug)).toEqual(["new", "old"]);
@@ -44,6 +44,45 @@ describe("getAllWork / getFeaturedWork", () => {
         const all = await getAllWork();
         expect(all.find((w) => w.slug === "with-cs")?.hasCaseStudy).toBe(true);
         expect(all.find((w) => w.slug === "without-cs")?.hasCaseStudy).toBe(false);
+    });
+});
+
+describe("WorkSummary.availableLocales", () => {
+    it("is [\"en\"] for an item with a translated summary but NO Russian case study", async () => {
+        // The case Post can never be in: `translateWork` writes
+        // `summary.ru` unconditionally and the case-study half only when an
+        // English case study exists. Declaring this page a Russian version
+        // in hreflang would be a lie — the body is English.
+        const document = await prisma.document.create({ data: {} });
+        await prisma.work.create({
+            data: {
+                ...baseWorkData,
+                slug: "half-translated",
+                summary: { en: "English summary", ru: "Русское описание" },
+                caseStudyDocumentId: document.id,
+            },
+        });
+
+        const [item] = await getAllWork();
+        expect(item.availableLocales).toEqual(["en"]);
+    });
+
+    it("includes \"ru\" once a Russian case-study document exists", async () => {
+        const en = await prisma.document.create({ data: {} });
+        const ru = await prisma.document.create({ data: {} });
+        await prisma.work.create({
+            data: { ...baseWorkData, slug: "translated", caseStudyDocumentId: en.id, caseStudyDocumentIdRu: ru.id },
+        });
+
+        const [item] = await getAllWork();
+        expect(item.availableLocales).toEqual(["en", "ru"]);
+    });
+
+    it("reports contentUpdatedAt as null on a row that has never been edited", async () => {
+        await prisma.work.create({ data: { ...baseWorkData, slug: "untouched" } });
+
+        const [item] = await getAllWork();
+        expect(item.contentUpdatedAt).toBeNull();
     });
 });
 
@@ -142,8 +181,8 @@ describe("getPublishedTechSlugs", () => {
 
 describe("lifecycleState filtering — content lifecycle state machine", () => {
     it("getAllWork excludes DRAFT items entirely, even though they'd otherwise sort first", async () => {
-        await prisma.work.create({ data: { ...baseWorkData, slug: "published", year: 2020 } });
-        await prisma.work.create({ data: { ...baseWorkData, slug: "draft", year: 2026, lifecycleState: "DRAFT" } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "published", date: "2020-01-01" } });
+        await prisma.work.create({ data: { ...baseWorkData, slug: "draft", date: "2026-01-01", lifecycleState: "DRAFT" } });
 
         const all = await getAllWork();
         expect(all.map((w) => w.slug)).toEqual(["published"]);

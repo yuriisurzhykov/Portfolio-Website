@@ -14,7 +14,7 @@ import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
  *
  * Deliberately does NOT hold the form's own field state (unlike
  * `WorkEditorPage`, which is a single component) — each settings form has
- * a genuinely different shape (`hero`'s `graphNodes` array vs. `config`'s
+ * a genuinely different shape (`hero`'s `chips` array vs. `config`'s
  * flat fields), and forcing them through one generic `data: SiteContentDataMap[K]`
  * state would mean editing derived representations (comma-joined chip
  * lists, newline-joined heading lines) THROUGH that shape on every

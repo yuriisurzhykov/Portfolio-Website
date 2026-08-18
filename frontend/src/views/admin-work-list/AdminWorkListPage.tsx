@@ -2,20 +2,24 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { LifecycleState, WorkSummary } from "@portfolio/backend";
+import type { AdminWorkListItem, LifecycleState } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { LinkButton } from "@/shared/ui/button/LinkButton";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { AdminListItem } from "@/shared/ui/admin-list-item";
+import { TagList } from "@/shared/ui/tag-list";
+import { WorkCoverImage } from "@/shared/ui/work-cover-image";
+import { CompactRelatedLink } from "@/shared/ui/related-content-callout";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
+import { formatAdminDate } from "@/shared/lib/date-format";
 
 export interface AdminWorkListPageProps {
-    items: WorkSummary[];
+    items: AdminWorkListItem[];
 }
 
 /** Same tab shape/reasoning as `AdminJournalListPage`'s `lifecycleOptions` — see its comment. */
-function lifecycleOptions(items: WorkSummary[]): StatusToggleOption<LifecycleState>[] {
+function lifecycleOptions(items: AdminWorkListItem[]): StatusToggleOption<LifecycleState>[] {
     const count = (state: LifecycleState) => items.filter((item) => item.lifecycleState === state).length;
     return [
         { value: "PUBLISHED", label: `Published (${ count("PUBLISHED") })`, tone: "success" },
@@ -66,15 +70,31 @@ export function AdminWorkListPage({ items }: AdminWorkListPageProps) {
                     {visibleItems.map((item) => (
                         <AdminListItem
                             key={item.slug}
+                            thumbnail={(
+                                <WorkCoverImage
+                                    override={item.coverImage}
+                                    cover={item.cover}
+                                    alt={item.title.en}
+                                    label={item.title.en.toLowerCase()}
+                                    className="h-14 w-24 rounded-md border border-border-subtle"
+                                />
+                            )}
                             badges={(
                                 <>
                                     <StatusBadge tone={item.status === "shipped" ? "success" : "warning"}>{item.status}</StatusBadge>
                                     {item.featured && <StatusBadge tone="accent">Featured</StatusBadge>}
+                                    {item.lifecycleState === "PUBLISHED" && item.hasUnpublishedChanges && (
+                                        <StatusBadge tone="warning">Unpublished changes</StatusBadge>
+                                    )}
+                                    <TagList items={item.stack} maxVisible={3} size="sm" variant="neutral" />
                                 </>
                             )}
-                            meta={item.year}
-                            title={item.title}
+                            meta={formatAdminDate(item.date)}
+                            title={item.title.en}
                             slug={item.slug}
+                            related={item.relatedPostSlug && (
+                                <CompactRelatedLink href={`/admin/journal/${ item.relatedPostSlug }/edit`} label={`Linked to: ${ item.relatedPostSlug }`} />
+                            )}
                             editHref={`/admin/work/${ item.slug }/edit`}
                             onDelete={() => handleDelete(item.slug)}
                             deleting={deletingSlug === item.slug}

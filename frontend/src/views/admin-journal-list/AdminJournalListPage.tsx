@@ -2,17 +2,20 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { LifecycleState, PostSummary } from "@portfolio/backend";
+import type { AdminPostListItem, LifecycleState } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { LinkButton } from "@/shared/ui/button/LinkButton";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { AdminListItem } from "@/shared/ui/admin-list-item";
+import { Tag } from "@/shared/ui/tag";
+import { CoverImage } from "@/shared/ui/cover-image";
+import { CompactRelatedLink } from "@/shared/ui/related-content-callout";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { formatAdminDate } from "@/shared/lib/date-format";
 
 export interface AdminJournalListPageProps {
-    entries: PostSummary[];
+    entries: AdminPostListItem[];
 }
 
 /**
@@ -22,7 +25,7 @@ export interface AdminJournalListPageProps {
  * for Draft mirrors "upcoming"/"in-progress" elsewhere in the admin —
  * "not fully live yet," the same visual meaning.
  */
-function lifecycleOptions(entries: PostSummary[]): StatusToggleOption<LifecycleState>[] {
+function lifecycleOptions(entries: AdminPostListItem[]): StatusToggleOption<LifecycleState>[] {
     const count = (state: LifecycleState) => entries.filter((e) => e.lifecycleState === state).length;
     return [
         { value: "PUBLISHED", label: `Published (${ count("PUBLISHED") })`, tone: "success" },
@@ -76,10 +79,25 @@ export function AdminJournalListPage({ entries }: AdminJournalListPageProps) {
                     {visibleEntries.map((post) => (
                         <AdminListItem
                             key={post.slug}
-                            badges={<StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>}
+                            thumbnail={post.cover && (
+                                <CoverImage {...post.cover} className="h-14 w-24 rounded-md border border-border-subtle" />
+                            )}
+                            badges={(
+                                <>
+                                    <StatusBadge tone={post.status === "published" ? "success" : "warning"}>{post.status}</StatusBadge>
+                                    {/* Only meaningful for an already-PUBLISHED post — a DRAFT one is unpublished either way, so this would just be noise. */}
+                                    {post.lifecycleState === "PUBLISHED" && post.hasUnpublishedChanges && (
+                                        <StatusBadge tone="warning">Unpublished changes</StatusBadge>
+                                    )}
+                                    {post.category.en && <Tag variant="neutral" size="sm">{post.category.en}</Tag>}
+                                </>
+                            )}
                             meta={formatAdminDate(post.date)}
                             title={post.title.en}
                             slug={post.slug}
+                            related={post.relatedWorkSlug && (
+                                <CompactRelatedLink href={`/admin/work/${ post.relatedWorkSlug }/edit`} label={`Linked to: ${ post.relatedWorkSlug }`} />
+                            )}
                             editHref={`/admin/journal/${ post.slug }/edit`}
                             onDelete={() => handleDelete(post.slug)}
                             deleting={deletingSlug === post.slug}

@@ -36,7 +36,7 @@ export interface TechStackProps {
  * the same rule from the component's side.
  */
 const iconInteractiveClasses = cn(
-    "block w-[26px] h-[26px] rounded-sm text-text-muted",
+    "block h-lg aspect-square w-auto rounded-sm text-text-muted",
     "transition-colors duration-fast ease-standard motion-reduce:transition-none",
     "hover:text-accent-solid",
     "active:text-accent-solid-hover active:scale-press",
@@ -55,26 +55,29 @@ export function TechStack({ techStack }: TechStackProps) {
     }
 
     return (
-        <section className="max-w-[var(--layout-content-max-width)] mx-auto px-[clamp(20px,4vw,56px)] pb-[clamp(56px,7vw,80px)]">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-[18px] sm:gap-[28px]">
-                <Eyebrow className="shrink-0">{ln("eyebrow.stack")}</Eyebrow>
-                <span aria-hidden className="hidden sm:block h-[26px] w-px bg-border-subtle shrink-0" />
-                <ul className="flex flex-wrap items-center gap-x-[26px] gap-y-[16px] list-none m-0 p-0">
-                    {techStack.map((item) => (
-                        <li key={item.name}>
-                            <Tooltip label={item.name}>
-                                {item.hasProjects ? (
-                                    <Link href={`/work?tech=${item.slug}`} aria-label={item.name} className={iconInteractiveClasses}>
-                                        <TechIcon icon={item.icon} />
+        <section
+            className="max-w-(--layout-content-max-width) mx-auto px-(--layout-section-horizontal-padding) pb-[clamp(56px,7vw,80px)]">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-md sm:gap-lg">
+                <Eyebrow className="shrink-0">{ ln("eyebrow.stack") }</Eyebrow>
+                <span aria-hidden className="hidden sm:block h-lg w-px bg-border-subtle shrink-0"/>
+                <ul className="flex flex-wrap items-center gap-x-lg gap-y-md list-none m-0 p-0">
+                    { techStack.map((item) => (
+                        <li key={ item.name }>
+                            <Tooltip label={ item.name }>
+                                { item.hasProjects ? (
+                                    <Link href={ `/work?tech=${ item.slug }` } aria-label={ item.name }
+                                          className={ iconInteractiveClasses }>
+                                        <TechIcon icon={ item.icon }/>
                                     </Link>
                                 ) : (
-                                    <span role="img" aria-label={item.name} className={cn(iconInteractiveClasses, "cursor-default")}>
-                                        <TechIcon icon={item.icon} />
+                                    <span role="img" aria-label={ item.name }
+                                          className={ cn(iconInteractiveClasses, "cursor-default") }>
+                                        <TechIcon icon={ item.icon }/>
                                     </span>
-                                )}
+                                ) }
                             </Tooltip>
                         </li>
-                    ))}
+                    )) }
                 </ul>
             </div>
         </section>

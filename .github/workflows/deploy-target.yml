@@ -43,6 +43,14 @@ on:
         required: true
         type: string
         description: 'Release identifier passed to deploy-frontend.sh (commit SHA for dev, tag name for prod)'
+      seo-indexable:
+        required: true
+        type: string
+        description: '"true" ONLY for the environment search engines must index; any other value means noindex (frontend/src/shared/lib/seo/site-url.ts). Required on purpose — a new deploy target cannot be added without answering it.'
+      site-url:
+        required: true
+        type: string
+        description: "This target's own public origin, no trailing slash — canonical, hreflang, sitemap and OG image URLs are all built from it. Set even on a noindex target, or metadataBase falls back to localhost."
     secrets:
       VPS_HOST:
         required: true
@@ -68,10 +76,10 @@ jobs:
       # .scripts/deploy-frontend.sh simply doesn't exist in this job's workspace and
       # scp-action silently has nothing to send.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-release
 
@@ -85,8 +93,93 @@ jobs:
           source: "release.tar.gz, .scripts/deploy-frontend.sh"
           target: "/tmp/"
 
+      # A separate target from the step above — "Deploy on Server" below
+      # `rm -rf`s /tmp/.scripts, but these root-owned installers must
+      # persist so a human can (re-)run them without ever needing a
+      # separate scp/git-checkout. Never auto-executed here — see
+      # provision/16-deploy-finish-helper.sh's own header for why, and
+      # provision/README.md's dated entry for the full story.
+      - name: Sync deploy/provisioning scripts (reference copy, never auto-run)
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: ".scripts/deploy-frontend-finish.sh, .scripts/deploy-frontend-finish.sh, .scripts/provision/"
+          target: "~/deploy-scripts/"
+
+      # BEFORE the deploy, deliberately — unlike the optional-secrets step
+      # further down, which runs after. Two reasons, both about failure
+      # modes rather than tidiness:
+      #
+      # 1. `set-app-env-finish.sh` writes shared/.env, and
+      #    `deploy-frontend-finish.sh` wires shared/.env into the new
+      #    release before starting it. Running first therefore means the
+      #    new release comes up ALREADY indexable. After the deploy it
+      #    would start noindex and only get the variables on a second
+      #    restart — a real, if short, window in which production tells
+      #    every crawler not to index it.
+      # 2. No `continue-on-error` here (again unlike the step below): if
+      #    this fails, the deploy never happens and the previous, correctly
+      #    configured release keeps serving. Failing after the deploy would
+      #    instead leave the NEW release live with the wrong config.
+      #
+      # These two values are inputs rather than secrets on purpose: they
+      # aren't secret, and having them at the call site is what makes
+      # "which environment is the indexable one" readable in
+      # deploy-frontend.yaml instead of hidden in repository settings.
+      # See frontend/src/shared/lib/seo/README.md for why getting this
+      # wrong on prod is the most damaging mistake in the whole SEO area.
+      #
+      # Precondition, and a real behavior change: this needs
+      # /usr/local/bin/set-app-env-finish.sh (provision/12-set-app-env-helper.sh)
+      # and its sudoers rule. The step below already depended on it, but
+      # tolerated its absence; this one does not, so a target that skipped
+      # that provisioning step now fails the deploy instead of quietly
+      # deploying a misconfigured site. That is the intended trade.
+      - name: Publish SEO configuration (${{ inputs.environment-name }})
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            sudo /usr/local/bin/set-app-env-finish.sh ${{ inputs.base-dir }} \
+              "SEO_INDEXABLE=${{ inputs.seo-indexable }}" \
+              "SITE_URL=${{ inputs.site-url }}"
+
+      # Self-heals a target provisioned BEFORE `provision/06-app-env.sh`
+      # started writing MEDIA_DIR/XDG_CACHE_HOME into a brand-new
+      # shared/.env — that script explicitly refuses to touch an EXISTING
+      # .env (by design, see its own comment), so a pre-existing dev/prod
+      # target would otherwise never pick these keys up. MEDIA_DIR missing
+      # means covers fall back to next.config.ts's release-local default,
+      # which vanishes every deploy while nginx keeps serving shared/media.
+      # XDG_CACHE_HOME missing means sharp's underlying fontconfig has
+      # nowhere to write its cache (nextapp has no home directory) and
+      # logs "No writable cache directories" on every cover render —
+      # harmless, but noisy (the actual directory this points at is
+      # created idempotently by deploy-frontend-finish.sh, self-healing
+      # the same way this env sync does). Unconditional (no
+      # continue-on-error), unlike the Upstash/PlantUML sync below: both
+      # values are derived, always correct, and not secrets, so there's no
+      # "not configured yet" case to tolerate.
+      - name: Sync MEDIA_DIR / XDG_CACHE_HOME (${{ inputs.environment-name }})
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            sudo /usr/local/bin/set-app-env-finish.sh ${{ inputs.base-dir }} \
+              "MEDIA_DIR=${{ inputs.base-dir }}/shared/media" \
+              "XDG_CACHE_HOME=${{ inputs.base-dir }}/shared/.cache"
+
       - name: Deploy on Server (${{ inputs.environment-name }})
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}
@@ -115,7 +208,7 @@ jobs:
       # good deploy — this step only ever ADDS/UPDATES named keys, never deletes.
       - name: Sync optional env vars (${{ inputs.environment-name }})
         continue-on-error: true
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           port: ${{ secrets.VPS_PORT }}

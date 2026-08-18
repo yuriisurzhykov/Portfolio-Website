@@ -1,4 +1,5 @@
 import { prisma } from "../db/client";
+import { coverUrlFor, type CoverImageData } from "../media/covers";
 import type { Block } from "./blocks";
 import { getDocumentBlocks } from "./document";
 import type { LifecycleState } from "./lifecycle";
@@ -31,6 +32,45 @@ export interface PostSummary {
     lifecycleState: LifecycleState;
     /** Mirrors `Post.publishedAt` — see schema.prisma's comment for why an UNPUBLISH never clears it. */
     publishedAt: string | null;
+    /**
+     * When the post's CONTENT last changed — `null` for rows predating the
+     * column (see schema.prisma's comment for why there's no backfill).
+     * Both consumers fall back to `publishedAt`: `lastmod` in sitemap.xml
+     * and `dateModified` in the post's JSON-LD. Replaces `updatedAt` on
+     * this type rather than joining it — the public API surface doesn't
+     * grow, and "the row was touched" was never a useful thing to publish.
+     */
+    contentUpdatedAt: string | null;
+    /**
+     * Whether `/journal/:slug` would actually render, without fetching the
+     * body — mirror of `WorkSummary.hasCaseStudy`. `status === "published"`
+     * does NOT imply this: an upcoming stub is filtered out by `status`,
+     * but a published post whose body document was never written makes
+     * `/journal/[slug]` call `notFound()`, and sitemap.xml must not list a
+     * guaranteed 404.
+     */
+    hasBody: boolean;
+    /**
+     * The locales this post has its OWN version in — always contains
+     * `"en"`, and `"ru"` only once a Russian body document exists. What
+     * hreflang/`alternates.languages` is built from, so it has to mean
+     * "there is a Russian page here", not "somebody translated the title":
+     * a Russian headline over an English body is not a Russian version.
+     *
+     * A list, not a `hasRussianVersion` boolean, so a third language is a
+     * new VALUE rather than a new field to add at every consumer.
+     */
+    availableLocales: ContentLocale[];
+    /**
+     * `null` only for a post that predates this feature (created before the
+     * `coverAssetId` migration ran) — every post created through
+     * `createPost` since gets one automatically (see `media/covers.ts`'s
+     * `generateCoverForPost`) and this is never null for it. Callers
+     * (`JournalListPage`, `JournalPreview`, the post detail hero) render
+     * conditionally rather than assuming non-null, precisely to stay
+     * correct for that pre-existing-content case without a backfill.
+     */
+    cover: CoverImageData | null;
 }
 
 export interface PostDetail extends PostSummary {
@@ -38,7 +78,17 @@ export interface PostDetail extends PostSummary {
     body: Block[];
 }
 
-/** Exported for reuse by admin-posts.ts (Phase 4) — the admin CRUD layer maps the exact same Prisma row shape back to the same public `PostSummary`, so this mapping stays defined in one place. */
+/**
+ * Exported for reuse by admin-posts.ts (Phase 4) — the admin CRUD layer
+ * maps the exact same Prisma row shape back to the same public
+ * `PostSummary`, so this mapping stays defined in one place.
+ *
+ * `availableLocales` is derived HERE, from `bodyDocumentIdRu`, rather than
+ * being passed in: which columns imply "there is a Russian version of this
+ * post" is this module's business, and `Work`'s honest answer is a
+ * different column with a different rule (see `toWorkSummary`) — a shared
+ * rule across both types would have to lie about one of them.
+ */
 export function toPostSummary(row: {
     slug: string;
     date: string;
@@ -48,8 +98,20 @@ export function toPostSummary(row: {
     excerpt: unknown;
     status: string;
     relatedWorkSlug: string | null;
+    bodyDocumentId: string | null;
+    bodyDocumentIdRu: string | null;
     lifecycleState: LifecycleState;
     publishedAt: Date | null;
+    contentUpdatedAt: Date | null;
+    /**
+     * Optional and possibly `undefined` (as opposed to `null`) on purpose —
+     * a caller that queried `Post` WITHOUT `include: { cover: true }` (every
+     * admin read that doesn't render a cover thumbnail yet, see
+     * `admin-posts.ts`) simply never has this key at all, and this function
+     * treats that identically to "no cover" rather than requiring every
+     * call site to remember to fetch a relation it doesn't use.
+     */
+    cover?: { storageKey: string; placeholder: string; width: number; height: number } | null;
 }): PostSummary {
     return {
         slug: row.slug,
@@ -62,6 +124,10 @@ export function toPostSummary(row: {
         relatedWorkSlug: row.relatedWorkSlug,
         lifecycleState: row.lifecycleState,
         publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+        contentUpdatedAt: row.contentUpdatedAt ? row.contentUpdatedAt.toISOString() : null,
+        hasBody: row.bodyDocumentId !== null,
+        availableLocales: row.bodyDocumentIdRu !== null ? ["en", "ru"] : ["en"],
+        cover: coverUrlFor(row.cover),
     };
 }
 
@@ -79,7 +145,11 @@ export function toPostSummary(row: {
  * `admin-posts.ts`'s `getPostsForAdmin()`.
  */
 export async function getJournalEntries(): Promise<PostSummary[]> {
-    const rows = await prisma.post.findMany({ where: { lifecycleState: "PUBLISHED" }, orderBy: { date: "desc" } });
+    const rows = await prisma.post.findMany({
+        where: { lifecycleState: "PUBLISHED" },
+        orderBy: { date: "desc" },
+        include: { cover: true },
+    });
     return rows.map(toPostSummary);
 }
 
@@ -117,6 +187,7 @@ export async function getLatestPublishedPost(): Promise<PostSummary | null> {
     const row = await prisma.post.findFirst({
         where: { status: "published", lifecycleState: "PUBLISHED" },
         orderBy: { date: "desc" },
+        include: { cover: true },
     });
     return row ? toPostSummary(row) : null;
 }
@@ -136,7 +207,7 @@ export async function getLatestPublishedPost(): Promise<PostSummary | null> {
  * added (see admin-posts.ts's `translatePost`).
  */
 export async function getPostBySlug(slug: string, locale: ContentLocale = "en"): Promise<PostDetail | null> {
-    const row = await prisma.post.findUnique({ where: { slug } });
+    const row = await prisma.post.findUnique({ where: { slug }, include: { cover: true } });
     if (!row || row.lifecycleState !== "PUBLISHED") {
         return null;
     }

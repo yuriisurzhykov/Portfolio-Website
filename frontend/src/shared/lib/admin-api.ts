@@ -1,9 +1,12 @@
 "use client";
 
-import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/shared/lib/auth/constants";
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE, LOGIN_PATH } from "@/shared/lib/auth/constants";
 import type {
+    AdminPostDetail,
+    AdminWorkDetail,
     PostInput,
     PostSummary,
+    RevisionSummary,
     SiteContentDataMap,
     SiteContentKey,
     TechIcon,
@@ -84,9 +87,23 @@ function refreshSessionOnce(): Promise<boolean> {
     return refreshInFlight;
 }
 
+/**
+ * Sends the visitor to the sign-in page, remembering where they were.
+ *
+ * Does NOTHING when they are already on `/admin/login`, and that guard is
+ * load-bearing rather than tidy: `from` is built from
+ * `pathname + search`, so redirecting to login FROM login nested the
+ * previous `from` inside the new one and re-encoded it every time —
+ * `?from=%2Fadmin%2Flogin%3Ffrom%3D%252Fadmin%252Flogin%253Ffrom%253D...`,
+ * growing without bound. It also meant a hard page load that wiped the
+ * error message the visitor needed to read.
+ */
 function redirectToLogin(): void {
+    if (window.location.pathname.startsWith(LOGIN_PATH)) {
+        return;
+    }
     const from = encodeURIComponent(window.location.pathname + window.location.search);
-    window.location.assign(`/admin/login?from=${ from }`);
+    window.location.assign(`${ LOGIN_PATH }?from=${ from }`);
 }
 
 async function parseErrorMessage(response: Response): Promise<string> {
@@ -143,6 +160,35 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
         throw new AdminApiError(response.status, message);
     }
 
+    return readBody<T>(response);
+}
+
+/**
+ * The same call without ANY of the session-recovery behavior above — no
+ * silent refresh, no redirect. A 401 here is just an error, reported to
+ * the caller with the server's own message.
+ *
+ * For endpoints that ESTABLISH a session rather than consume one. On
+ * `/api/auth/login` a 401 means "wrong email or password", not "your
+ * session expired", and `request()`'s reaction to it was actively
+ * harmful: it navigated to the sign-in page — from the sign-in page —
+ * which both wiped the error message before it could render and grew the
+ * `?from=` parameter on every attempt (see `redirectToLogin`). Every
+ * failed sign-in looked like an infinite redirect loop.
+ *
+ * Same reasoning `refresh` below already documents for itself: an
+ * operation that IS the recovery must not be routed through the thing
+ * that triggers the recovery.
+ */
+async function requestWithoutSessionRecovery<T>(method: string, url: string, body?: unknown): Promise<T> {
+    const response = await doFetch(method, url, body);
+    if (!response.ok) {
+        throw new AdminApiError(response.status, await parseErrorMessage(response));
+    }
+    return readBody<T>(response);
+}
+
+async function readBody<T>(response: Response): Promise<T> {
     if (response.status === 204) {
         return undefined as T;
     }
@@ -154,7 +200,15 @@ export interface AdminLoginResult {
 }
 
 export const adminApi = {
-    login: (email: string, password: string) => request<AdminLoginResult>("POST", "/api/auth/login", { email, password }),
+    // NOT `request()` — see `requestWithoutSessionRecovery`. A 401 here is
+    // "wrong credentials", the one 401 in this app that must surface to
+    // the caller as a message rather than trigger a trip to the sign-in
+    // page the visitor is already looking at.
+    login: (email: string, password: string) =>
+        requestWithoutSessionRecovery<AdminLoginResult>("POST", "/api/auth/login", { email, password }),
+    // Stays on `request()`: a 401 while ENDING a session genuinely means
+    // the session is already gone, and being sent to sign in is the right
+    // answer. `redirectToLogin`'s own guard makes that safe.
     logout: () => request<{ ok: true }>("POST", "/api/auth/logout"),
     // Used by `useSessionKeepAlive` for its proactive heartbeat —
     // deliberately NOT routed through `request()` above: refreshing IS the
@@ -172,19 +226,37 @@ export const adminApi = {
     },
 
     createPost: (input: PostInput) => request<PostSummary>("POST", "/api/admin/posts", input),
+    // PUT here only ever writes the post's DRAFT now — see the route's own
+    // comment (admin-posts.ts's `savePostDraft`). Kept the name
+    // `updatePost` (not `savePostDraft`) on THIS client method — every
+    // caller already reads as "save the post," and renaming it here would
+    // suggest the semantics changed at the call site, when the whole
+    // point of the draft/publish split is that callers don't have to
+    // know or care where a save actually lands.
     updatePost: (slug: string, input: PostInput) => request<PostSummary>("PUT", `/api/admin/posts/${ encodeURIComponent(slug) }`, input),
     deletePost: (slug: string) => request<{ ok: true }>("DELETE", `/api/admin/posts/${ encodeURIComponent(slug) }`),
     // No body — see the route's own comment (admin-posts.ts's
     // `publishPost`/`unpublishPost`): these validate/flip whatever's
-    // already saved, they don't accept content changes.
+    // already saved, they don't accept content changes. `publishPost` is
+    // also what an already-published post's "Update" button calls — same
+    // endpoint, same action ("apply the pending draft"), just a different
+    // label depending on `lifecycleState`.
     publishPost: (slug: string) => request<PostSummary>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/publish`),
     unpublishPost: (slug: string) => request<PostSummary>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/unpublish`),
+    discardPostDraft: (slug: string) => request<AdminPostDetail>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/draft/discard`),
+    listPostRevisions: (slug: string) => request<RevisionSummary[]>("GET", `/api/admin/posts/${ encodeURIComponent(slug) }/revisions`),
+    restorePostRevision: (slug: string, revisionId: string) =>
+        request<AdminPostDetail>("POST", `/api/admin/posts/${ encodeURIComponent(slug) }/revisions/${ encodeURIComponent(revisionId) }/restore`),
 
     createWork: (input: WorkInput) => request<WorkSummary>("POST", "/api/admin/work", input),
     updateWork: (slug: string, input: WorkInput) => request<WorkSummary>("PUT", `/api/admin/work/${ encodeURIComponent(slug) }`, input),
     deleteWork: (slug: string) => request<{ ok: true }>("DELETE", `/api/admin/work/${ encodeURIComponent(slug) }`),
     publishWork: (slug: string) => request<WorkSummary>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/publish`),
     unpublishWork: (slug: string) => request<WorkSummary>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/unpublish`),
+    discardWorkDraft: (slug: string) => request<AdminWorkDetail>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/draft/discard`),
+    listWorkRevisions: (slug: string) => request<RevisionSummary[]>("GET", `/api/admin/work/${ encodeURIComponent(slug) }/revisions`),
+    restoreWorkRevision: (slug: string, revisionId: string) =>
+        request<AdminWorkDetail>("POST", `/api/admin/work/${ encodeURIComponent(slug) }/revisions/${ encodeURIComponent(revisionId) }/restore`),
 
     // Separate from `updatePost`/`updateWork` — see the two `[slug]/translation`
     // route files' top comments — this is the only path that ever writes

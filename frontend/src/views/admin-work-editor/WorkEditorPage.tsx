@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { LifecycleState, WorkDetail, WorkInput, WorkStatus, WorkSummary } from "@portfolio/backend";
+import type { AdminWorkDetail, LifecycleState, WorkInput, WorkStatus, WorkSummary } from "@portfolio/backend";
 import { Card } from "@/shared/ui/card";
 import { Text } from "@/shared/ui/text";
 import { Button } from "@/shared/ui/button";
@@ -11,15 +11,19 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { StatusToggle, type StatusToggleOption } from "@/shared/ui/status-toggle";
 import { BlockEditor, type BlockEditorHandle } from "@/shared/ui/block-editor";
 import { TokenCombobox } from "@/shared/ui/token-combobox";
+import { RelatedItemPicker, type RelatedItemOption } from "@/shared/ui/related-item-picker";
 import { AdminApiError, adminApi } from "@/shared/lib/admin-api";
 import { slugify } from "@/shared/lib/slugify";
+import { todayIsoDate } from "@/shared/lib/date-format";
 import { type AutosaveStatus, useAutosaveDraft } from "@/shared/lib/use-autosave-draft";
 
 export interface WorkEditorPageProps {
     /** Absent for "create new"; present (already-saved) for "edit". */
-    initialWork?: WorkDetail;
-    /** `techStack[].name` from `SiteContent` — fuzzy-search suggestions for the Stack field's `TokenCombobox`, not a hard-enforced list (see `token-combobox/README.md` for why free text is still allowed). Defaults to `[]` so callers that don't have this yet (there are none today, but the type stays honest) don't crash. */
+    initialWork?: AdminWorkDetail;
+    /** `techStack[].name` from `SiteContent` вЂ” fuzzy-search suggestions for the Stack field's `TokenCombobox`, not a hard-enforced list (see `token-combobox/README.md` for why free text is still allowed). Defaults to `[]` so callers that don't have this yet (there are none today, but the type stays honest) don't crash. */
     techStackSuggestions?: string[];
+    /** Every real Post, for `RelatedItemPicker`'s "Related journal post" field вЂ” same "hand the whole small list to the client" pattern as `techStackSuggestions`. Defaults to `[]` for the same reason. */
+    postOptions?: RelatedItemOption[];
 }
 
 const STATUS_OPTIONS: StatusToggleOption<WorkStatus>[] = [
@@ -30,7 +34,7 @@ const STATUS_OPTIONS: StatusToggleOption<WorkStatus>[] = [
 interface FormState {
     slug: string;
     title: string;
-    year: string;
+    date: string;
     status: WorkStatus;
     summary: string;
     stack: string[];
@@ -44,34 +48,35 @@ interface FormState {
     heroImage: string;
 }
 
-/** Same shape/reasoning as `PostEditorPage`'s identical helper — see its comment. */
+/** Same shape/reasoning as `PostEditorPage`'s identical helper вЂ” see its comment. */
 function autosaveStatusLabel(status: AutosaveStatus): string | null {
     switch (status) {
         case "saving":
-            return "Saving…";
+            return "Saving draftвЂ¦";
         case "saved":
-            return "Saved just now";
+            return "Draft saved just now";
         case "error":
-            return "Save failed — retrying";
+            return "Save failed вЂ” retrying";
         case "idle":
             return null;
     }
 }
 
 /**
- * English-only — same reasoning as `PostEditorPage`'s `toFormState`.
- * `initialWork`'s localized fields stay full `{en, ru}` pairs on the read
- * side; only `.en` is ever shown/edited here. `status` defaults to
- * `"in-progress"`, not `"shipped"` — same reasoning as `PostEditorPage`'s
- * identical change (2026-07-31, Phase 3): a brand new item is a DRAFT
- * (`lifecycleState`) until explicitly published, "shipped" as the default
- * was a leftover contradiction from before that field existed.
+ * English-only title (`.en` вЂ” `Work.title` was localized 2026-08-11, same
+ * shape as `Post.title`; translation happens on the separate "Add
+ * translation" page, same as Post) вЂ” same reasoning as `PostEditorPage`'s
+ * `toFormState`. `slug` reads `draftSlug` (the pending rename, if any), not
+ * `slug` вЂ” same reasoning as `PostEditorPage`'s identical change, see
+ * `AdminWorkDetail.draftSlug`'s comment. `status` defaults to
+ * `"in-progress"`, not `"shipped"` вЂ” a brand new item is a DRAFT
+ * (`lifecycleState`) until explicitly published.
  */
-function toFormState(work?: WorkDetail): FormState {
+function toFormState(work?: AdminWorkDetail): FormState {
     return {
-        slug: work?.slug ?? "",
-        title: work?.title ?? "",
-        year: work ? String(work.year) : String(new Date().getFullYear()),
+        slug: work?.draftSlug ?? work?.slug ?? "",
+        title: work?.title.en ?? "",
+        date: work?.date ?? todayIsoDate(),
         status: work?.status ?? "in-progress",
         summary: work?.summary.en ?? "",
         stack: work?.stack ?? [],
@@ -86,37 +91,46 @@ function toFormState(work?: WorkDetail): FormState {
     };
 }
 
-export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkEditorPageProps) {
+export function WorkEditorPage({ initialWork, techStackSuggestions = [], postOptions = [] }: WorkEditorPageProps) {
     const router = useRouter();
     const isEditing = Boolean(initialWork);
 
+    // Same reasoning as `PostEditorPage`'s identical field вЂ” re-set
+    // wholesale by "Discard changes"/"Load into draft", read for
+    // everything the form doesn't itself own (case-study blocks, in
+    // particular).
+    const [work, setWork] = React.useState<AdminWorkDetail | undefined>(initialWork);
     const [form, setForm] = React.useState<FormState>(() => toFormState(initialWork));
-    // Same reasoning as `PostEditorPage`'s `slugTouched` — an existing
+    // Same reasoning as `PostEditorPage`'s `slugTouched` вЂ” an existing
     // item's slug never follows title edits, only a brand new one's does,
     // and only until the admin edits the slug field directly.
     const [slugTouched, setSlugTouched] = React.useState(isEditing);
     const blockEditorRef = React.useRef<BlockEditorHandle>(null);
+    // Same reasoning as `PostEditorPage`'s identical field.
+    const [contentVersion, setContentVersion] = React.useState(0);
     const [error, setError] = React.useState<string | null>(null);
-    // Separate from `error` — see admin-post-editor/PostEditorPage.tsx's identical field for why.
-    const [notice, setNotice] = React.useState<string | null>(null);
     const [deleting, setDeleting] = React.useState(false);
+    const [discarding, setDiscarding] = React.useState(false);
+    const [previewPending, setPreviewPending] = React.useState(false);
     const [lifecycleState, setLifecycleState] = React.useState<LifecycleState>(initialWork?.lifecycleState ?? "DRAFT");
     const [lifecyclePending, setLifecyclePending] = React.useState(false);
-    // Guards "Back to list"/"Add translation" — see `navigateAfterFlush` below.
+    /** Same reasoning as `PostEditorPage`'s identical field. */
+    const [hasUnpublishedChanges, setHasUnpublishedChanges] = React.useState(initialWork?.hasUnpublishedChanges ?? false);
+    // Guards "Back to list"/"Add translation" вЂ” see `navigateAfterFlush` below.
     const [navPending, setNavPending] = React.useState(false);
-    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical field — see its comment. */
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical field вЂ” see its comment. */
     const [currentSlug, setCurrentSlug] = React.useState<string | null>(initialWork?.slug ?? null);
 
-    /** Same hook, same reasoning as `PostEditorPage`'s identical field — see its comment and this slice's README. */
+    /** Same hook, same reasoning as `PostEditorPage`'s identical field вЂ” see its comment and this slice's README. */
     const autosave = useAutosaveDraft<WorkInput, WorkSummary>({
         slug: initialWork?.slug ?? null,
         buildInput: () => ({
             slug: form.slug.trim() || undefined,
             title: form.title.trim(),
-            year: Number(form.year) || 0,
+            date: form.date,
             status: form.status,
             summary: form.summary.trim(),
-            // Already an array of trimmed, deduped-by-TokenCombobox tokens —
+            // Already an array of trimmed, deduped-by-TokenCombobox tokens вЂ”
             // still `.filter(Boolean)` defensively at this boundary, same as
             // every other field here, rather than trusting the UI layer
             // never to hand back something empty.
@@ -138,21 +152,19 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         create: (input) => adminApi.createWork(input),
         update: (slug, input) => adminApi.updateWork(slug, input),
         getSlug: (result) => result.slug,
-        // Same reasoning as `PostEditorPage.tsx`'s identical field — fires for the initial create AND for a later rename.
+        // Same reasoning as `PostEditorPage.tsx`'s identical field вЂ” fires ONLY for the initial create.
         onSlugChanged: (result) => {
             setCurrentSlug(result.slug);
             router.replace(`/admin/work/${ result.slug }/edit`);
         },
         onSaved: (result) => {
-            // Auto-unpublish safety net — see admin-work.ts's `updateWork`
-            // and PostEditorPage.tsx's identical check for the full
-            // reasoning.
-            if (lifecycleState === "PUBLISHED" && result.lifecycleState === "DRAFT") {
-                setNotice("Saved, but automatically unpublished — this item no longer has everything required to stay public (e.g. a missing summary or case-study field). Fill in what's missing, then Publish again.");
-            }
             setLifecycleState(result.lifecycleState);
+            // Same reasoning as `PostEditorPage.tsx`'s identical check.
+            if (currentSlug !== null) {
+                setHasUnpublishedChanges(true);
+            }
         },
-        onError: (err) => setError(err instanceof AdminApiError ? err.message : "Something went wrong while saving. Retrying automatically…"),
+        onError: (err) => setError(err instanceof AdminApiError ? err.message : "Something went wrong while saving. Retrying automaticallyвЂ¦"),
     });
 
     function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -174,12 +186,11 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         update("slug", slug);
     }
 
+    /** Same reasoning as `PostEditorPage.tsx`'s identical function вЂ” see its comment. */
     async function handlePublish() {
         if (!currentSlug) return;
         setError(null);
-        setNotice(null);
         setLifecyclePending(true);
-        // Same reasoning as PostEditorPage.tsx's identical structure.
         try {
             await autosave.flush();
         } catch {
@@ -190,6 +201,11 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         try {
             const result = await adminApi.publishWork(currentSlug);
             setLifecycleState(result.lifecycleState);
+            setHasUnpublishedChanges(false);
+            if (result.slug !== currentSlug) {
+                setCurrentSlug(result.slug);
+                router.replace(`/admin/work/${ result.slug }/edit`);
+            }
         } catch (err) {
             setError(err instanceof AdminApiError ? err.message : "Failed to publish.");
         } finally {
@@ -200,7 +216,6 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
     async function handleUnpublish() {
         if (!currentSlug) return;
         setError(null);
-        setNotice(null);
         setLifecyclePending(true);
         try {
             const result = await adminApi.unpublishWork(currentSlug);
@@ -212,12 +227,44 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         }
     }
 
+    /** Same reasoning, same fix as `PostEditorPage.tsx`'s identical function вЂ” see its comment on why this flushes before discarding. */
+    async function handleDiscard() {
+        if (!currentSlug) return;
+        if (!window.confirm("Discard every unpublished change and go back to what's currently live?")) return;
+
+        setError(null);
+        setDiscarding(true);
+        await autosave.flush().catch(() => {});
+        try {
+            const fresh = await adminApi.discardWorkDraft(currentSlug);
+            setWork(fresh);
+            setForm(toFormState(fresh));
+            setSlugTouched(true);
+            setLifecycleState(fresh.lifecycleState);
+            setHasUnpublishedChanges(false);
+            setContentVersion((v) => v + 1);
+        } catch (err) {
+            setError(err instanceof AdminApiError ? err.message : "Failed to discard changes.");
+        } finally {
+            setDiscarding(false);
+        }
+    }
+
+    /** Same reasoning as `PostEditorPage.tsx`'s identical function. */
+    async function handlePreview() {
+        if (!currentSlug) return;
+        setPreviewPending(true);
+        await autosave.flush().catch(() => {});
+        setPreviewPending(false);
+        window.open(`/work/${ currentSlug }?preview=1`, "_blank", "noopener,noreferrer");
+    }
+
     async function handleDelete() {
         if (!currentSlug) return;
         if (!window.confirm(`Delete "${ currentSlug }"? This can't be undone.`)) return;
 
         setDeleting(true);
-        // See PostEditorPage.tsx's identical comment — avoids the background
+        // See PostEditorPage.tsx's identical comment вЂ” avoids the background
         // blur-flush's `update()` landing on the server after this delete
         // already removed the row.
         await autosave.flush().catch(() => {});
@@ -231,7 +278,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
         }
     }
 
-    /** Same hook, same reasoning, same fix as `PostEditorPage.tsx`'s identical function — see its comment for why this flushes BEFORE navigating rather than relying on `useAutosaveDraft`'s own unmount cleanup. */
+    /** Same hook, same reasoning, same fix as `PostEditorPage.tsx`'s identical function вЂ” see its comment for why this flushes BEFORE navigating rather than relying on `useAutosaveDraft`'s own unmount cleanup. */
     async function navigateAfterFlush(path: string) {
         setError(null);
         setNavPending(true);
@@ -239,28 +286,28 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
             await autosave.flush();
             router.push(path);
         } catch {
-            setError("Your latest changes couldn't be saved yet — please try again before leaving this page.");
+            setError("Your latest changes couldn't be saved yet вЂ” please try again before leaving this page.");
             setNavPending(false);
         }
     }
 
     const autosaveLabel = autosaveStatusLabel(autosave.status);
 
-    /** See PostEditorPage.tsx's identical `flushOnBlur` comment — same reasoning, same fire-and-forget flush on any field (including the block editor) losing focus. */
+    /** See PostEditorPage.tsx's identical `flushOnBlur` comment вЂ” same reasoning, same fire-and-forget flush on any field (including the block editor) losing focus. */
     function flushOnBlur() {
         void autosave.flush().catch(() => {});
     }
 
     return (
-        // See PostEditorPage.tsx's identical `onSubmit` comment — swallows the browser's implicit submit-on-Enter, there's no real submit action anymore.
+        // See PostEditorPage.tsx's identical `onSubmit` comment вЂ” swallows the browser's implicit submit-on-Enter, there's no real submit action anymore.
         <form onSubmit={(e) => e.preventDefault()} onBlur={flushOnBlur} className="flex flex-col gap-lg pb-4xl">
             <div className="flex items-start justify-between gap-md flex-wrap">
                 <div className="flex flex-col gap-sm">
                     <Text as="h1" variant="h3">{isEditing ? `Edit work: ${ currentSlug }` : "New work item"}</Text>
                     <Text variant="caption" tone="faint" className="max-w-[52ch]">
-                        A project or system in the <code className="font-mono">/work</code> portfolio ledger —
-                        “what you built.” A journal post, by contrast, is a dated essay about it —
-                        “what you wrote.” The two sections below map to the two things a visitor actually sees:
+                        A project or system in the <code className="font-mono">/work</code> portfolio ledger вЂ”
+                        вЂњwhat you built.вЂќ A journal post, by contrast, is a dated essay about it вЂ”
+                        вЂњwhat you wrote.вЂќ The two sections below map to the two things a visitor actually sees:
                         the card everyone gets, and an optional deep-dive page only some items have.
                     </Text>
                     <div className="flex items-center gap-sm flex-wrap">
@@ -276,21 +323,40 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-sm">
+                <div className="flex items-center gap-sm flex-wrap">
                     {isEditing && (
                         <>
                             <StatusBadge tone={lifecycleState === "PUBLISHED" ? "success" : "warning"} withDot>
                                 {lifecycleState === "PUBLISHED" ? "Published" : "Draft"}
                             </StatusBadge>
-                            {lifecycleState === "DRAFT" ? (
-                                <Button type="button" variant="secondary" size="sm" onClick={handlePublish} loading={lifecyclePending}>
-                                    Publish
+                            {lifecycleState === "PUBLISHED" && hasUnpublishedChanges && (
+                                <StatusBadge tone="warning">Unpublished changes</StatusBadge>
+                            )}
+                            <Button type="button" variant="secondary" size="sm" onClick={handlePublish} loading={lifecyclePending}>
+                                {lifecycleState === "DRAFT" ? "Publish" : "Update"}
+                            </Button>
+                            {hasUnpublishedChanges && (
+                                <Button type="button" variant="ghost" size="sm" onClick={handleDiscard} loading={discarding}>
+                                    Discard changes
                                 </Button>
-                            ) : (
+                            )}
+                            {lifecycleState === "PUBLISHED" && (
                                 <Button type="button" variant="ghost" size="sm" onClick={handleUnpublish} loading={lifecyclePending}>
                                     Unpublish
                                 </Button>
                             )}
+                            <Button type="button" variant="ghost" size="sm" onClick={handlePreview} loading={previewPending}>
+                                Preview
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => navigateAfterFlush(`/admin/work/${ currentSlug }/history`)}
+                                loading={navPending}
+                            >
+                                History
+                            </Button>
                         </>
                     )}
                     {isEditing && (
@@ -301,7 +367,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                             onClick={() => navigateAfterFlush(`/admin/work/${ currentSlug }/translate`)}
                             loading={navPending}
                         >
-                            {initialWork?.summary.ru ? "Edit translation" : "Add translation"}
+                            {work?.summary.ru ? "Edit translation" : "Add translation"}
                         </Button>
                     )}
                     {isEditing && (
@@ -313,32 +379,40 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
             </div>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
-                <div className="flex flex-col gap-[2px]">
+                <div className="flex flex-col gap-0.5">
                     <Text as="h2" variant="h5">Portfolio card</Text>
                     <Text variant="caption" tone="faint">
-                        Every work item gets one of these — on the <code className="font-mono">/work</code> ledger,
-                        and (if “Featured” below) on the landing page’s “Selected Work” grid too.
+                        Every work item gets one of these вЂ” on the <code className="font-mono">/work</code> ledger,
+                        and (if вЂњFeaturedвЂќ below) on the landing pageвЂ™s вЂњSelected WorkвЂќ grid too.
                     </Text>
                 </div>
 
-                <Field label="Title" htmlFor="title" hint="Not localized — same value in both languages on the public site.">
+                <Field label="Title" htmlFor="title">
                     <Input id="title" required value={form.title} onChange={(e) => updateTitle(e.target.value)} />
                 </Field>
-                <Field label="Slug" htmlFor="slug" hint="Auto-generated from the title — edit if you want a different URL.">
+                <Field
+                    label="Slug"
+                    htmlFor="slug"
+                    hint={
+                        isEditing
+                            ? `Auto-generated from the title вЂ” edit if you want a different URL. Currently live at /work/${ currentSlug }; a change here takes effect on Publish/Update.`
+                            : "Auto-generated from the title вЂ” edit if you want a different URL."
+                    }
+                >
                     <Input id="slug" required value={form.slug} onChange={(e) => updateSlugManually(e.target.value)} />
                 </Field>
-                <Field label="Summary" htmlFor="summary" hint="One or two sentences — the blurb shown under the title on the card.">
+                <Field label="Summary" htmlFor="summary" hint="One or two sentences вЂ” the blurb shown under the title on the card.">
                     <Textarea id="summary" required rows={2} value={form.summary} onChange={(e) => update("summary", e.target.value)} />
                 </Field>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                    <Field label="Year" htmlFor="year" hint="Used to sort the /work ledger, newest first.">
-                        <Input id="year" type="number" required value={form.year} onChange={(e) => update("year", e.target.value)} />
+                    <Field label="Date" htmlFor="date" hint="Used to sort the /work ledger, newest first вЂ” edit freely, unlike a journal post's date.">
+                        <Input id="date" type="date" required value={form.date} onChange={(e) => update("date", e.target.value)} />
                     </Field>
                     <TokenCombobox
                         id="work-stack"
                         label="Stack"
-                        hint="Press Enter to add. Pick a suggestion, or type your own — it doesn't have to already exist in Tech Stack."
+                        hint="Press Enter to add. Pick a suggestion, or type your own вЂ” it doesn't have to already exist in Tech Stack."
                         values={form.stack}
                         onChange={(stack) => update("stack", stack)}
                         suggestions={techStackSuggestions}
@@ -347,7 +421,7 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                     <Field
                         label="Cover image"
                         htmlFor="coverImage"
-                        hint={"Optional — only used on the landing page's \"Selected Work\" grid, not on the /work ledger itself."}
+                        hint={"Optional вЂ” only used on the landing page's \"Selected Work\" grid, not on the /work ledger itself."}
                     >
                         <Input id="coverImage" value={form.coverImage} onChange={(e) => update("coverImage", e.target.value)} />
                     </Field>
@@ -361,21 +435,23 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                     </div>
                 </div>
 
-                <Field
+                <RelatedItemPicker
+                    id="relatedPostSlug"
                     label="Related journal post"
-                    htmlFor="relatedPostSlug"
-                    hint={"Optional — the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."}
-                >
-                    <Input id="relatedPostSlug" value={form.relatedPostSlug} onChange={(e) => update("relatedPostSlug", e.target.value)} placeholder="e.g. flowbus" />
-                </Field>
+                    hint="Optional вЂ” the one journal entry that's the deepest write-up of this project. If this item has no case study below, clicking it takes visitors there instead."
+                    value={form.relatedPostSlug || null}
+                    onChange={(slug) => update("relatedPostSlug", slug ?? "")}
+                    options={postOptions}
+                    placeholder="Search journal postsвЂ¦"
+                />
             </Card>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
-                <div className="flex flex-col gap-[2px]">
+                <div className="flex flex-col gap-0.5">
                     <Text as="h2" variant="h5">Case study (optional)</Text>
                     <Text variant="caption" tone="faint">
-                        A full write-up page at <code className="font-mono">/work/{ form.slug || "…" }</code> — the
-                        project’s own detail page, separate from the journal. Most items don’t need one; a plain
+                        A full write-up page at <code className="font-mono">/work/{ form.slug || "вЂ¦" }</code> вЂ” the
+                        projectвЂ™s own detail page, separate from the journal. Most items donвЂ™t need one; a plain
                         card above is often enough.
                     </Text>
                 </div>
@@ -390,46 +466,43 @@ export function WorkEditorPage({ initialWork, techStackSuggestions = [] }: WorkE
                 {form.hasCaseStudy && (
                     <>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                            <Field label="Started" htmlFor="startedLabel" hint={"Free-text, e.g. \"Jan 2023\" — not an exact date."}>
+                            <Field label="Started" htmlFor="startedLabel" hint={"Free-text, e.g. \"Jan 2023\" вЂ” not an exact date."}>
                                 <Input id="startedLabel" required value={form.startedLabel} onChange={(e) => update("startedLabel", e.target.value)} placeholder="e.g. Jan 2023" />
                             </Field>
                             <Field
                                 label={form.status === "in-progress" ? "Target" : "Shipped"}
                                 htmlFor="shippedLabel"
                                 hint={form.status === "in-progress"
-                                    ? "Free-text estimate, e.g. \"Q4 2026\" — shown as the target date while In progress."
-                                    : "Free-text, e.g. \"Aug 2023\" — shown as the ship date."}
+                                    ? "Free-text estimate, e.g. \"Q4 2026\" вЂ” shown as the target date while In progress."
+                                    : "Free-text, e.g. \"Aug 2023\" вЂ” shown as the ship date."}
                             >
                                 <Input id="shippedLabel" required value={form.shippedLabel} onChange={(e) => update("shippedLabel", e.target.value)} placeholder="e.g. Aug 2023" />
                             </Field>
                         </div>
-                        <Field label="Role" htmlFor="role" hint={"Your role on the project, e.g. \"Sole engineer\" or \"Lead architect\" — shown in the case study's meta row."}>
+                        <Field label="Role" htmlFor="role" hint={"Your role on the project, e.g. \"Sole engineer\" or \"Lead architect\" вЂ” shown in the case study's meta row."}>
                             <Input id="role" required value={form.role} onChange={(e) => update("role", e.target.value)} placeholder="e.g. Sole engineer" />
                         </Field>
                         <Field
                             label="Hero image"
                             htmlFor="heroImage"
-                            hint="Optional — the large banner image at the top of THIS case study page. Different from the small Cover image above, which is only used on the landing page grid."
+                            hint="Optional вЂ” the large banner image at the top of THIS case study page. Different from the small Cover image above, which is only used on the landing page grid."
                         >
                             <Input id="heroImage" value={form.heroImage} onChange={(e) => update("heroImage", e.target.value)} />
                         </Field>
 
                         <div className="flex flex-col gap-sm mt-sm">
-                            <div className="flex flex-col gap-[2px]">
+                            <div className="flex flex-col gap-0.5">
                                 <Text variant="h5" as="h2">Case study body</Text>
                                 <Text variant="caption" tone="faint">
-                                    The narrative itself — same block editor as a journal post’s body.
+                                    The narrative itself вЂ” same block editor as a journal postвЂ™s body.
                                 </Text>
                             </div>
-                            <BlockEditor ref={blockEditorRef} initialBlocks={initialWork?.caseStudy?.blocks ?? []} onChange={autosave.scheduleSave} />
+                            <BlockEditor key={contentVersion} ref={blockEditorRef} initialBlocks={work?.caseStudy?.blocks ?? []} onChange={autosave.scheduleSave} />
                         </div>
                     </>
                 )}
             </Card>
 
-            {notice && (
-                <Text variant="caption" className="text-status-warning" role="status">{notice}</Text>
-            )}
             {error && (
                 <Text variant="caption" className="text-status-error" role="alert">{error}</Text>
             )}

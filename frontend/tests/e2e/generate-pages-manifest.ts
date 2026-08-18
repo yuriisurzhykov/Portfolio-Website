@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     // @portfolio/backend's PrismaClient with `DATABASE_URL` still undefined, since it'd run before
     // the `loadEnv()` call above. A dynamic `import()` defers evaluation to the moment it's
     // actually awaited — i.e. strictly after `loadEnv()` already ran.
-    const { getAllWork, getJournalEntries, getPostBySlug } = await import("@portfolio/backend");
+    const { getAllWork, getJournalEntries } = await import("@portfolio/backend");
 
     const staticPages: PageManifestEntry[] = [
         { name: "home", path: "/" },
@@ -79,19 +79,13 @@ async function main(): Promise<void> {
 
     const journalEntries = await getJournalEntries();
     // Mirrors the guard in app/(site)/journal/[slug]/page.tsx: no body document means notFound().
-    // Unlike WorkSummary, PostSummary has no equivalent "hasBody" flag (see
-    // backend/src/content/posts.ts) — so this asks the exact same question the real route asks:
-    // getPostBySlug() returns null precisely when there's no body to render (English locale, same
-    // as the rest of this suite — see utils/theme.ts's neighbour, no locale switching is tested).
-    const journalBodyChecks = await Promise.all(
-        journalEntries.map(async (entry) => ({
-            entry,
-            hasBody: (await getPostBySlug(entry.slug)) !== null,
-        })),
-    );
-    const journalDetailPages: PageManifestEntry[] = journalBodyChecks
-        .filter(({ hasBody }) => hasBody)
-        .map(({ entry }) => ({ name: `journal-${entry.slug}`, path: `/journal/${entry.slug}` }));
+    // `hasBody` is a plain boolean on PostSummary now, added alongside the SEO work — this used to
+    // issue a separate `getPostBySlug()` per post purely because that flag didn't exist yet, and
+    // the previous version of this comment said so. `app/sitemap.ts` applies the identical filter,
+    // which is what lets `seo.spec.ts` compare the two lists as sets.
+    const journalDetailPages: PageManifestEntry[] = journalEntries
+        .filter((entry) => entry.status === "published" && entry.hasBody)
+        .map((entry) => ({ name: `journal-${entry.slug}`, path: `/journal/${entry.slug}` }));
 
     const manifest: PageManifestEntry[] = [...staticPages, ...workDetailPages, ...journalDetailPages];
 

@@ -3,12 +3,15 @@
 import * as React from "react";
 import Link from "next/link";
 import type { WorkPageContent, WorkSummary } from "@portfolio/backend";
-import { Eyebrow } from "@/shared/ui/eyebrow";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { Tag } from "@/shared/ui/tag";
+import { TagList } from "@/shared/ui/tag-list";
+import { WorkCoverImage } from "@/shared/ui/work-cover-image";
+import { CompactRelatedLink } from "@/shared/ui/related-content-callout";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
+import { formatYear } from "@/shared/lib/date-format";
 
 export interface ActiveTechFilter {
     slug: string;
@@ -23,12 +26,24 @@ export interface WorkListPageProps {
     activeTech: ActiveTechFilter | null;
 }
 
-const desktopRowGridCols = "sm:grid-cols-[100px_1fr_auto_auto]";
+const desktopRowGridCols = "sm:grid-cols-[3.5rem_4.5rem_1fr_auto_auto]";
 
+/**
+ * `caseStudyHref`/`relatedPostHref` are mutually exclusive by construction
+ * (an item either has its own case study or it doesn't — see
+ * `WorkSummary.hasCaseStudy`), which is exactly why only ONE of the two
+ * ever wraps the whole row in a `<Link>` below: nesting a second anchor
+ * (or `CompactRelatedLink`) inside the row's own would be invalid HTML.
+ * When it's a related-POST fallback (no case study of its own), the row
+ * stays a plain, non-link container and `CompactRelatedLink` becomes the
+ * ONE real link on it — replacing what used to be the entire row silently
+ * linking to `/journal/:slug` with nothing but a bare "→" to show for it.
+ */
 function WorkRow({ item }: { item: WorkSummary }) {
     const { ln, pick } = useTranslation();
     const isShipped = item.status === "shipped";
-    const href = item.hasCaseStudy ? `/work/${ item.slug }` : item.relatedPostSlug ? `/journal/${ item.relatedPostSlug }` : undefined;
+    const caseStudyHref = item.hasCaseStudy ? `/work/${ item.slug }` : null;
+    const relatedPostHref = !item.hasCaseStudy && item.relatedPostSlug ? `/journal/${ item.relatedPostSlug }` : null;
 
     const statusBadge = (
         <StatusBadge tone={ isShipped ? "success" : "warning" } className="whitespace-nowrap">
@@ -36,55 +51,73 @@ function WorkRow({ item }: { item: WorkSummary }) {
         </StatusBadge>
     );
 
+    const trailingIndicator = caseStudyHref
+        ? <span className="text-text-muted">→</span>
+        : relatedPostHref
+            ? <CompactRelatedLink href={ relatedPostHref } label={ ln("work.ledger.relatedPost") }/>
+            : null;
+
+    const thumbnail = (
+        <WorkCoverImage
+            override={ item.coverImage }
+            cover={ item.cover }
+            alt={ pick(item.title) }
+            label={ pick(item.title).toLowerCase() }
+            className="h-10 w-14 rounded-md border border-border-subtle shrink-0"
+        />
+    );
+
     const wrapperClass = cn(
         "block border-b border-border-subtle",
-        href && "hover:bg-surface-row-hover transition-colors duration-fast rounded-lg",
+        caseStudyHref && "hover:bg-surface-row-hover transition-colors duration-fast rounded-lg",
     );
 
     const body = (
         <>
             {/* Mobile: stacked card */ }
-            <div className="sm:hidden py-[18px] px-4">
-                <div className="flex items-center justify-between gap-sm mb-2">
-                    <span className="font-mono text-caption text-text-faint">{ item.year }</span>
-                    <div className="flex items-center gap-xs">
-                        { statusBadge }
-                        { href && <span className="text-text-muted">→</span> }
+            <div className="sm:hidden py-md px-md">
+                <div className="flex items-center gap-sm mb-xs">
+                    { thumbnail }
+                    <div className="flex-1 flex items-center justify-between gap-sm">
+                        <span className="font-mono text-caption text-text-faint">{ formatYear(item.date) }</span>
+                        <div className="flex items-center gap-xs">
+                            { statusBadge }
+                            { trailingIndicator }
+                        </div>
                     </div>
                 </div>
-                <Text as="div" variant="h3" className="mb-1 text-[18px]!">
-                    { item.title }
+                <Text as="div" variant="h3" className="mb-1">
+                    { pick(item.title) }
                 </Text>
-                <Text as="div" variant="body" tone="muted" className="leading-[1.5]">
+                <Text as="div" variant="body" tone="muted" className="leading-normal">
                     { pick(item.summary) }
                 </Text>
             </div>
 
             {/* sm and up: ledger row */ }
-            <div className={ cn("hidden sm:grid items-center gap-4 py-[26px] px-5", desktopRowGridCols) }>
-                <span className="font-mono text-caption text-text-faint">{ item.year }</span>
+            <div className={ cn("hidden sm:grid items-center gap-md py-xl px-md", desktopRowGridCols) }>
+                { thumbnail }
+                <span className="font-mono text-caption text-text-faint">{ formatYear(item.date) }</span>
                 <div>
                     <Text as="div" variant="h3" className="mb-1">
-                        { item.title }
+                        { pick(item.title) }
                     </Text>
-                    <Text as="div" variant="body" tone="muted" className="leading-[1.5]">
+                    <Text as="div" variant="body" tone="muted" className="leading-normal">
                         { pick(item.summary) }
                     </Text>
                 </div>
-                <span className="font-mono text-caption text-text-muted whitespace-nowrap self-center">
-                    { item.stack.slice(0, 2).join(" · ") }
-                </span>
+                <TagList items={ item.stack } maxVisible={ 2 } size="sm" variant="neutral" className="self-center"/>
                 <div className="flex items-center gap-sm self-center">
                     { statusBadge }
-                    { href && <span className="text-text-muted">→</span> }
+                    { trailingIndicator }
                 </div>
             </div>
         </>
     );
 
-    if (href) {
+    if (caseStudyHref) {
         return (
-            <Link href={ href } className={ wrapperClass }>
+            <Link href={ caseStudyHref } className={ wrapperClass }>
                 { body }
             </Link>
         );
@@ -98,28 +131,22 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
 
     return (
         <main>
+            {/* pb-10 already exact match (2xl). m-2 already exact match (xs). */ }
             <div
-                className="max-w-(--layout-content-narrow) mx-auto px-[clamp(20px,4vw,56px)] pt-[clamp(48px,7vw,80px)] pb-10">
-                <Link href="/" className="font-mono text-caption text-text-muted">
+                className="max-w-(--layout-content-standard) mx-auto pt-xl pb-2xl">
+                <Link href="/" className="font-bold text-caption text-text-accent">
                     ← { ln("button.backHome") }
                 </Link>
-                <Eyebrow tone="accent" className="mt-6 mb-3.5">
-                    { ln("eyebrow.allWork") }
-                </Eyebrow>
-                <h1 className="m-0 mb-4 font-extrabold text-[clamp(32px,4.5vw,52px)] leading-[1.08] tracking-tight text-text-primary">
-                    { pick(workPage.heading).map((line, index) => (
-                        <React.Fragment key={ line }>
-                            { index > 0 && <br className="hidden sm:inline"/> }{ " " }
-                            { line }
-                        </React.Fragment>
-                    )) }
-                </h1>
-                <Text variant="body" tone="muted" className="max-w-[64ch]">
+                <Text variant={ "h2" } className="m-xs">
+                    { pick(workPage.heading) }
+                </Text>
+                <Text variant="body" tone="muted" className="m-xs">
                     { pick(workPage.description) }
                 </Text>
 
+                {/* mt-5 (20px) tie md/lg, smaller preferred. */ }
                 { activeTech && (
-                    <div className="flex items-center gap-sm mt-5" role="status">
+                    <div className="flex items-center gap-sm mt-md" role="status">
                         <Text variant="caption" tone="faint" className="font-mono">
                             { ln("work.filter.activeLabel") }
                         </Text>
@@ -134,21 +161,28 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
                 ) }
             </div>
 
-            <div className="max-w-(--layout-content-narrow) mx-auto px-[clamp(20px,4vw,56px)] pt-6 pb-[100px]">
+            {/* pt-6/py-16 already exact matches (lg/4xl). */ }
+            <div className="max-w-(--layout-content-standard) mx-auto pt-lg pb-4xl">
                 { items.length === 0 && activeTech ? (
-                    <Text variant="body" tone="muted" className="py-16 text-center">
+                    <Text variant="body" tone="muted" className="py-4xl text-center">
                         { ln("work.filter.empty", { tech: activeTech.label }) }
                     </Text>
                 ) : (
                     <>
+                        {/* gap-4/pb-3 already exact matches (md/sm). px-5
+                            (20px) tie md/lg, smaller preferred. tracking-
+                            [0.08em] snapped to tracking-widest (0.1em,
+                            nearer than wider/0.05em) — same as elsewhere,
+                            no letter-spacing token category exists. */ }
                         <div
                             className={ cn(
-                                "hidden sm:grid gap-4 px-5 pb-3",
+                                "hidden sm:grid gap-md px-md pb-sm",
                                 desktopRowGridCols,
-                                "font-mono font-semibold text-micro tracking-[0.08em] text-text-faint",
+                                "font-mono font-semibold text-micro tracking-widest text-text-faint",
                                 "border-b border-border-subtle",
                             ) }
                         >
+                            <span aria-hidden="true"/>
                             <span>{ ln("work.ledger.year") }</span>
                             <span>{ ln("work.ledger.system") }</span>
                             <span>{ ln("work.ledger.stack") }</span>

@@ -1,0 +1,491 @@
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetTestDatabase } from "../test-utils/db";
+import { prisma } from "../db/client";
+import { CURRENT_COVER_STYLE_VERSION } from "./cover-brief";
+import { computeContentHash, coverUrlFor, ensureCoverIsCurrent, generateCoverForPost, resolveCategoryHue, resolvePostHue, resolveWorkHue } from "./covers";
+import { hueForOrdinal } from "./cover-hue";
+import { DiskMediaStore, setMediaStoreForTesting } from "./media-store";
+
+const DATE = "2026-08-10";
+
+beforeEach(async () => {
+    await resetTestDatabase();
+    // A real (but throwaway, per-test) disk directory rather than the
+    // default `backend/media` — keeps generated files out of the repo
+    // working tree during tests and gives each test a clean slate without
+    // needing to know this module's internal env-var name.
+    setMediaStoreForTesting(new DiskMediaStore(path.join(os.tmpdir(), `covers-test-${ Date.now() }-${ Math.random() }`)));
+});
+
+afterEach(() => {
+    setMediaStoreForTesting(undefined);
+});
+
+describe("computeContentHash", () => {
+    it("hashes title+excerpt the same way regardless of extra being omitted — Post's 2-arg call never changes", () => {
+        expect(computeContentHash("Title", "Excerpt")).toBe(computeContentHash("Title", "Excerpt"));
+    });
+
+    it("a third `extra` argument changes the hash — added 2026-08-11 so Work's cover freshness check can fold in its editable date", () => {
+        const withoutExtra = computeContentHash("Title", "Excerpt");
+        const withExtra = computeContentHash("Title", "Excerpt", "2026-01-01");
+        expect(withExtra).not.toBe(withoutExtra);
+    });
+
+    it("two different `extra` values produce two different hashes, same title/excerpt", () => {
+        const first = computeContentHash("Title", "Excerpt", "2024-01-01");
+        const second = computeContentHash("Title", "Excerpt", "2026-01-01");
+        expect(first).not.toBe(second);
+    });
+
+    it("never collides `extra` with an equivalent concatenation of title/excerpt — the \\0 separator applies to all three parts, not just the first two", () => {
+        const asExtra = computeContentHash("ab", "c", "d");
+        const asExcerpt = computeContentHash("ab", "cd");
+        expect(asExtra).not.toBe(asExcerpt);
+    });
+});
+
+describe("resolveCategoryHue", () => {
+    it("assigns ordinal 0 (hue 0°) to the first category ever seen", async () => {
+        expect(await resolveCategoryHue("Kotlin")).toBeCloseTo(hueForOrdinal(0));
+    });
+
+    it("assigns increasing ordinals to distinct new categories, in first-sight order", async () => {
+        const first = await resolveCategoryHue("Kotlin");
+        const second = await resolveCategoryHue("Architecture");
+        const third = await resolveCategoryHue("Tooling");
+
+        expect(first).toBeCloseTo(hueForOrdinal(0));
+        expect(second).toBeCloseTo(hueForOrdinal(1));
+        expect(third).toBeCloseTo(hueForOrdinal(2));
+    });
+
+    it("returns the SAME hue for the same category on a later call, without spending another ordinal", async () => {
+        const first = await resolveCategoryHue("Kotlin");
+        await resolveCategoryHue("Architecture");
+        const kotlinAgain = await resolveCategoryHue("Kotlin");
+
+        expect(kotlinAgain).toBe(first);
+        expect(await prisma.identityHue.count({ where: { kind: "category" } })).toBe(2);
+    });
+
+    it("normalizes case and surrounding whitespace to the SAME category row", async () => {
+        const first = await resolveCategoryHue("Kotlin");
+        const second = await resolveCategoryHue("  kotlin  ");
+
+        expect(second).toBe(first);
+        expect(await prisma.identityHue.count({ where: { kind: "category" } })).toBe(1);
+    });
+
+    it("gives an empty category a fixed hue without spending an ordinal", async () => {
+        const empty = await resolveCategoryHue("");
+        await resolveCategoryHue("Kotlin");
+
+        expect(empty).toBe(await resolveCategoryHue(""));
+        expect(await prisma.identityHue.count({ where: { kind: "category" } })).toBe(1); // only "Kotlin" persisted
+    });
+
+    it("persists the ordinal explicitly, not re-derivable from row count alone", async () => {
+        await resolveCategoryHue("Kotlin");
+        const row = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "kotlin" } } });
+        expect(row.ordinal).toBe(0);
+        expect(row.hue).toBeCloseTo(hueForOrdinal(0));
+    });
+});
+
+/** Minimal, published `Work` row — just enough non-null columns to satisfy the schema; the fields `resolveWorkHue`/`resolvePostHue` actually care about (`slug`) are passed explicitly at each call site instead of baked in here. */
+async function createTestWork(slug: string) {
+    return prisma.work.create({
+        data: {
+            slug,
+            title: { en: slug, ru: "" },
+            date: DATE,
+            status: "shipped",
+            summary: { en: "s", ru: "s" },
+            stack: [],
+            lifecycleState: "PUBLISHED",
+        },
+    });
+}
+
+describe("resolveWorkHue", () => {
+    it("shares the SAME ordinal sequence as resolveCategoryHue — the whole point of the unified identity pool", async () => {
+        await resolveCategoryHue("Kotlin"); // ordinal 0
+        await resolveCategoryHue("Architecture"); // ordinal 1
+        await createTestWork("my-project");
+
+        const workHue = await resolveWorkHue("my-project");
+        expect(workHue).toBeCloseTo(hueForOrdinal(2));
+    });
+
+    it("returns the SAME hue for the same slug on a later call, without spending another ordinal", async () => {
+        await createTestWork("my-project");
+        const first = await resolveWorkHue("my-project");
+        const second = await resolveWorkHue("my-project");
+
+        expect(second).toBe(first);
+        expect(await prisma.identityHue.count({ where: { kind: "work" } })).toBe(1);
+    });
+
+    it("gives two different Work slugs two different hues, never colliding with a category's own hue", async () => {
+        const categoryHue = await resolveCategoryHue("Kotlin"); // ordinal 0
+        await createTestWork("project-a");
+        await createTestWork("project-b");
+
+        const hueA = await resolveWorkHue("project-a"); // ordinal 1
+        const hueB = await resolveWorkHue("project-b"); // ordinal 2
+
+        expect(hueA).not.toBeCloseTo(categoryHue);
+        expect(hueB).not.toBeCloseTo(categoryHue);
+        expect(hueA).not.toBeCloseTo(hueB);
+    });
+});
+
+describe("resolvePostHue", () => {
+    it("falls back to resolveCategoryHue when relatedWorkSlug is absent", async () => {
+        const categoryHue = await resolveCategoryHue("Kotlin");
+        const postHue = await resolvePostHue({ categoryEn: "Kotlin", relatedWorkSlug: null });
+
+        expect(postHue).toBe(categoryHue);
+    });
+
+    it("inherits the linked Work's hue INSTEAD of the category's, even when the two would otherwise differ", async () => {
+        await createTestWork("flowbus");
+        const workHue = await resolveWorkHue("flowbus");
+        // Deliberately a DIFFERENT category than the Work would ever
+        // resolve to — proves the post's own category is ignored entirely
+        // once a real link exists, not just used as a tie-breaker.
+        const categoryHue = await resolveCategoryHue("Some Unrelated Category");
+
+        const postHue = await resolvePostHue({ categoryEn: "Some Unrelated Category", relatedWorkSlug: "flowbus" });
+
+        expect(postHue).toBe(workHue);
+        expect(postHue).not.toBe(categoryHue);
+    });
+
+    it("degrades gracefully to resolveCategoryHue for a dangling relatedWorkSlug that doesn't exist", async () => {
+        const categoryHue = await resolveCategoryHue("Kotlin");
+        const postHue = await resolvePostHue({ categoryEn: "Kotlin", relatedWorkSlug: "does-not-exist" });
+
+        expect(postHue).toBe(categoryHue);
+    });
+});
+
+describe("generateCoverForPost", () => {
+    it("creates a persisted MediaAsset with post-cover kind and real WebP dimensions", async () => {
+        const asset = await generateCoverForPost({
+            slug: "my-first-post",
+            titleEn: "My First Post",
+            excerptEn: "An excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(asset.kind).toBe("post-cover");
+        expect(asset.mimeType).toBe("image/webp");
+        expect(asset.width).toBe(1200);
+        expect(asset.height).toBe(630);
+        expect(asset.placeholder.startsWith("data:image/webp;base64,")).toBe(true);
+        expect(await prisma.mediaAsset.count()).toBe(1);
+    });
+
+    it("records the current styleVersion and a contentHash derived from title+excerpt", async () => {
+        const asset = await generateCoverForPost({
+            slug: "flowbus",
+            titleEn: "FlowBus",
+            excerptEn: "Why I built it.",
+            categoryEn: "Architecture",
+            date: DATE,
+        });
+
+        const generation = asset.generation as { styleVersion: number; contentHash: string };
+        expect(generation.styleVersion).toBe(CURRENT_COVER_STYLE_VERSION);
+        expect(generation.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("is deterministic across processes: the same slug/category/title/excerpt/variant reproduces the exact same contentHash", async () => {
+        const first = await generateCoverForPost({
+            slug: "flowbus",
+            titleEn: "FlowBus",
+            excerptEn: "Why I built it.",
+            categoryEn: "Architecture",
+            date: DATE,
+        });
+
+        // Simulates "regenerate after a restart" — a brand-new PRNG/sharp
+        // pipeline run, not a cached in-memory value.
+        const second = await generateCoverForPost({
+            slug: "flowbus",
+            titleEn: "FlowBus",
+            excerptEn: "Why I built it.",
+            categoryEn: "Architecture",
+            date: DATE,
+        });
+
+        expect(second.contentHash).toBe(first.contentHash);
+        // Reused the existing row rather than writing a duplicate — the
+        // whole point of content-addressed dedup (see this module's own
+        // comment on `generateCoverForPost`).
+        expect(second.id).toBe(first.id);
+        expect(await prisma.mediaAsset.count()).toBe(1);
+    });
+
+    it("produces a different cover for a different variant of the same post", async () => {
+        const variant1 = await generateCoverForPost({
+            slug: "flowbus",
+            titleEn: "FlowBus",
+            excerptEn: "Why I built it.",
+            categoryEn: "Architecture",
+            date: DATE,
+            variant: 1,
+        });
+        const variant2 = await generateCoverForPost({
+            slug: "flowbus",
+            titleEn: "FlowBus",
+            excerptEn: "Why I built it.",
+            categoryEn: "Architecture",
+            date: DATE,
+            variant: 2,
+        });
+
+        expect(variant2.contentHash).not.toBe(variant1.contentHash);
+    });
+
+    it("gives two posts in the SAME category covers from the same hue family, but never byte-identical", async () => {
+        const first = await generateCoverForPost({
+            slug: "post-a",
+            titleEn: "Post A",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+        const second = await generateCoverForPost({
+            slug: "post-b",
+            titleEn: "Post B",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(second.contentHash).not.toBe(first.contentHash);
+        const category = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "kotlin" } } });
+        expect((first.generation as { hue: number }).hue).toBeCloseTo(category.hue);
+        expect((second.generation as { hue: number }).hue).toBeCloseTo(category.hue);
+    });
+});
+
+describe("ensureCoverIsCurrent", () => {
+    it("regenerates when there is no existing cover at all", async () => {
+        const assetId = await ensureCoverIsCurrent(null, {
+            slug: "no-cover-yet",
+            titleEn: "No Cover Yet",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        const asset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: assetId } });
+        const category = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "kotlin" } } });
+        expect((asset.generation as { hue: number }).hue).toBeCloseTo(category.hue);
+    });
+
+    it("reuses the SAME cover when NOTHING relevant changed — no wasted regeneration on every publish where the post is unchanged", async () => {
+        const first = await generateCoverForPost({
+            slug: "stable-post",
+            titleEn: "Stable Post",
+            excerptEn: "An unchanging excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        const second = await ensureCoverIsCurrent(first.id, {
+            slug: "stable-post",
+            titleEn: "Stable Post",
+            excerptEn: "An unchanging excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(second).toBe(first.id);
+        expect(await prisma.mediaAsset.count()).toBe(1);
+    });
+
+    it("regenerates when the category actually changed — the real bug this exists to fix: a post created before its category was ever typed", async () => {
+        // Mirrors the real admin flow: the very first autosave fires the
+        // moment the title stops being empty, almost always BEFORE the
+        // admin has typed a category — `createPost` (admin-posts.ts) is
+        // exactly this call, with an empty category.
+        const uncategorized = await generateCoverForPost({
+            slug: "post-in-progress",
+            titleEn: "Post In Progress",
+            excerptEn: "",
+            categoryEn: "",
+            date: DATE,
+        });
+
+        // The admin then types the real category — the NEXT publish must
+        // correct the cover, not leave it frozen.
+        const corrected = await ensureCoverIsCurrent(uncategorized.id, {
+            slug: "post-in-progress",
+            titleEn: "Post In Progress",
+            excerptEn: "",
+            categoryEn: "Architecture",
+            date: DATE,
+        });
+
+        expect(corrected).not.toBe(uncategorized.id);
+        const correctedAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: corrected } });
+        const category = await prisma.identityHue.findUniqueOrThrow({ where: { kind_key: { kind: "category", key: "architecture" } } });
+        expect((correctedAsset.generation as { hue: number }).hue).toBeCloseTo(category.hue);
+    });
+
+    it("regenerates when the title/excerpt changed but the category stayed the same — v3's title-driven layers would otherwise go stale", async () => {
+        // The behavior v1's `ensureCoverMatchesCategory` deliberately did
+        // NOT have (it only ever compared hue) — v3's flow/wave/letterform/
+        // readable-title layers are all shaped by title+excerpt, so an
+        // edited title with an unchanged category must still regenerate.
+        const first = await generateCoverForPost({
+            slug: "retitled-post",
+            titleEn: "Original Title",
+            excerptEn: "Original excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        const second = await ensureCoverIsCurrent(first.id, {
+            slug: "retitled-post",
+            titleEn: "A Completely Different Title",
+            excerptEn: "Original excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(second).not.toBe(first.id);
+        expect(await prisma.mediaAsset.count()).toBe(2);
+    });
+
+    it("regenerates when only the excerpt changed, title and category unchanged", async () => {
+        const first = await generateCoverForPost({
+            slug: "re-excerpted-post",
+            titleEn: "Same Title",
+            excerptEn: "Original excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        const second = await ensureCoverIsCurrent(first.id, {
+            slug: "re-excerpted-post",
+            titleEn: "Same Title",
+            excerptEn: "A totally different excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(second).not.toBe(first.id);
+    });
+
+    it("generateCoverForPost/ensureCoverIsCurrent use the LINKED WORK'S hue when relatedWorkSlug is set, not the post's own category", async () => {
+        await createTestWork("flowbus-app");
+        const workHue = await resolveWorkHue("flowbus-app");
+
+        const linked = await generateCoverForPost({
+            slug: "post-about-flowbus",
+            titleEn: "Building FlowBus",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            relatedWorkSlug: "flowbus-app",
+            date: DATE,
+        });
+
+        expect((linked.generation as { hue: number }).hue).toBeCloseTo(workHue);
+
+        // Publishing again with the SAME link must not spuriously
+        // regenerate — the whole point of `ensureCoverIsCurrent`'s
+        // no-op-when-nothing-changed check now also covers the link.
+        const stillCurrent = await ensureCoverIsCurrent(linked.id, {
+            slug: "post-about-flowbus",
+            titleEn: "Building FlowBus",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            relatedWorkSlug: "flowbus-app",
+            date: DATE,
+        });
+        expect(stillCurrent).toBe(linked.id);
+    });
+
+    it("regenerates a cover whose stored styleVersion is older than CURRENT_COVER_STYLE_VERSION, even with matching hue AND contentHash", async () => {
+        // Simulates a real v1 row from before this rewrite: same hue, same
+        // contentHash (title/excerpt haven't changed) as what today's post
+        // would compute — but rendered by an OLDER algorithm, so its actual
+        // pixels are stale even though its BOOKKEEPING fields (hue,
+        // contentHash) still match. A crafted row with a random, never-
+        // colliding `contentHash` column (distinct from the metadata
+        // `contentHash` field inside `generation`, which is what
+        // `ensureCoverIsCurrent` actually compares) is used here instead of
+        // a real `generateCoverForPost` call, specifically so the RE-render
+        // this test triggers can't spuriously dedup back onto this same
+        // row — see this test file's own history for why a same-bytes
+        // dedup hit made an earlier version of this test meaningless.
+        const category = await resolveCategoryHue("Kotlin");
+        const staleRow = await prisma.mediaAsset.create({
+            data: {
+                contentHash: `stale-row-${ crypto.randomUUID() }`,
+                storageKey: "covers/stale-row",
+                mimeType: "image/webp",
+                width: 1200,
+                height: 630,
+                byteSize: 1,
+                placeholder: "data:image/webp;base64,",
+                kind: "post-cover",
+                generation: {
+                    generator: "procedural",
+                    styleVersion: CURRENT_COVER_STYLE_VERSION - 1,
+                    variant: 1,
+                    seed: "stale-style-version",
+                    hue: category,
+                    contentHash: computeContentHash("Same Title", "Same excerpt."),
+                },
+            },
+        });
+
+        const upgraded = await ensureCoverIsCurrent(staleRow.id, {
+            slug: "stale-style-version",
+            titleEn: "Same Title",
+            excerptEn: "Same excerpt.",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        expect(upgraded).not.toBe(staleRow.id);
+        const upgradedAsset = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: upgraded } });
+        expect((upgradedAsset.generation as { styleVersion: number }).styleVersion).toBe(CURRENT_COVER_STYLE_VERSION);
+    });
+});
+
+describe("coverUrlFor", () => {
+    it("returns null for a null/undefined asset", () => {
+        expect(coverUrlFor(null)).toBeNull();
+        expect(coverUrlFor(undefined)).toBeNull();
+    });
+
+    it("builds distinct full/narrow URLs and carries the placeholder through", async () => {
+        const asset = await generateCoverForPost({
+            slug: "url-check",
+            titleEn: "URL check",
+            excerptEn: "",
+            categoryEn: "Kotlin",
+            date: DATE,
+        });
+
+        const cover = coverUrlFor(asset);
+        expect(cover).not.toBeNull();
+        expect(cover!.src).toContain("1200.webp");
+        expect(cover!.srcNarrow).toContain("640.webp");
+        expect(cover!.src).not.toBe(cover!.srcNarrow);
+        expect(cover!.placeholder).toBe(asset.placeholder);
+        expect(cover!.width).toBe(1200);
+        expect(cover!.height).toBe(630);
+    });
+});

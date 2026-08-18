@@ -38,26 +38,27 @@ interface SegmentedToggleProps<T extends string> {
  * */
 function SegmentedToggle<T extends string>({ options, value, onChange }: SegmentedToggleProps<T>) {
     return (
-        <div className="flex items-center gap-[2px] bg-surface-icon border border-border-subtle rounded-pill p-[3px]" contentEditable={false}>
-            {options.map((option) => {
+        <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-xxs"
+             contentEditable={ false }>
+            { options.map((option) => {
                 const isActive = value === option.value;
                 return (
                     <button
-                        key={option.value}
+                        key={ option.value }
                         type="button"
-                        onClick={() => onChange(option.value)}
-                        aria-pressed={isActive}
-                        className={cn(
-                            "rounded-pill px-sm py-[5px]",
+                        onClick={ () => onChange(option.value) }
+                        aria-pressed={ isActive }
+                        className={ cn(
+                            "rounded-pill px-sm py-xxs",
                             "font-mono font-semibold text-micro uppercase",
                             "transition-colors duration-fast",
                             isActive ? "bg-text-primary text-bg-app" : "text-text-muted hover:text-text-primary",
-                        )}
+                        ) }
                     >
-                        {option.label}
+                        { option.label }
                     </button>
                 );
-            })}
+            }) }
         </div>
     );
 }
@@ -103,39 +104,42 @@ export const DiagramBlock = createReactBlockSpec(
             return (
                 <div
                     className="w-full flex flex-col gap-sm p-sm rounded-md border border-border-subtle bg-surface-raised/50"
-                    contentEditable={false}
+                    contentEditable={ false }
                 >
                     <div className="flex items-center justify-between">
-                        <SegmentedToggle options={ENGINE_OPTIONS} value={engine} onChange={(value) => update({ engine: value })} />
-                        <SegmentedToggle options={MODE_OPTIONS} value={mode} onChange={setMode} />
+                        <SegmentedToggle options={ ENGINE_OPTIONS } value={ engine }
+                                         onChange={ (value) => update({ engine: value }) }/>
+                        <SegmentedToggle options={ MODE_OPTIONS } value={ mode } onChange={ setMode }/>
                     </div>
 
-                    {mode === "edit" ? (
-                        <div className="rounded-md border border-border-subtle bg-surface-base font-mono text-caption overflow-x-auto">
+                    { mode === "edit" ? (
+                        <div
+                            className="rounded-md border border-border-subtle bg-surface-base font-mono text-caption overflow-x-auto">
                             <Editor
-                                value={source}
-                                onValueChange={(value) => update({ source: value })}
-                                highlight={(code) => highlightSource(code, engine)}
-                                padding={12}
+                                value={ source }
+                                onValueChange={ (value) => update({ source: value }) }
+                                highlight={ (code) => highlightSource(code, engine) }
+                                padding={ 12 }
                                 placeholder="Diagram source…"
-                                style={{ minHeight: "8rem" }}
+                                style={ { minHeight: "var(--ds-layout-code-editor-min-height)" } }
                             />
                         </div>
                     ) : source ? (
-                        <Diagram engine={engine} source={source} />
+                        <Diagram engine={ engine } source={ source }/>
                     ) : (
-                        <div className="h-30 flex items-center justify-center rounded-md border border-border-subtle bg-surface-raised/50 text-caption text-text-faint">
+                        <div
+                            className="h-30 flex items-center justify-center rounded-md border border-border-subtle bg-surface-raised/50 text-caption text-text-faint">
                             Nothing to preview yet
                         </div>
-                    )}
+                    ) }
 
                     {/* Plain <input>, not the shared <Input> — inputBaseStyles' border/padding
                         would need overriding for this Confluence-style "unobtrusive caption"
                         look, and cn() here is plain clsx (no tailwind-merge), so a conflicting
-                        override wouldn't reliably win — simpler and safer to style from scratch. */}
+                        override wouldn't reliably win — simpler and safer to style from scratch. */ }
                     <input
-                        value={caption}
-                        onChange={(e) => update({ caption: e.target.value })}
+                        value={ caption }
+                        onChange={ (e) => update({ caption: e.target.value }) }
                         placeholder="Add a caption…"
                         className="w-full bg-transparent border-0 border-t border-border-subtle pt-xs text-caption text-text-secondary placeholder:text-text-faint focus:outline-none"
                     />
@@ -160,8 +164,8 @@ export const DiagramBlock = createReactBlockSpec(
             const { engine, source } = props.block.props;
             return (
                 <pre>
-                    <code data-language={engine} className={`language-${engine}`}>
-                        {source}
+                    <code data-language={ engine } className={ `language-${ engine }` }>
+                        { source }
                     </code>
                 </pre>
             );

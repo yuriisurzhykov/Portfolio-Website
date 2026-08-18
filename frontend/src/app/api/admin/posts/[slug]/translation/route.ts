@@ -15,7 +15,10 @@ interface RouteParams {
  * GET is what `/admin/journal/[slug]/translate`'s Server Component calls
  * directly (see posts/route.ts's GET comment on why the web UI doesn't
  * loop back through its own HTTP API for reads); this route exists so the
- * full JSON contract exists too.
+ * full JSON contract exists too. Since the draft/publish split
+ * (content/README.md's dated entry), `PUT` here only ever writes the
+ * post's `ContentDraft` — the translation reaches readers the same way
+ * any other edit does, via `POST .../publish`.
  */
 export const GET = defineAdminRoute<RouteParams>(async (_request, { params }) => {
     try {

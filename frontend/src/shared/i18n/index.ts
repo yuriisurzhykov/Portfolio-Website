@@ -5,3 +5,4 @@ export type { LanguageProps } from './types';
 export type { I18nContextType } from './types';
 export type { Localized } from './types';
 export { useTranslation } from "./useTranslation";
+export { pickFor } from "./pick";

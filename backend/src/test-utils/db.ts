@@ -12,9 +12,31 @@ import { prisma } from "../db/client";
 export async function resetTestDatabase(): Promise<void> {
     await prisma.session.deleteMany();
     await prisma.user.deleteMany();
+    // Before Post/Work — no FK ties these to either (see schema.prisma's
+    // own comment, same polymorphism as `SlugHistory` below), but a stale
+    // draft/revision row surviving into the next test can still collide on
+    // `ContentDraft`'s `@@unique([kind, entityId])` if that test happens to
+    // reuse the same `Post`/`Work` id (cuid collision odds are effectively
+    // zero, but the leftover row would silently feed a WRONG draft into an
+    // unrelated test either way, cuid collision or not).
+    await prisma.contentDraft.deleteMany();
+    await prisma.contentRevision.deleteMany();
     await prisma.post.deleteMany();
     await prisma.work.deleteMany();
     await prisma.block.deleteMany();
     await prisma.document.deleteMany();
+    // After Post (which references it via `coverAssetId`, `onDelete:
+    // SetNull`) — deleting Post first, rather than relying on the FK's own
+    // SetNull behavior to clear the reference first, keeps this file's
+    // stated ordering rule ("children before parents") true for every row
+    // here, not just most of them.
+    await prisma.mediaAsset.deleteMany();
+    await prisma.identityHue.deleteMany();
     await prisma.siteContent.deleteMany();
+    // No foreign key ties this to `Post`/`Work` (see schema.prisma's own
+    // comment on why), so nothing cascades it away — leaving it out meant
+    // rows surviving into the next test and colliding on
+    // `@@unique([kind, formerSlug])`. Found by the tests themselves, which
+    // is exactly the "one more line here" this function's comment predicts.
+    await prisma.slugHistory.deleteMany();
 }

@@ -59,6 +59,16 @@ cp "${BASE_DIR}/shared/.env" "${RELEASE_PATH}/backend/.env"
 chown nextapp:nextapp "${RELEASE_PATH}/backend/.env"
 chmod 600 "${RELEASE_PATH}/backend/.env"
 
+# Self-heals a target provisioned BEFORE provision/05-app-dirs.sh started
+# creating this — nextapp has no home directory, so sharp/librsvg's
+# fontconfig otherwise has nowhere to write its cache and logs "No
+# writable cache directories" on every cover render (harmless — the
+# render still succeeds uncached — but real log noise). Idempotent, same
+# reasoning as the "Sync MEDIA_DIR" step in deploy-target.yml.
+mkdir -p "${BASE_DIR}/shared/.cache/fontconfig"
+chown -R nextapp:nextapp "${BASE_DIR}/shared/.cache"
+chmod 700 "${BASE_DIR}/shared/.cache"
+
 (cd "${RELEASE_PATH}/backend" && runuser -u nextapp -- npx prisma migrate deploy)
 
 # Symlink switch happens here — AFTER migrations succeed (so a failed
@@ -72,3 +82,80 @@ ln -sfn "${RELEASE_PATH}" "${BASE_DIR}/current"
 systemctl restart "${SERVICE_NAME}"
 sleep 2
 systemctl is-active --quiet "${SERVICE_NAME}"
+
+# --- OG image health check --------------------------------------------------
+# See frontend/README.md's dated entry (Phase 0, lazy OG generation). The
+# route's cache (`revalidate = 3600`) lives in `.next/cache` INSIDE the
+# release directory (render.tsx's own comment), so it starts cold on every
+# release this script just switched `current` to point at — a scraper
+# hitting a freshly-published link right after this deploy would be the
+# first ever request for that template. Rendering here, against
+# 127.0.0.1 (bypassing TLS/DNS on purpose, same reasoning as everywhere else
+# in this script), fails the DEPLOY instead of leaving a broken template to
+# be discovered by whoever shares the next link. Checks the BODY, not just
+# HTTP 200 — a template rendering with an empty/undefined title still
+# returns 200 with a real (wrong) PNG.
+case "$SERVICE_NAME" in
+    yuriisoft-frontend.service) PORT=3000 ;;
+    yuriisoft-frontend-dev.service) PORT=3001 ;;
+    *)
+        echo "Refusing: no known PORT for SERVICE_NAME '${SERVICE_NAME}'" >&2
+        exit 1
+        ;;
+esac
+
+verify_og_image() {
+    local url="$1"
+    local tmp
+    tmp="$(mktemp)"
+    if ! curl -fsS "$url" -o "$tmp"; then
+        echo "OG image health check FAILED: could not fetch ${url}" >&2
+        rm -f "$tmp"
+        exit 1
+    fi
+
+    # PNG signature: 89 50 4E 47 0D 0A 1A 0A.
+    if [ "$(od -An -tx1 -N 8 "$tmp" | tr -d ' \n')" != "89504e470d0a1a0a" ]; then
+        echo "OG image health check FAILED: ${url} is not a PNG." >&2
+        rm -f "$tmp"
+        exit 1
+    fi
+
+    # IHDR width/height: two big-endian uint32s starting right after the
+    # 8-byte signature + 4-byte chunk length + 4-byte "IHDR" tag (offset 16).
+    local width height
+    width="$(od -An -tu4 --endian=big -j 16 -N 4 "$tmp" | tr -d ' ')"
+    height="$(od -An -tu4 --endian=big -j 20 -N 4 "$tmp" | tr -d ' ')"
+    rm -f "$tmp"
+    if [ "$width" != "1200" ] || [ "$height" != "630" ]; then
+        echo "OG image health check FAILED: ${url} is ${width}x${height}, expected 1200x630." >&2
+        exit 1
+    fi
+}
+
+# Every post/work URL from the release's OWN sitemap (its content, its
+# templates) — not a fixed list, so a newly published post is covered the
+# same deploy it first appears in. `|| true`: an empty sitemap (a brand new
+# environment with zero content yet) must not fail the deploy via `set -e`
+# on a `grep` that legitimately found nothing.
+SITEMAP="$(curl -fsS "http://127.0.0.1:${PORT}/sitemap.xml")"
+ENTITY_PATHS="$(echo "$SITEMAP" \
+    | grep -oE '<loc>[^<]+</loc>' \
+    | sed -E 's#</?loc>##g; s#^https?://[^/]+##' \
+    | grep -E '^/(journal|work)/[^/]+$' || true)"
+
+while IFS= read -r entity_path; do
+    [ -z "$entity_path" ] && continue
+    kind="$(echo "$entity_path" | cut -d/ -f2)"
+    slug="$(echo "$entity_path" | cut -d/ -f3)"
+    # Both locales, regardless of whether a Russian translation exists —
+    # the route always renders SOMETHING (English fallback), and that
+    # fallback needs to actually work too.
+    verify_og_image "http://127.0.0.1:${PORT}/${kind}/${slug}/og-image/en"
+    verify_og_image "http://127.0.0.1:${PORT}/${kind}/${slug}/og-image/ru"
+done <<< "$ENTITY_PATHS"
+
+# Site-default card — always exists regardless of content.
+verify_og_image "http://127.0.0.1:${PORT}/opengraph-image"
+
+echo "OG image health check passed."

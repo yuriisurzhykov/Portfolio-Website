@@ -28,15 +28,15 @@ export const Eyebrow = React.forwardRef<HTMLParagraphElement, EyebrowProps>(
     ) {
         return (
             <p
-                ref={ref}
-                className={cn(
-                    "font-mono font-bold text-micro uppercase tracking-[0.12em]",
+                ref={ ref }
+                className={ cn(
+                    "font-mono font-bold text-micro uppercase tracking-widest",
                     toneClasses[tone],
                     className,
-                )}
-                {...rest}
+                ) }
+                { ...rest }
             >
-                {children}
+                { children }
             </p>
         );
     },

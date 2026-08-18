@@ -134,4 +134,49 @@ describe("admin-api request()", () => {
         expect((error as AdminApiError).message).toBe("Slug already exists.");
         expect(assignSpy).not.toHaveBeenCalled();
     });
+
+    /**
+     * The reported bug: signing in with a wrong password bounced the
+     * visitor to the sign-in page they were already on, wiping the error
+     * message and growing `?from=` on every attempt —
+     * `?from=%2Fadmin%2Flogin%3Ffrom%3D%252Fadmin%252Flogin%253F...`.
+     */
+    describe("a failed sign-in is an error message, not a session loss", () => {
+        it("surfaces the server's message on 401 and never navigates", async () => {
+            const fetchMock = vi.fn().mockResolvedValue(jsonResponse(401, { error: "Invalid email or password." }));
+            vi.stubGlobal("fetch", fetchMock);
+
+            const error = await adminApi.login("a@b.c", "wrong").catch((err: unknown) => err);
+
+            expect(error).toBeInstanceOf(AdminApiError);
+            expect((error as AdminApiError).message).toBe("Invalid email or password.");
+            expect(assignSpy).not.toHaveBeenCalled();
+        });
+
+        it("does not attempt a silent refresh — there is no session to refresh yet", async () => {
+            const fetchMock = vi.fn().mockResolvedValue(jsonResponse(401, { error: "Invalid email or password." }));
+            vi.stubGlobal("fetch", fetchMock);
+
+            await adminApi.login("a@b.c", "wrong").catch(() => undefined);
+
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(fetchMock.mock.calls.map((call) => call[0])).not.toContain("/api/auth/refresh");
+        });
+    });
+
+    it("never redirects to the login page when already on it — the loop that grew ?from= without bound", async () => {
+        Object.defineProperty(window, "location", {
+            value: { ...originalLocation, pathname: "/admin/login", search: "?from=%2Fadmin", assign: assignSpy },
+            writable: true,
+            configurable: true,
+        });
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce(jsonResponse(401, { error: "Unauthorized" }))
+            .mockResolvedValueOnce(jsonResponse(401, { error: "Refresh failed." }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(adminApi.deletePost("some-slug")).rejects.toBeInstanceOf(SessionExpiredError);
+
+        expect(assignSpy).not.toHaveBeenCalled();
+    });
 });

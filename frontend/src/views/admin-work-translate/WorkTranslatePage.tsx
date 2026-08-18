@@ -15,6 +15,7 @@ export interface WorkTranslatePageProps {
 }
 
 interface FormState {
+    title: string;
     summary: string;
     startedLabel: string;
     shippedLabel: string;
@@ -23,6 +24,7 @@ interface FormState {
 
 function toFormState(translation: AdminWorkTranslation): FormState {
     return {
+        title: translation.title.ru,
         summary: translation.summary.ru,
         startedLabel: translation.startedLabel.ru,
         shippedLabel: translation.shippedLabel.ru,
@@ -54,6 +56,7 @@ export function WorkTranslatePage({ translation }: WorkTranslatePageProps) {
         setError(null);
 
         const input: TranslateWorkInput = {
+            title: form.title.trim(),
             summary: form.summary.trim(),
             startedLabel: form.startedLabel.trim(),
             shippedLabel: form.shippedLabel.trim(),
@@ -77,6 +80,9 @@ export function WorkTranslatePage({ translation }: WorkTranslatePageProps) {
             <Text as="h1" variant="h3">Translate: {translation.slug}</Text>
 
             <Card variant="filled" className="p-lg flex flex-col gap-md">
+                <ReferenceField label="Title" reference={translation.title.en}>
+                    <Input required value={form.title} onChange={(e) => update("title", e.target.value)} />
+                </ReferenceField>
                 <ReferenceField label="Summary" reference={translation.summary.en}>
                     <Textarea required rows={2} value={form.summary} onChange={(e) => update("summary", e.target.value)} />
                 </ReferenceField>

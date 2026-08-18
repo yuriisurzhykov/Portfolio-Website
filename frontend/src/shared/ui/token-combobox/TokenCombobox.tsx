@@ -166,7 +166,12 @@ export function TokenCombobox({ id, label, hint, values, onChange, suggestions, 
                         role="listbox"
                         className={cn(
                             "absolute left-0 right-0 top-full z-20 mt-xs",
-                            "flex flex-col gap-[2px] rounded-md border border-border-subtle bg-surface-raised p-xs shadow-lg",
+                            // `bg-surface-base`, not `-raised` — see
+                            // `RelatedItemPicker`'s identical fix/comment for
+                            // why `-raised` (a near-transparent tint meant to
+                            // sit atop an already-opaque parent) is the wrong
+                            // token for a floating popover's own backdrop.
+                            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-base p-xs shadow-lg",
                         )}
                     >
                         {results.map((result, index) => (

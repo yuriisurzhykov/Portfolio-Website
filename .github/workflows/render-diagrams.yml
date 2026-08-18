@@ -50,7 +50,7 @@ jobs:
       # The later `git push origin HEAD:...` step still uses `head.ref`
       # deliberately — you push TO a branch name, not a commit SHA.
       - name: Checkout PR head commit (immutable)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 

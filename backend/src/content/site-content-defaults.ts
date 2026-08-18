@@ -37,21 +37,6 @@ export const SITE_CONTENT_DEFAULTS: SiteContentDataMap = {
                 "onvif-camera-lib · в работе",
             ],
         },
-        graphNodes: [
-            {
-                label: "Client",
-                sublabel: { en: "Android · OEM · AOSP", ru: "Android · OEM · AOSP" },
-            },
-            {
-                label: "Navigation Engine",
-                sublabel: { en: "route · rendering", ru: "маршрут · рендеринг" },
-                highlighted: true,
-            },
-            {
-                label: "FlowBus",
-                sublabel: { en: "event bus · pub/sub · Kotlin", ru: "шина событий · pub/sub · Kotlin" },
-            },
-        ],
     },
 
     contact: {

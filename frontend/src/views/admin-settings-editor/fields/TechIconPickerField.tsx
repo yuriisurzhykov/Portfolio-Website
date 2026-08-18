@@ -161,7 +161,7 @@ export function TechIconPickerField({ label = "Icon", idPrefix, value, onChange 
                         />
                     </Field>
                     {results.length > 0 && (
-                        <ul className="flex max-h-[220px] flex-col gap-[2px] overflow-y-auto rounded-md border border-border-subtle bg-surface-raised p-xs">
+                        <ul className="flex max-h-55 flex-col gap-0.5 overflow-y-auto rounded-md border border-border-subtle bg-surface-raised p-xs">
                             {results.map((result) => (
                                 <li key={result.slug}>
                                     <button
@@ -174,7 +174,7 @@ export function TechIconPickerField({ label = "Icon", idPrefix, value, onChange 
                                         className="flex w-full items-center gap-sm rounded-sm px-sm py-xs text-left font-mono text-caption text-text-primary hover:bg-surface-base"
                                     >
                                         <span className="w-5 h-5 shrink-0 text-text-primary">
-                                            <TechIconRenderer icon={{ kind: "path", d: result.path, title: result.title }} />
+                                            <TechIconRenderer icon={{ kind: "path", rawSvg: result.path, title: result.title }} />
                                         </span>
                                         {result.title}
                                     </button>

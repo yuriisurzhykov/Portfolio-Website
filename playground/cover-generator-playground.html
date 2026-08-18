@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cover Generator Playground v2 — Organic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg: #0b0b0d;
+        --panel: #16161a;
+        --border: rgba(255,255,255,.1);
+        --text: #f5f3f0;
+        --text2: #b3b0ab;
+        --accent: #e8743a;
+        font-family: 'Inter', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+    #preview {
+        flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px; overflow: auto;
+        background:
+            linear-gradient(45deg, #151517 25%, transparent 25%),
+            linear-gradient(-45deg, #151517 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #151517 75%),
+            linear-gradient(-45deg, transparent 75%, #151517 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+        background-color: #0e0e10;
+    }
+    #canvasWrap { width: 100%; max-width: 1100px; box-shadow: 0 20px 60px rgba(0,0,0,.6); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+    #canvasWrap img { display: block; width: 100%; height: auto; }
+    #panel { width: 400px; min-width: 400px; background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 20px; }
+    h1 { font-size: 16px; margin: 0 0 4px; }
+    .subtitle { font-size: 12px; color: var(--text2); margin: 0 0 18px; line-height: 1.5; }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 12px; }
+    fieldset.layer { border-color: rgba(232,116,58,.35); }
+    legend { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); padding: 0 6px; display: flex; align-items: center; gap: 8px; }
+    legend .hint { color: var(--text2); font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; }
+    label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text2); margin: 7px 0; }
+    label span.val { font-family: 'JetBrains Mono', monospace; color: var(--text); min-width: 42px; text-align: right; font-size: 11px; }
+    input[type=range] { flex: 1; accent-color: var(--accent); }
+    input[type=text], input[type=number], select, textarea {
+        background: #0e0e10; border: 1px solid var(--border); color: var(--text); border-radius: 6px;
+        padding: 6px 8px; font-size: 12px; font-family: 'JetBrains Mono', monospace; width: 100%;
+    }
+    textarea { resize: vertical; min-height: 44px; }
+    .row { display: flex; flex-direction: column; margin: 8px 0; gap: 4px; }
+    .row-label { font-size: 12px; color: var(--text2); }
+    .btns { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+    button { background: var(--accent); color: #0b0b0d; border: none; border-radius: 6px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; flex: 1; }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    button:hover { opacity: .88; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); margin: 2px 0 8px; font-weight: 600; }
+    .checkbox-row input { width: 16px; height: 16px; accent-color: var(--accent); }
+    #paramsOut { width: 100%; height: 84px; font-family: 'JetBrains Mono', monospace; font-size: 10px; background: #0e0e10; color: var(--text2); border: 1px solid var(--border); border-radius: 6px; padding: 8px; resize: vertical; }
+    .stats { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text2); background: #0e0e10; border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin: 6px 0 0; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div id="preview"><div id="canvasWrap"></div></div>
+
+<div id="panel">
+    <h1>Cover Generator Playground v2 — Organic</h1>
+    <p class="subtitle">
+        Новая техника: гладкие Catmull-Rom кривые вместо прямых/кружков,
+        непрерывный smooth mesh-градиент вместо дискретных пятен. Категория
+        задаёт только hue. Форма и ритм узора выводятся из <b>title + excerpt</b>
+        (кол-во слов, длина, частоты букв) — не только из случайного seed.
+        4 слоя выражения текста ниже включаются и настраиваются независимо —
+        пробуйте по одному и вместе.
+    </p>
+
+    <fieldset>
+        <legend>Identity</legend>
+        <div class="row"><div class="row-label">Category (→ hue only)</div><input type="text" id="category" value="Architecture"></div>
+        <div class="row"><div class="row-label">Slug (→ layout seed)</div><input type="text" id="slug" value="my-first-post"></div>
+        <div class="row"><div class="row-label">Title</div><textarea id="title">Notes on FlowBus: why I built an event bus</textarea></div>
+        <div class="row"><div class="row-label">Excerpt</div><textarea id="excerpt">A deep dive into designing a lightweight, type-safe event bus for a modular Android app, and the mistakes that shaped its final API.</textarea></div>
+        <div class="row"><div class="row-label">Date (stamp)</div><input type="text" id="date" value="08.26"></div>
+        <label>Variant <input type="number" id="variant" value="1" min="1" style="width:60px"></label>
+        <div class="checkbox-row"><input type="checkbox" id="hueOverrideEnabled"><label style="margin:0" for="hueOverrideEnabled">Override hue manually</label></div>
+        <label>Hue override <input type="range" id="hueOverride" min="0" max="360" value="45"><span class="val" id="hueOverrideVal">45</span></label>
+        <div class="stats" id="statsOut">—</div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Smooth color mesh</legend>
+        <label>Base lightness <input type="range" id="baseL" min="0" max="1" step="0.01" value="0.20"><span class="val" id="baseLVal"></span></label>
+        <label>Base chroma <input type="range" id="baseC" min="0" max="0.4" step="0.01" value="0.05"><span class="val" id="baseCVal"></span></label>
+        <label>Spot lightness <input type="range" id="spotL" min="0" max="1" step="0.01" value="0.66"><span class="val" id="spotLVal"></span></label>
+        <label>Spot chroma <input type="range" id="spotC" min="0" max="0.4" step="0.01" value="0.17"><span class="val" id="spotCVal"></span></label>
+        <label>Spot count <input type="range" id="spotCount" min="2" max="8" step="1" value="5"><span class="val" id="spotCountVal"></span></label>
+        <div class="row-label" style="margin-top:2px">Hue spread — keep this small, or "purple" starts reading as "pink"/"blue". OKLCH's gamut is uneven across hues, so a 45°+ swing near purple/magenta crosses into a visibly different named color, not just a lighter/darker version of the same one.</div>
+        <label>Spread min ° <input type="range" id="spreadMin" min="0" max="20" step="1" value="4"><span class="val" id="spreadMinVal"></span></label>
+        <label>Spread max ° <input type="range" id="spreadMax" min="0" max="35" step="1" value="12"><span class="val" id="spreadMaxVal"></span></label>
+        <label>Spot radius (% width) <input type="range" id="spotRadius" min="0.4" max="1.6" step="0.02" value="0.95"><span class="val" id="spotRadiusVal"></span></label>
+        <label>Spot opacity <input type="range" id="spotOpacity" min="0" max="1" step="0.02" value="0.85"><span class="val" id="spotOpacityVal"></span></label>
+        <label>Softness (extra stops) <input type="range" id="softness" min="0" max="1" step="0.02" value="0.6"><span class="val" id="softnessVal"></span></label>
+        <div class="row">
+            <div class="row-label">Blend mode <span style="color:var(--text2)">(preview only — verify librsvg support before shipping)</span></div>
+            <select id="blendMode"><option value="normal">normal</option><option value="screen" selected>screen</option><option value="plus-lighter">plus-lighter</option><option value="overlay">overlay</option></select>
+        </div>
+        <label>Vignette <input type="range" id="vignette" min="0" max="0.6" step="0.02" value="0.22"><span class="val" id="vignetteVal"></span></label>
+    </fieldset>
+
+    <fieldset class="layer">
+        <legend>Layer · Flow curves <span class="hint">text-driven organic lines</span></legend>
+        <div class="checkbox-row"><input type="checkbox" id="flowEnabled" checked><label style="margin:0" for="flowEnabled">Enabled</label></div>
+        <label>Opacity <input type="range" id="flowOpacity" min="0" max="1" step="0.02" value="0.5"><span class="val" id="flowOpacityVal"></span></label>
+        <label>Curve density × <input type="range" id="flowDensity" min="0.3" max="2.5" step="0.1" value="1"><span class="val" id="flowDensityVal"></span></label>
+        <label>Amplitude × <input type="range" id="flowAmplitude" min="0.2" max="2.5" step="0.1" value="1"><span class="val" id="flowAmplitudeVal"></span></label>
+        <label>Line width <input type="range" id="flowWidth" min="0.5" max="6" step="0.1" value="2"><span class="val" id="flowWidthVal"></span></label>
+        <label>Control points <input type="range" id="flowPoints" min="3" max="10" step="1" value="6"><span class="val" id="flowPointsVal"></span></label>
+    </fieldset>
+
+    <fieldset class="layer">
+        <legend>Layer · Waveform <span class="hint">letters → smooth waveform</span></legend>
+        <div class="checkbox-row"><input type="checkbox" id="waveEnabled" checked><label style="margin:0" for="waveEnabled">Enabled</label></div>
+        <label>Opacity <input type="range" id="waveOpacity" min="0" max="1" step="0.02" value="0.35"><span class="val" id="waveOpacityVal"></span></label>
+        <label>Ridges <input type="range" id="waveRidges" min="1" max="6" step="1" value="3"><span class="val" id="waveRidgesVal"></span></label>
+        <label>Amplitude × <input type="range" id="waveAmplitude" min="0.2" max="2.5" step="0.1" value="1"><span class="val" id="waveAmplitudeVal"></span></label>
+        <label>Samples <input type="range" id="waveSamples" min="8" max="48" step="1" value="24"><span class="val" id="waveSamplesVal"></span></label>
+        <label>Line width <input type="range" id="waveWidth" min="0.5" max="5" step="0.1" value="1.6"><span class="val" id="waveWidthVal"></span></label>
+        <div class="row">
+            <div class="row-label">Source text</div>
+            <select id="waveSource"><option value="title">Title</option><option value="excerpt">Excerpt</option><option value="both" selected>Title + excerpt</option></select>
+        </div>
+    </fieldset>
+
+    <fieldset class="layer">
+        <legend>Layer · Letterform fill <span class="hint">pattern lives inside the letters</span></legend>
+        <div class="checkbox-row"><input type="checkbox" id="letterEnabled" checked><label style="margin:0" for="letterEnabled">Enabled</label></div>
+        <label>Fill intensity <input type="range" id="letterOpacity" min="0" max="1" step="0.02" value="0.9"><span class="val" id="letterOpacityVal"></span></label>
+        <label>Font scale <input type="range" id="letterScale" min="0.3" max="1.3" step="0.02" value="0.85"><span class="val" id="letterScaleVal"></span></label>
+        <label>Outline opacity <input type="range" id="letterOutline" min="0" max="0.5" step="0.01" value="0.06"><span class="val" id="letterOutlineVal"></span></label>
+        <div class="row">
+            <div class="row-label">Source</div>
+            <select id="letterSource"><option value="titleWord">First word of title</option><option value="titleInitials">Initials of title</option><option value="excerptWord">First word of excerpt</option></select>
+        </div>
+        <div class="row">
+            <div class="row-label">Fill content</div>
+            <select id="letterFillMode"><option value="mesh">Repeat color mesh (brighter)</option><option value="flow">Repeat flow curves (denser)</option><option value="solid">Solid accent color</option></select>
+        </div>
+    </fieldset>
+
+    <fieldset class="layer">
+        <legend>Layer · Readable title <span class="hint">actual wrapped text — real context, not an abstract letter</span></legend>
+        <div class="checkbox-row"><input type="checkbox" id="titleTextEnabled" checked><label style="margin:0" for="titleTextEnabled">Enabled</label></div>
+        <label>Opacity <input type="range" id="titleTextOpacity" min="0" max="1" step="0.02" value="0.96"><span class="val" id="titleTextOpacityVal"></span></label>
+        <label>Font size <input type="range" id="titleTextSize" min="24" max="72" step="1" value="46"><span class="val" id="titleTextSizeVal"></span></label>
+        <label>Max width (% canvas) <input type="range" id="titleTextMaxWidth" min="30" max="90" step="1" value="58"><span class="val" id="titleTextMaxWidthVal"></span></label>
+        <label>Max lines <input type="range" id="titleTextMaxLines" min="1" max="4" step="1" value="3"><span class="val" id="titleTextMaxLinesVal"></span></label>
+        <label>Scrim behind text <input type="range" id="titleTextScrim" min="0" max="0.85" step="0.02" value="0.35"><span class="val" id="titleTextScrimVal"></span></label>
+        <div class="row"><div class="row-label">Horizontal</div><select id="titleTextHAlign"><option value="left" selected>Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
+        <div class="row"><div class="row-label">Vertical</div><select id="titleTextVAlign"><option value="top">Top</option><option value="middle">Middle</option><option value="bottom" selected>Bottom</option></select></div>
+        <div class="row"><div class="row-label">Color</div><select id="titleTextColor"><option value="auto" selected>Auto (contrast vs base lightness)</option><option value="light">Always light</option><option value="dark">Always dark</option></select></div>
+    </fieldset>
+
+    <fieldset class="layer">
+        <legend>Layer · Watermark <span class="hint">soft giant word, blended not flat</span></legend>
+        <div class="checkbox-row"><input type="checkbox" id="markEnabled"><label style="margin:0" for="markEnabled">Enabled</label></div>
+        <label>Opacity <input type="range" id="markOpacity" min="0" max="0.4" step="0.01" value="0.08"><span class="val" id="markOpacityVal"></span></label>
+        <label>Scale (% height) <input type="range" id="markScale" min="0.3" max="1.8" step="0.02" value="1.1"><span class="val" id="markScaleVal"></span></label>
+        <label>Softness (stroke blur ring) <input type="range" id="markSoftness" min="0" max="1" step="0.05" value="0.4"><span class="val" id="markSoftnessVal"></span></label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Stamp</legend>
+        <div class="checkbox-row"><input type="checkbox" id="stampEnabled" checked><label style="margin:0" for="stampEnabled">Enabled</label></div>
+        <label>Opacity <input type="range" id="stampOpacity" min="0" max="1" step="0.02" value="0.6"><span class="val" id="stampOpacityVal"></span></label>
+        <div class="row"><div class="row-label">Position</div>
+            <select id="stampPos"><option value="bl">Bottom-left</option><option value="br">Bottom-right</option><option value="tl">Top-left</option><option value="tr">Top-right</option></select>
+        </div>
+    </fieldset>
+
+    <div class="btns">
+        <button id="btnRandomSlug">🎲 Random slug</button>
+        <button id="btnRandomAll" class="secondary">Randomize sliders</button>
+    </div>
+    <div class="btns">
+        <button id="btnDownloadSvg" class="secondary">Download SVG</button>
+        <button id="btnDownloadParams" class="secondary">Copy params JSON</button>
+    </div>
+
+    <div class="row" style="margin-top:14px;">
+        <div class="row-label">Current params (for sharing back)</div>
+        <textarea id="paramsOut" readonly></textarea>
+    </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Core primitives — same as backend/src/media/cover-seed.ts + cover-hue.ts.
+// ---------------------------------------------------------------------------
+function cyrb128(str) {
+    let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+    for (let i = 0; i < str.length; i++) {
+        const k = str.charCodeAt(i);
+        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+    }
+    h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+    h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+    h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+    h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+    h1 ^= h2 ^ h3 ^ h4; h2 ^= h1; h3 ^= h1; h4 ^= h1;
+    return [h1 >>> 0, h2 >>> 0, h3 >>> 0, h4 >>> 0];
+}
+function sfc32(seedA, seedB, seedC, seedD) {
+    let a = seedA, b = seedB, c = seedC, d = seedD;
+    return function next() {
+        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+        let t = (a + b) | 0;
+        a = b ^ (b >>> 9);
+        b = (c + (c << 3)) | 0;
+        c = (c << 21) | (c >>> 11);
+        d = (d + 1) | 0;
+        t = (t + d) | 0;
+        c = (c + t) | 0;
+        return (t >>> 0) / 4294967296;
+    };
+}
+function prngFromSeed(seed) { const [a, b, c, d] = cyrb128(String(seed)); return sfc32(a, b, c, d); }
+function randomInRange(prng, min, max) { return min + prng() * (max - min); }
+function randomInt(prng, min, max) { return Math.floor(randomInRange(prng, min, max + 1)); }
+
+function oklchToLinearSrgb(lightness, chroma, hueDeg) {
+    const hueRad = (hueDeg * Math.PI) / 180;
+    const a = chroma * Math.cos(hueRad), b = chroma * Math.sin(hueRad);
+    const l_ = lightness + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = lightness - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = lightness - 0.0894841775 * a - 1.291485548 * b;
+    const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+    return [
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+    ];
+}
+function linearToGammaChannel(v) { return v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; }
+const GAMUT_EPSILON = 1e-4;
+function isInGamut(linear) { return linear.every((c) => c >= -GAMUT_EPSILON && c <= 1 + GAMUT_EPSILON); }
+function clipChromaToGamut(l, c, h) {
+    if (isInGamut(oklchToLinearSrgb(l, c, h))) return c;
+    let low = 0, high = c;
+    for (let i = 0; i < 24; i++) { const mid = (low + high) / 2; if (isInGamut(oklchToLinearSrgb(l, mid, h))) low = mid; else high = mid; }
+    return low;
+}
+function toHexByte(ch) { return Math.round(Math.min(1, Math.max(0, ch)) * 255).toString(16).padStart(2, "0"); }
+function oklchToSrgbHex(l, c, h) {
+    const hue = ((h % 360) + 360) % 360;
+    const safeC = clipChromaToGamut(l, c, hue);
+    const [r, g, b] = oklchToLinearSrgb(l, safeC, hue).map(linearToGammaChannel);
+    return `#${toHexByte(r)}${toHexByte(g)}${toHexByte(b)}`;
+}
+function vanDerCorput(n) { let bits = n >>> 0, result = 0, denom = 1; while (bits > 0) { denom *= 2; result += (bits & 1) / denom; bits >>>= 1; } return result; }
+function hueForOrdinal(n) { return vanDerCorput(n) * 360; }
+const categoryOrdinals = new Map();
+function ordinalForCategory(key) { if (!categoryOrdinals.has(key)) categoryOrdinals.set(key, categoryOrdinals.size); return categoryOrdinals.get(key); }
+
+const WIDTH = 1200, HEIGHT = 630;
+const sha256Hex = async (str) => {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+};
+// Every free-text field (title/excerpt/category/...) ends up embedded into
+// an SVG string that this same page later assigns to `innerHTML` (see
+// `rerender()` below) — a classic DOM-based-XSS shape (flagged by CodeQL:
+// "DOM text reinterpreted as HTML") if that text isn't escaped first. The
+// previous version of this function hand-rolled a regex `replace()` chain
+// that also happened to be INCOMPLETE (missing `>` and `'`) — using the
+// browser's own serializer instead (round-trip through a scratch element's
+// `textContent`/`innerHTML`) is both provably correct for every meta-
+// character and the standard, widely-recognized way to escape untrusted
+// text for safe HTML/SVG embedding, instead of trying to enumerate every
+// special character by hand.
+const escScratch = document.createElement("div");
+function esc(s) {
+    escScratch.textContent = String(s);
+    return escScratch.innerHTML;
+}
+
+// ---------------------------------------------------------------------------
+// Text statistics — the "expresses the title" input. Combines title +
+// excerpt, since a one-word title alone barely has enough entropy/rhythm
+// to shape a whole composition.
+// ---------------------------------------------------------------------------
+function textStats(title, excerpt) {
+    const clean = (s) => s.toLowerCase().replace(/[^a-zа-яё0-9\s]/gi, " ").trim();
+    const titleWords = clean(title).split(/\s+/).filter(Boolean);
+    const excerptWords = clean(excerpt).split(/\s+/).filter(Boolean);
+    const allWords = [...titleWords, ...excerptWords];
+    const letters = allWords.join("").split("");
+    const vowels = "aeiouаеёиоуыэюя";
+    const vowelCount = letters.filter((c) => vowels.includes(c)).length;
+    const freq = {};
+    for (const ch of letters) freq[ch] = (freq[ch] || 0) + 1;
+    return {
+        titleWords, excerptWords,
+        wordCount: allWords.length,
+        avgWordLen: letters.length / Math.max(1, allWords.length),
+        letterCount: letters.length,
+        vowelRatio: letters.length ? vowelCount / letters.length : 0.4,
+        sentenceCount: Math.max(1, (excerpt.match(/[.!?]+/g) || []).length),
+        freq,
+    };
+}
+function charCodesOf(text) { const codes = [...text.toLowerCase()].map((c) => c.codePointAt(0)); return codes.length ? codes : [97]; }
+
+// ---------------------------------------------------------------------------
+// Smooth path builder — Catmull-Rom to cubic Bezier. This single function is
+// what makes every layer "плавным" instead of jagged straight segments.
+// ---------------------------------------------------------------------------
+function smoothPath(points) {
+    if (points.length < 2) return "";
+    const p = points;
+    let d = `M ${p[0].x.toFixed(2)} ${p[0].y.toFixed(2)} `;
+    for (let i = 0; i < p.length - 1; i++) {
+        const p0 = p[i - 1] || p[i];
+        const p1 = p[i];
+        const p2 = p[i + 1];
+        const p3 = p[i + 2] || p2;
+        const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+        const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+        d += `C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} `;
+    }
+    return d;
+}
+
+// ---------------------------------------------------------------------------
+// Layer: smooth color mesh — many large, heavily overlapping soft radial
+// gradients (screen/plus-lighter blend) instead of a few discrete "spots"
+// with hard edges. No fe* filters, so it stays librsvg-safe.
+// ---------------------------------------------------------------------------
+function meshLayer(prng, p, hue) {
+    const spotColors = Array.from({ length: p.spotCount }, () => {
+        const spread = randomInRange(prng, p.spreadMin, p.spreadMax);
+        const sign = prng() < 0.5 ? -1 : 1;
+        return oklchToSrgbHex(p.spotL, p.spotC, hue + sign * spread);
+    });
+    let defs = "";
+    let spots = "";
+    spotColors.forEach((color, i) => {
+        const midStop = 30 + p.softness * 25;
+        defs += `<radialGradient id="spot${i}" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="${color}" stop-opacity="${p.spotOpacity}"/>
+            <stop offset="${midStop.toFixed(0)}%" stop-color="${color}" stop-opacity="${(p.spotOpacity * 0.55).toFixed(2)}"/>
+            <stop offset="${Math.min(85, midStop + 30).toFixed(0)}%" stop-color="${color}" stop-opacity="${(p.spotOpacity * 0.18).toFixed(2)}"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </radialGradient>`;
+        const r = p.spotRadius * WIDTH;
+        const cx = randomInRange(prng, 5, 95) / 100 * WIDTH;
+        const cy = randomInRange(prng, 5, 95) / 100 * HEIGHT;
+        spots += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="url(#spot${i})"/>`;
+    });
+    return { defs, markup: `<g style="mix-blend-mode:${p.blendMode}">${spots}</g>` };
+}
+
+// ---------------------------------------------------------------------------
+// Layer: flow curves — count/amplitude driven by text stats, not just prng.
+// ---------------------------------------------------------------------------
+function flowLayer(prng, p, stats) {
+    if (!p.flowEnabled) return "";
+    const count = Math.max(1, Math.round((stats.wordCount / 5) * p.flowDensity));
+    const amplitude = (HEIGHT * 0.18) * (0.4 + stats.avgWordLen / 8) * p.flowAmplitude;
+    let out = "";
+    for (let i = 0; i < count; i++) {
+        const baseline = randomInRange(prng, 0.1, 0.9) * HEIGHT;
+        const points = [];
+        for (let j = 0; j < p.flowPoints; j++) {
+            const x = (j / (p.flowPoints - 1)) * WIDTH;
+            const y = baseline + Math.sin(j * (1 + stats.vowelRatio * 3) + i) * amplitude * randomInRange(prng, 0.5, 1);
+            points.push({ x, y });
+        }
+        out += `<path d="${smoothPath(points)}" fill="none" stroke="#ffffff" stroke-width="${p.flowWidth}" opacity="${(p.flowOpacity * randomInRange(prng, 0.6, 1)).toFixed(3)}"/>`;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Layer: waveform — smooth ridgeline built directly from character codes.
+// ---------------------------------------------------------------------------
+function waveLayer(p, stats, sourceText) {
+    if (!p.waveEnabled) return "";
+    const codes = charCodesOf(sourceText);
+    let out = "";
+    for (let ridge = 0; ridge < p.waveRidges; ridge++) {
+        const baseline = HEIGHT * (0.3 + (ridge / Math.max(1, p.waveRidges - 1)) * 0.4);
+        const amplitude = (HEIGHT * 0.05) * p.waveAmplitude * (1 + ridge * 0.15);
+        const points = [];
+        for (let s = 0; s < p.waveSamples; s++) {
+            const t = s / (p.waveSamples - 1);
+            const pos = t * (codes.length - 1);
+            const i0 = Math.floor(pos), i1 = Math.min(codes.length - 1, i0 + 1), frac = pos - i0;
+            const v = codes[i0] * (1 - frac) + codes[i1] * frac;
+            const norm = ((v + ridge * 37) % 60) / 60 * 2 - 1;
+            points.push({ x: t * WIDTH, y: baseline + norm * amplitude });
+        }
+        out += `<path d="${smoothPath(points)}" fill="none" stroke="#ffffff" stroke-width="${p.waveWidth}" opacity="${(p.waveOpacity * (1 - ridge * 0.12)).toFixed(3)}"/>`;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Layer: letterform fill — the title's own glyphs become a clip mask; a
+// brighter/denser copy of the mesh or flow layer only shows inside them.
+// ---------------------------------------------------------------------------
+function letterformLayer(prng, p, stats, meshDefs, hue, uid) {
+    if (!p.letterEnabled) return { defs: "", markup: "" };
+    let text;
+    if (p.letterSource === "titleInitials") text = stats.titleWords.slice(0, 3).map((w) => w[0]).join("").toUpperCase();
+    else if (p.letterSource === "excerptWord") text = (stats.excerptWords[0] || "X").toUpperCase();
+    else text = (stats.titleWords[0] || "X").toUpperCase();
+
+    const fontSize = HEIGHT * p.letterScale;
+    const clipId = `letterClip${uid}`;
+    const clipDef = `<clipPath id="${clipId}"><text x="50%" y="58%" font-family="Inter, sans-serif" font-weight="900" font-size="${fontSize.toFixed(0)}" text-anchor="middle">${esc(text)}</text></clipPath>`;
+
+    let fillMarkup;
+    if (p.letterFillMode === "solid") {
+        const color = oklchToSrgbHex(p.spotL, p.spotC, hue);
+        fillMarkup = `<rect width="${WIDTH}" height="${HEIGHT}" fill="${color}" opacity="${p.letterOpacity}"/>`;
+    } else if (p.letterFillMode === "flow") {
+        fillMarkup = `<g opacity="${p.letterOpacity}">${flowLayer(prng, { ...p, flowDensity: p.flowDensity * 2.2, flowOpacity: 1 }, stats)}</g>`;
+    } else {
+        fillMarkup = `<rect width="${WIDTH}" height="${HEIGHT}" fill="${oklchToSrgbHex(p.baseL, p.baseC, hue)}"/>${meshDefs.markup.replace('mix-blend-mode:' + p.blendMode, 'mix-blend-mode:' + p.blendMode).replace(/opacity="[^"]*"/, "")}`;
+    }
+
+    const outline = p.letterOutline > 0
+        ? `<text x="50%" y="58%" font-family="Inter, sans-serif" font-weight="900" font-size="${fontSize.toFixed(0)}" text-anchor="middle" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="${p.letterOutline}">${esc(text)}</text>`
+        : "";
+
+    return { defs: clipDef, markup: `<g clip-path="url(#${clipId})">${fillMarkup}</g>${outline}` };
+}
+
+// ---------------------------------------------------------------------------
+// Layer: readable title — real wrapped text with real width measurement
+// (via a scratch canvas), not an approximation. This is the actual "give the
+// user context" fix: every other layer treats the title as raw material for
+// an abstract pattern; this one is the only place the title is legible.
+// ---------------------------------------------------------------------------
+const measureCanvas = document.createElement("canvas");
+const measureCtx = measureCanvas.getContext("2d");
+function wrapText(text, fontSpec, maxWidthPx, maxLines) {
+    measureCtx.font = fontSpec;
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [];
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+        const attempt = current ? `${current} ${word}` : word;
+        if (current && measureCtx.measureText(attempt).width > maxWidthPx) {
+            lines.push(current);
+            current = word;
+            if (lines.length === maxLines) {
+                let last = lines[lines.length - 1];
+                while (last.length > 1 && measureCtx.measureText(last + "…").width > maxWidthPx) last = last.slice(0, -1);
+                lines[lines.length - 1] = last.replace(/\s+$/, "") + "…";
+                return lines;
+            }
+        } else {
+            current = attempt;
+        }
+    }
+    if (current) lines.push(current);
+    return lines.slice(0, maxLines);
+}
+function readableTitleLayer(p, title, baseLightness) {
+    if (!p.titleTextEnabled || !title.trim()) return "";
+    const fontSize = p.titleTextSize;
+    const fontSpec = `800 ${fontSize}px Inter, sans-serif`;
+    const maxWidth = (p.titleTextMaxWidth / 100) * WIDTH;
+    const lines = wrapText(title, fontSpec, maxWidth, p.titleTextMaxLines);
+    if (lines.length === 0) return "";
+    const lineHeight = fontSize * 1.2;
+    const totalHeight = lines.length * lineHeight;
+    const margin = 56;
+
+    let x, anchor;
+    if (p.titleTextHAlign === "left") { x = margin; anchor = "start"; }
+    else if (p.titleTextHAlign === "right") { x = WIDTH - margin; anchor = "end"; }
+    else { x = WIDTH / 2; anchor = "middle"; }
+
+    let firstBaselineY;
+    if (p.titleTextVAlign === "top") firstBaselineY = margin + fontSize * 0.85;
+    else if (p.titleTextVAlign === "middle") firstBaselineY = HEIGHT / 2 - totalHeight / 2 + fontSize * 0.85;
+    else firstBaselineY = HEIGHT - margin - totalHeight + fontSize * 0.85;
+
+    const color = p.titleTextColor === "light" ? "#ffffff" : p.titleTextColor === "dark" ? "#0b0b0d" : (baseLightness > 0.55 ? "#0b0b0d" : "#ffffff");
+
+    let scrim = "";
+    if (p.titleTextScrim > 0) {
+        measureCtx.font = fontSpec;
+        const widest = Math.max(...lines.map((l) => measureCtx.measureText(l).width));
+        const pad = 26;
+        const scrimX = anchor === "start" ? x - pad : anchor === "end" ? x - widest - pad : x - widest / 2 - pad;
+        const scrimY = firstBaselineY - fontSize * 0.9 - pad * 0.6;
+        scrim = `<rect x="${scrimX.toFixed(1)}" y="${scrimY.toFixed(1)}" width="${(widest + pad * 2).toFixed(1)}" height="${(totalHeight + pad * 1.2).toFixed(1)}" rx="12" fill="${baseLightness > 0.55 ? '#ffffff' : '#050506'}" opacity="${p.titleTextScrim}"/>`;
+    }
+
+    const textEls = lines.map((line, i) =>
+        `<text x="${x.toFixed(1)}" y="${(firstBaselineY + i * lineHeight).toFixed(1)}" font-family="Inter, sans-serif" font-weight="800" font-size="${fontSize}" fill="${color}" text-anchor="${anchor}" opacity="${p.titleTextOpacity}">${esc(line)}</text>`
+    ).join("");
+
+    return scrim + textEls;
+}
+
+// ---------------------------------------------------------------------------
+// Layer: watermark — same idea as v1's giant letter, but "softened": a
+// stroke-only halo ring at low opacity behind the fill, instead of one flat
+// silhouette, so it blends into the mesh rather than sitting on top of it.
+// ---------------------------------------------------------------------------
+function watermarkLayer(prng, p, stats) {
+    if (!p.markEnabled) return "";
+    const text = (stats.titleWords[0] || "X").toUpperCase();
+    const fontSize = HEIGHT * p.markScale;
+    const edge = ["left", "right", "top", "bottom"][randomInt(prng, 0, 3)];
+    let x, y, anchor;
+    if (edge === "left") { x = -fontSize * 0.22; y = HEIGHT * 0.68; anchor = "start"; }
+    else if (edge === "right") { x = WIDTH + fontSize * 0.22; y = HEIGHT * 0.68; anchor = "end"; }
+    else if (edge === "top") { x = WIDTH * 0.5; y = fontSize * 0.5; anchor = "middle"; }
+    else { x = WIDTH * 0.5; y = HEIGHT + fontSize * 0.08; anchor = "middle"; }
+    const halo = p.markSoftness > 0
+        ? `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-family="Inter, sans-serif" font-weight="900" font-size="${(fontSize * (1 + p.markSoftness * 0.06)).toFixed(0)}" text-anchor="${anchor}" fill="none" stroke="#ffffff" stroke-width="${(p.markSoftness * 6).toFixed(1)}" opacity="${(p.markOpacity * 0.5).toFixed(3)}">${esc(text)}</text>`
+        : "";
+    const fill = `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-family="Inter, sans-serif" font-weight="900" font-size="${fontSize.toFixed(0)}" text-anchor="${anchor}" fill="#ffffff" opacity="${p.markOpacity}">${esc(text)}</text>`;
+    return halo + fill;
+}
+
+function stampLayer(p, categoryLabel, ref, date) {
+    if (!p.stampEnabled) return "";
+    const text = `${categoryLabel.toUpperCase()} / ${ref} / ${date}`;
+    const margin = 28;
+    let x, y, anchor;
+    if (p.stampPos === "bl") { x = margin; y = HEIGHT - margin; anchor = "start"; }
+    else if (p.stampPos === "br") { x = WIDTH - margin; y = HEIGHT - margin; anchor = "end"; }
+    else if (p.stampPos === "tl") { x = margin; y = margin + 14; anchor = "start"; }
+    else { x = WIDTH - margin; y = margin + 14; anchor = "end"; }
+    return `<text x="${x}" y="${y}" font-family="'JetBrains Mono', monospace" font-size="16" letter-spacing="2" fill="#f5f3f0" opacity="${p.stampOpacity}" text-anchor="${anchor}">${esc(text)}</text>`;
+}
+
+// ---------------------------------------------------------------------------
+// Assembly
+// ---------------------------------------------------------------------------
+async function renderCover(p) {
+    const seedPrng = prngFromSeed(`${p.slug}:${p.variant}`);
+    const categoryKey = p.category.trim().toLowerCase() || "(uncategorized)";
+    const ordinal = ordinalForCategory(categoryKey);
+    const hue = p.hueOverrideEnabled ? p.hueOverride : hueForOrdinal(ordinal);
+    const stats = textStats(p.title, p.excerpt);
+
+    const base = oklchToSrgbHex(p.baseL, p.baseC, hue);
+    const mesh = meshLayer(seedPrng, p, hue);
+    const flow = flowLayer(seedPrng, p, stats);
+    const waveSource = p.waveSource === "title" ? p.title : p.waveSource === "excerpt" ? p.excerpt : `${p.title} ${p.excerpt}`;
+    const wave = waveLayer(p, stats, waveSource);
+    const letter = letterformLayer(seedPrng, p, stats, mesh, hue, Math.round(seedPrng() * 1e6));
+    const readableTitle = readableTitleLayer(p, p.title, p.baseL);
+    const watermark = watermarkLayer(seedPrng, p, stats);
+    const refHex = (await sha256Hex(p.slug)).slice(0, 4).toUpperCase();
+    const stamp = stampLayer(p, p.category || "Journal", refHex, p.date);
+
+    const vignetteDef = `<radialGradient id="vignette" cx="50%" cy="50%" r="75%">
+        <stop offset="55%" stop-color="#000000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity="${p.vignette}"/>
+    </radialGradient>`;
+
+    const svg = `<svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+        <defs>${mesh.defs}${letter.defs}${vignetteDef}</defs>
+        <rect width="${WIDTH}" height="${HEIGHT}" fill="${base}"/>
+        ${mesh.markup}
+        <g>${flow}</g>
+        <g>${wave}</g>
+        ${letter.markup}
+        ${readableTitle}
+        ${watermark}
+        <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#vignette)"/>
+        ${stamp}
+    </svg>`;
+
+    return { svg, hue, ordinal, refHex, stats };
+}
+
+// ---------------------------------------------------------------------------
+// UI wiring
+// ---------------------------------------------------------------------------
+const ids = [
+    "category", "slug", "title", "excerpt", "date", "variant",
+    "hueOverrideEnabled", "hueOverride",
+    "baseL", "baseC", "spotL", "spotC", "spotCount", "spreadMin", "spreadMax", "spotRadius", "spotOpacity", "softness", "blendMode", "vignette",
+    "flowEnabled", "flowOpacity", "flowDensity", "flowAmplitude", "flowWidth", "flowPoints",
+    "waveEnabled", "waveOpacity", "waveRidges", "waveAmplitude", "waveSamples", "waveWidth", "waveSource",
+    "letterEnabled", "letterOpacity", "letterScale", "letterOutline", "letterSource", "letterFillMode",
+    "titleTextEnabled", "titleTextOpacity", "titleTextSize", "titleTextMaxWidth", "titleTextMaxLines", "titleTextScrim", "titleTextHAlign", "titleTextVAlign", "titleTextColor",
+    "markEnabled", "markOpacity", "markScale", "markSoftness",
+    "stampEnabled", "stampOpacity", "stampPos",
+];
+const rangeIds = ["hueOverride","baseL","baseC","spotL","spotC","spotCount","spreadMin","spreadMax","spotRadius","spotOpacity","softness","vignette","flowOpacity","flowDensity","flowAmplitude","flowWidth","flowPoints","waveOpacity","waveRidges","waveAmplitude","waveSamples","waveWidth","letterOpacity","letterScale","letterOutline","titleTextOpacity","titleTextSize","titleTextMaxWidth","titleTextMaxLines","titleTextScrim","markOpacity","markScale","markSoftness","stampOpacity"];
+
+function readParams() {
+    const p = {};
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el.type === "checkbox") p[id] = el.checked;
+        else if (el.type === "range" || el.type === "number") p[id] = parseFloat(el.value);
+        else p[id] = el.value;
+    }
+    return p;
+}
+
+// The generated SVG is rendered into an <img>, backed by a Blob URL —
+// NEVER assigned via innerHTML — even though every free-text field that
+// reaches the SVG string is already escaped (see `esc()` above). CodeQL's
+// "DOM text reinterpreted as HTML" query keeps flagging the innerHTML
+// assignment regardless (its taint tracking can't fully see through
+// `renderCover`'s several layers of template-literal composition to
+// confirm every tainted fragment is individually escaped) — rather than
+// fight that imprecision, this removes the whole SINK category instead:
+// an <img> (unlike a live DOM node tree from innerHTML) never executes an
+// embedded <script>, and critically, unlike innerHTML, never wires up an
+// inline event-handler attribute (onload=/onerror=/onclick=) either,
+// since the browser only ever decodes it as a static/animated image, not
+// as markup to attach to the document. This is strictly SAFER than the
+// previous innerHTML-based rendering, not just quieter for the scanner —
+// verified live: a manually crafted title containing `"><script>`/
+// `<img onerror=...>` still renders as inert, visible text on the cover
+// (proving `esc()` also works), AND no longer even has a codepath that
+// could execute it if `esc()` had a bug, since <img> src is never parsed
+// as HTML in the first place.
+const previewImg = document.createElement("img");
+previewImg.alt = "";
+document.getElementById("canvasWrap").appendChild(previewImg);
+let previewBlobUrl = null;
+/** The exact, unmodified markup last handed to `renderCover` — what "Download SVG" below saves; kept separate from the DOM (never read back out of it) now that the preview is an <img>, not a live SVG node tree. */
+let lastSvgMarkup = "";
+
+let renderToken = 0;
+async function rerender() {
+    const token = ++renderToken;
+    const p = readParams();
+    for (const id of rangeIds) { const out = document.getElementById(id + "Val"); if (out) out.textContent = document.getElementById(id).value; }
+    const result = await renderCover(p);
+    if (token !== renderToken) return;
+    lastSvgMarkup = result.svg;
+    const blob = new Blob([result.svg], { type: "image/svg+xml" });
+    const nextUrl = URL.createObjectURL(blob);
+    previewImg.src = nextUrl;
+    // Revokes the PREVIOUS render's blob URL, never the one just assigned
+    // above — that previous image is being replaced regardless of whether
+    // its load had finished, so there's nothing left needing that URL to
+    // stay alive. Without this, every slider drag (many "input" events,
+    // many rerenders) would leak one Blob URL each, for as long as the
+    // page stays open.
+    if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+    previewBlobUrl = nextUrl;
+    document.getElementById("statsOut").textContent =
+        `words: ${result.stats.wordCount}  avgWordLen: ${result.stats.avgWordLen.toFixed(2)}\n` +
+        `vowelRatio: ${result.stats.vowelRatio.toFixed(2)}  hue: ${Math.round(result.hue)}  ordinal: ${result.ordinal}`;
+    document.getElementById("paramsOut").value = JSON.stringify(
+        { ...p, resolvedHue: Math.round(result.hue), categoryOrdinal: result.ordinal, ref: result.refHex },
+        null, 2,
+    );
+}
+
+for (const id of ids) document.getElementById(id).addEventListener("input", rerender);
+
+document.getElementById("btnRandomSlug").addEventListener("click", () => {
+    document.getElementById("slug").value = "post-" + Math.random().toString(36).slice(2, 9);
+    rerender();
+});
+document.getElementById("btnRandomAll").addEventListener("click", () => {
+    for (const id of rangeIds) {
+        const el = document.getElementById(id);
+        if (el.tagName !== "INPUT" || el.type !== "range") continue;
+        const min = parseFloat(el.min), max = parseFloat(el.max), step = parseFloat(el.step) || 1;
+        const steps = Math.round((max - min) / step);
+        el.value = (min + step * Math.round(Math.random() * steps)).toString();
+    }
+    rerender();
+});
+document.getElementById("btnDownloadSvg").addEventListener("click", () => {
+    // `lastSvgMarkup`, not the DOM — the preview is an <img> now (see
+    // `rerender()`'s own comment), so there is no live SVG node tree left
+    // to read markup back out of.
+    const blob = new Blob([lastSvgMarkup], { type: "image/svg+xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "cover.svg";
+    a.click();
+});
+document.getElementById("btnDownloadParams").addEventListener("click", () => {
+    document.getElementById("paramsOut").select();
+    document.execCommand("copy");
+});
+
+rerender();
+</script>
+</body>
+</html>

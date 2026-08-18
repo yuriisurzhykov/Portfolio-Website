@@ -2,23 +2,26 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
+import type { Language } from "@/shared/i18n";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
-import type { Language } from "@/shared/i18n";
 import { RU_PREFIX } from "@/shared/lib/locale-constants";
 
 const OPTIONS: Language[] = ["en", "ru"];
 
-/** Strips a leading `/ru` (or `/ru/...`) segment, mirroring `proxy.ts`'s `handleLocale` rewrite target — the un-prefixed path this URL renders through either way. */
+/**
+ * Strips a leading `/ru` (or `/ru/...`) segment, mirroring `proxy.ts`'s `handleLocale` rewrite
+ * target — the unprefixed path this URL renders through either way.
+ * */
 function stripRuPrefix(pathname: string): string {
     if (pathname === RU_PREFIX) return "/";
-    if (pathname.startsWith(`${RU_PREFIX}/`)) return pathname.slice(RU_PREFIX.length);
+    if (pathname.startsWith(`${ RU_PREFIX }/`)) return pathname.slice(RU_PREFIX.length);
     return pathname;
 }
 
 function hrefFor(language: Language, unprefixedPath: string): string {
     if (language === "en") return unprefixedPath;
-    return unprefixedPath === "/" ? RU_PREFIX : `${RU_PREFIX}${unprefixedPath}`;
+    return unprefixedPath === "/" ? RU_PREFIX : `${ RU_PREFIX }${ unprefixedPath }`;
 }
 
 /**
@@ -41,7 +44,7 @@ function hrefFor(language: Language, unprefixedPath: string): string {
  * correctness this toggle exists to preserve.
  */
 export function LanguageSegmentedToggle() {
-    const { language, ln } = useTranslation();
+    const {language, ln} = useTranslation();
     const pathname = usePathname();
     const unprefixedPath = stripRuPrefix(pathname);
 
@@ -50,26 +53,31 @@ export function LanguageSegmentedToggle() {
         ru: ln("label.button.language.ru"),
     };
 
+    // gap-0.5/p-0.75 (2px/3px) left as-is — too small to snap to xxs without
+    // losing the pixel-perfect pill-internal boundary; see theme/README.md's
+    // dated entry for the micro-spacing cluster decision.
     return (
-        <div className="flex items-center gap-[2px] bg-surface-icon border border-border-subtle rounded-pill p-[3px]">
-            {OPTIONS.map((option) => {
+        <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-0.75">
+            { OPTIONS.map((option) => {
                 const isActive = language === option;
                 return (
                     <a
-                        key={option}
-                        href={hrefFor(option, unprefixedPath)}
-                        aria-current={isActive ? "true" : undefined}
-                        className={cn(
-                            "rounded-pill px-[10px] py-[5px]",
-                            "font-mono font-semibold text-[10.5px] uppercase",
+                        key={ option }
+                        href={ hrefFor(option, unprefixedPath) }
+                        aria-current={ isActive ? "true" : undefined }
+                        className={ cn(
+                            // px-2.5 (10px) snapped to xs (8px); py-1.25 (5px)
+                            // snapped to xxs (4px) — nearest steps.
+                            "rounded-pill px-xs py-xxs",
+                            "font-mono font-semibold text-micro uppercase",
                             "transition-colors duration-fast",
                             isActive ? "bg-text-primary text-bg-app" : "text-text-muted hover:text-text-primary",
-                        )}
+                        ) }
                     >
-                        {labels[option]}
+                        { labels[option] }
                     </a>
                 );
-            })}
+            }) }
         </div>
     );
 }

@@ -23,7 +23,7 @@ export const NoteBlock = createReactBlockSpec(
                                 type="button"
                                 onClick={() => props.editor.updateBlock(props.block, { props: { variant: option } })}
                                 className={cn(
-                                    "text-micro font-semibold uppercase tracking-wider px-xs py-[2px] rounded-sm",
+                                    "text-micro font-semibold uppercase tracking-wider px-xs py-xxs rounded-sm",
                                     option === variant
                                         ? "bg-text-primary text-bg-app"
                                         : "text-text-muted hover:text-text-primary",
