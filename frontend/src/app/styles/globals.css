@@ -1,6 +1,69 @@
 @layer base {
-    html, body, #root {
-        height: 100%;
+    /*
+     * WRONG FIRST TRY, left here as a record per this repo's own methodology
+     * (see .cursor/rules/development-methodology.mdc, point 5): this used to
+     * be `html, body, #root { height: 100%; }`. `#root` never existed in
+     * this Next.js app — dead CSS carried over from the old Vite SPA, whose
+     * template had `<div id="root">`. `html`'s `height: 100%` was already
+     * redundant with the `h-full` Tailwind class on `<html>` in
+     * `app/layout.tsx`/`app/global-error.tsx`; `body`'s was redundant with
+     * (and, once `overflow-x: hidden` was added below, actively in conflict
+     * with) `min-h-full` on `<body>` in those same two files.
+     *
+     * The conflict: per the CSS Overflow spec, setting `overflow-x` to
+     * anything but `visible` while `overflow-y` is left at its default
+     * `visible` forces the COMPUTED `overflow-y` to `auto` instead — on
+     * BOTH `html` and `body`, since the rule below targeted both. Combined
+     * with this block's explicit `height: 100%` (not `min-height`), that
+     * turned `body` from "grows taller than the viewport to fit tall
+     * content" (the correct sticky-footer pattern `min-h-full` was there
+     * for) into "clamped to exactly one viewport tall, with its own hidden
+     * internal scrollbar" — content past the first ~844px on mobile
+     * silently kept scrolling/working for a real visitor (browsers route
+     * wheel/keyboard scroll to whichever box actually clips), but
+     * `document.documentElement.scrollHeight` — what Playwright's
+     * `fullPage` screenshots (and anything else that measures total page
+     * height the standard way) read — now reported just the viewport
+     * height instead of the true content height. Caught via
+     * `journal-flowbus`'s visual-regression baseline suddenly failing on
+     * every viewport with everything below the first code block rendering
+     * blank in the *fullPage* capture, even though a same-viewport,
+     * non-fullPage screenshot of the exact same load showed the code block
+     * and everything after it rendering correctly.
+     *
+     * Fix: delete the block outright rather than swap `height` for
+     * `min-height` here — `html`/`body` already get the right values
+     * (`h-full`/`min-h-full`) from Tailwind classes in JSX, so this
+     * standalone rule added nothing but the dead `#root` selector and the
+     * conflict above.
+     *
+     * That got the `journal-flowbus` fullPage screenshot's HEIGHT right
+     * again, but a second, subtler issue was still there: `<html>` still
+     * carries `h-full` (`height: 100%`) from those same two files, so
+     * `overflow-x: hidden` on `html` (below) was still forcing `html`'s own
+     * `overflow-y` to `auto` against an explicit, fixed height — same
+     * shape of bug, one level up. This didn't reclamp `scrollHeight` again
+     * (`scrollHeight` reports true content extent regardless of clipping —
+     * that part of the earlier theory was wrong: BODY's *explicit* height
+     * capping its own rendered box size, not `scrollHeight`'s definition,
+     * was what broke the first measurement), but it did mean `<html>` was
+     * clipping `<body>` into its own internal `overflow: auto` scroll box
+     * instead of leaving real page/viewport scrolling to the browser's
+     * normal root-overflow propagation — visible as a consistent few-px
+     * horizontal offset of every element once real vertical scrolling
+     * kicked in (`journal-flowbus` is the only fixture page tall enough to
+     * need it), from a scrollbar now being reserved somewhere it wasn't
+     * before. Fix: apply the safety net to `body` only. Per the CSS
+     * Overflow spec, a non-`visible` overflow set on `<body>` while
+     * `<html>` stays fully `visible` on both axes propagates to control
+     * the actual viewport/page scrollbar directly, rather than clipping
+     * `<body>` inside a nested scrolling box — which is also why this is
+     * the pattern virtually every CSS reset uses (`body { overflow-x:
+     * hidden }`, never `html, body`) and this rule should have matched it
+     * from the start.
+     */
+    body {
+        overflow-x: hidden;
     }
 
     body {
