@@ -1,5 +1,6 @@
 import { AppLayout } from "@/widgets/layout";
 import { getSiteConfigSafe } from "@/shared/lib/get-site-config-safe";
+import { resolveSocialIcon } from "@/shared/lib/social-icons";
 
 /**
  * Chrome (Nav/Footer) for every public route except /storybook, which lives
@@ -9,5 +10,6 @@ import { getSiteConfigSafe } from "@/shared/lib/get-site-config-safe";
  */
 export default async function SiteLayout({ children }: Readonly<{ children: React.ReactNode }>) {
     const config = await getSiteConfigSafe();
-    return <AppLayout config={config}>{children}</AppLayout>;
+    const socialIcons = resolveSocialIcon();
+    return <AppLayout config={ config } socialIcons={ socialIcons }>{ children }</AppLayout>;
 }

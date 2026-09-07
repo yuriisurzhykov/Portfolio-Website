@@ -7,6 +7,7 @@ import type { ConfigContent } from "@portfolio/backend";
 import { Nav } from "@/widgets/nav";
 import { Footer } from "@/widgets/footer";
 import { BackToTop } from "@/shared/ui/back-to-top";
+import { TechIconView } from "@/shared/lib/tech-icons";
 
 /**
  * On every route change: jump to the target section if the URL has a hash
@@ -38,19 +39,20 @@ function useScrollToLocation() {
 export interface AppLayoutProps {
     children: React.ReactNode;
     config: ConfigContent;
+    socialIcons: { github: TechIconView; linkedin: TechIconView };
 }
 
-export function AppLayout({ children, config }: AppLayoutProps) {
+export function AppLayout({ children, config, socialIcons }: AppLayoutProps) {
     useScrollToLocation();
 
     return (
         <div className="min-h-screen bg-bg-app text-text-primary flex flex-col">
-            <Nav config={config} />
+            <Nav config={ config }/>
             <div className="flex-1">
-                {children}
+                { children }
             </div>
-            <Footer config={config} />
-            <BackToTop />
+            <Footer config={ config } socialIcons={ socialIcons }/>
+            <BackToTop/>
         </div>
     );
 }

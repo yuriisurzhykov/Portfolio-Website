@@ -433,7 +433,9 @@ jsdom просто нет (`ReferenceError: ClipboardEvent is not defined`) — 
 провалилась: `TransformError: Invalid content for node blockContainer`
 (обычный ProseMirror-сплит не знает о вложенной схеме блоков BlockNote).
 Исправлено без него: смещение курсора внутри блока вычисляется через
-`editor.transact` + `getBlockInfoFromTransaction` (публичный API), `content`
+`editor.transact` + `getBlockInfoFromSelection` (публичный API, переименован
+из `getBlockInfoFromTransaction` в `@blocknote/core` 0.53.0 — то же
+поведение и сигнатура, только имя), `content`
 блока вручную режется на "до"/"после" с сохранением стилей ПОРЕЗАННОГО
 рана (плоское flatten-и-нарезка строки потеряло бы границы `**bold**`),
 "до" остаётся в исходном блоке через `updateBlock`, "после" вставляется

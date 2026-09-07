@@ -219,7 +219,7 @@ export function TechStackQuickAdd({ existingNames, onAdd }: TechStackQuickAddPro
                                 )}
                             >
                                 <span className="h-md aspect-square w-auto shrink-0">
-                                    <TechIconRenderer icon={{ kind: "path", d: result.path, title: result.title }} />
+                                    <TechIconRenderer icon={{ kind: "path", rawSvg: result.path, title: result.title }} />
                                 </span>
                                 <span className="flex-1">{result.title}</span>
                                 <span className="font-mono text-micro text-text-faint">{result.slug}</span>

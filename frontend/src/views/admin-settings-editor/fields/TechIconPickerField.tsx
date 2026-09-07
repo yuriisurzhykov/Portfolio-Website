@@ -174,7 +174,7 @@ export function TechIconPickerField({ label = "Icon", idPrefix, value, onChange 
                                         className="flex w-full items-center gap-sm rounded-sm px-sm py-xs text-left font-mono text-caption text-text-primary hover:bg-surface-base"
                                     >
                                         <span className="w-5 h-5 shrink-0 text-text-primary">
-                                            <TechIconRenderer icon={{ kind: "path", d: result.path, title: result.title }} />
+                                            <TechIconRenderer icon={{ kind: "path", rawSvg: result.path, title: result.title }} />
                                         </span>
                                         {result.title}
                                     </button>

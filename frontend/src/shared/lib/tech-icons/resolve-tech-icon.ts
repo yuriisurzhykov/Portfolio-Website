@@ -14,7 +14,7 @@ import { getSimpleIconBySlug } from "./registry";
  * that sanitizes it, client-side, right before rendering.
  */
 export type TechIconView =
-    | { kind: "path"; d: string; title: string }
+    | { kind: "path"; rawSvg: string; title: string }
     | { kind: "url"; src: string }
     | { kind: "svg"; markup: string }
     | { kind: "none" };
@@ -45,11 +45,11 @@ export function resolveTechIcon({ name, icon }: TechStackIconInput): TechIconVie
             return { kind: "svg", markup: icon.value };
         case "brand": {
             const found = getSimpleIconBySlug(icon.value);
-            return found ? { kind: "path", d: found.path, title: found.title } : { kind: "none" };
+            return found ? { kind: "path", rawSvg: found.path, title: found.title } : { kind: "none" };
         }
         case "auto": {
             const found = getSimpleIconBySlug(toSimpleIconSlug(name));
-            return found ? { kind: "path", d: found.path, title: found.title } : { kind: "none" };
+            return found ? { kind: "path", rawSvg: found.path, title: found.title } : { kind: "none" };
         }
     }
 }

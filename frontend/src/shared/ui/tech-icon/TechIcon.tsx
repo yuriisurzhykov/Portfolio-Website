@@ -56,7 +56,7 @@ export function TechIcon({ icon, className }: TechIconProps) {
 
     return (
         <svg viewBox="0 0 24 24" fill="currentColor" className={cn("w-full h-full", className)} aria-hidden>
-            <path d={icon.d} />
+            <path d={icon.rawSvg} />
         </svg>
     );
 }

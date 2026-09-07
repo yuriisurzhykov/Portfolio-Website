@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { describeIconStatus } from "./icon-status";
 
-const resolved = { kind: "path", d: "M0 0", title: "Docker" } as const;
+const resolved = { kind: "path", rawSvg: "M0 0", title: "Docker" } as const;
 const unresolved = { kind: "none" } as const;
 
 describe("describeIconStatus", () => {
