@@ -185,7 +185,7 @@ function renderBlock(block: Block | BlockInput, ln: Ln, key: React.Key): React.R
                 <div
                     key={ key }
                     className="grid gap-4 mb-7"
-                    style={ {gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"} }
+                    style={ {gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))"} }
                 >
                     { block.data.items.map((item, index) => (
                         <div

@@ -80,7 +80,7 @@ export function SelectedWork({ items }: SelectedWorkProps) {
         >
             <Text variant={ "body-lg" }
                   className="mb-md text-accent-text font-bold">{ ln("eyebrow.selectedWork") }</Text>
-            <div className="grid gap-lg" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(18.75rem, 1fr))" } }>
+            <div className="grid gap-lg" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(min(18.75rem, 100%), 1fr))" } }>
                 { items.map((item) => (
                     <WorkCard key={ item.slug } item={ item }/>
                 )) }

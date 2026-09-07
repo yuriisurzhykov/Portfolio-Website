@@ -19,7 +19,7 @@ export function Principles({ principles }: PrinciplesProps) {
         <section
             className="max-w-(--layout-content-max-width) mx-auto px-(--layout-section-horizontal-padding) pb-[clamp(64px,8vw,96px)]">
             <Eyebrow className="mb-md">{ ln("eyebrow.howIWork") }</Eyebrow>
-            <div className="grid gap-md" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))" } }>
+            <div className="grid gap-md" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" } }>
                 { principles.map((principle) => (
                     <Card key={ pick(principle.title) } className="p-lg">
                         <IconRefPreview icon={ principle.icon } className="h-xl aspect-square w-auto mb-md"/>
