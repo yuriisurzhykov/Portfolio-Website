@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.1",
-    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/estree": "^1.0.8",
     "@types/node": "^26",
     "eslint": "^10.8.0",
