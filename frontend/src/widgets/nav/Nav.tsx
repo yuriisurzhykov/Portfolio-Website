@@ -13,6 +13,7 @@ import { useHideOnScroll } from "@/shared/lib/useHideOnScroll";
 import { ThemeDropdown } from "@/widgets/theme-dropdown";
 import { LanguageSegmentedToggle } from "./LanguageSegmentedToggle";
 import { AvailabilityBadge } from "@/shared/ui/availability-badge";
+import { ThemeSegmentedToggle } from "@/widgets/nav/ThemeSegmentedToggle";
 
 const navLinkClass = (isActive: boolean) =>
     cn(
@@ -83,7 +84,7 @@ export function Nav({ config: site }: NavProps) {
 
     return (
         <header
-            className={cn(
+            className={ cn(
                 "sticky top-0 z-navbar",
                 "flex items-center justify-between gap-sm",
                 "sm:grid sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:justify-start",
@@ -100,7 +101,7 @@ export function Nav({ config: site }: NavProps) {
                 // independent hook calls rather than one shared value.
                 "transition-transform duration-normal ease-standard",
                 hiddenOnScroll && "-translate-y-full",
-            )}
+            ) }
         >
             <div className="flex items-center gap-sm">
                 <Link href="/" className="font-mono font-bold text-body-lg text-text-primary shrink-0">
@@ -112,12 +113,12 @@ export function Nav({ config: site }: NavProps) {
             </div>
 
             <nav className="hidden sm:flex items-center gap-md sm:justify-self-center">
-                {navLinks}
+                { navLinks }
             </nav>
 
             <div className="hidden sm:flex items-center gap-xs sm:gap-sm shrink-0 sm:justify-self-end">
-                <LanguageSegmentedToggle />
-                <ThemeDropdown />
+                <LanguageSegmentedToggle/>
+                <ThemeDropdown/>
             </div>
 
             <button
@@ -160,9 +161,9 @@ export function Nav({ config: site }: NavProps) {
                 </nav>
 
                 <div className="mt-auto flex flex-col gap-md px-lg py-lg border-t border-border-subtle">
-                    <div className="flex items-center gap-sm">
+                    <div className="flex items-center gap-sm ">
                         <LanguageSegmentedToggle/>
-                        <ThemeDropdown/>
+                        <ThemeSegmentedToggle/>
                     </div>
                     <StatusBadge tone="success" withDot className="w-fit whitespace-nowrap">
                         { ln(`status.${ site.availability }`) }
