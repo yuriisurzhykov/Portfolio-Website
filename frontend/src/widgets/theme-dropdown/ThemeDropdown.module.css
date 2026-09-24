@@ -1,0 +1,85 @@
+.dropdown {
+    box-sizing: border-box;
+    max-width: calc(100vw - var(--ds-dimension-xl));
+    padding: var(--ds-dimension-xxs);
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-base);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--ds-radius-md);
+    box-shadow: var(--ds-shadow-surface-deep);
+}
+
+.item {
+    min-height: var(--ds-dimension-2xl);
+    color: var(--color-text-primary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ds-radius-sm);
+}
+
+.item:hover,
+.item[data-hovered] {
+    background: var(--color-surface-row-hover);
+}
+
+.item[aria-checked="true"] {
+    color: var(--color-text-primary);
+    background: color-mix(
+            in srgb,
+            var(--color-border-highlight) 12%,
+            var(--color-surface-base)
+    );
+    border-color: var(--color-border-highlight);
+}
+
+.item[aria-checked="true"]:hover,
+.item[aria-checked="true"][data-hovered] {
+    background: color-mix(
+            in srgb,
+            var(--color-border-highlight) 18%,
+            var(--color-surface-base)
+    );
+}
+
+.itemLabel {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.itemSection {
+    width: var(--ds-dimension-md);
+    height: var(--ds-dimension-md);
+    flex: 0 0 auto;
+}
+
+.selectionMark {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+    color: var(--color-border-highlight);
+    line-height: 1;
+}
+
+.trigger {
+    display: grid;
+    width: var(--ds-dimension-2xl);
+    height: var(--ds-dimension-2xl);
+    padding: 0;
+    place-items: center;
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-icon);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--ds-radius-md);
+    cursor: pointer;
+}
+
+.trigger:hover {
+    background-color: var(--color-surface-row-hover);
+}
+
+.trigger:focus-visible {
+    outline: 2px solid var(--color-border-highlight);
+    outline-offset: var(--ds-dimension-xxs);
+}

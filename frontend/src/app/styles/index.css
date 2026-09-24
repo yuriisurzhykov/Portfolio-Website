@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@mantine/core/styles.css";
 @import "./globals.css";
 @import "./code-theme.css";
 @import "./gradients.css";

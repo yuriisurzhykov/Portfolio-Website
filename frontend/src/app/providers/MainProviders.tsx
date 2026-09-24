@@ -1,7 +1,8 @@
 import React, { type ReactNode } from "react";
-import { I18nProvider } from "@/shared/i18n";
 import type { Language } from "@/shared/i18n";
+import { I18nProvider } from "@/shared/i18n";
 import { ThemeProvider } from "@/shared/theme";
+import { MantineProvider } from "@mantine/core";
 
 type ProviderProperties = {
     children: ReactNode;
@@ -11,10 +12,12 @@ type ProviderProperties = {
 
 export const MainProviders = ({ children, initialLanguage }: ProviderProperties) => {
     return (
-        <ThemeProvider>
-            <I18nProvider initialLanguage={initialLanguage}>
-                {children}
-            </I18nProvider>
-        </ThemeProvider>
+        <MantineProvider>
+            <ThemeProvider>
+                <I18nProvider initialLanguage={ initialLanguage }>
+                    { children }
+                </I18nProvider>
+            </ThemeProvider>
+        </MantineProvider>
     );
 }

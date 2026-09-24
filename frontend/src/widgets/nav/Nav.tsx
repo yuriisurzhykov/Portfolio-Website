@@ -10,7 +10,7 @@ import { Drawer } from "@/shared/ui/drawer";
 import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import { useHideOnScroll } from "@/shared/lib/useHideOnScroll";
-import { ThemeSegmentedToggle } from "./ThemeSegmentedToggle";
+import { ThemeDropdown } from "@/widgets/theme-dropdown";
 import { LanguageSegmentedToggle } from "./LanguageSegmentedToggle";
 import { AvailabilityBadge } from "@/shared/ui/availability-badge";
 
@@ -83,9 +83,10 @@ export function Nav({ config: site }: NavProps) {
 
     return (
         <header
-            className={ cn(
+            className={cn(
                 "sticky top-0 z-navbar",
                 "flex items-center justify-between gap-sm",
+                "sm:grid sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:justify-start",
                 "px-(--layout-section-horizontal-padding) py-lg",
                 "bg-overlay-scrim backdrop-blur-md",
                 "border-b border-border-subtle",
@@ -99,22 +100,24 @@ export function Nav({ config: site }: NavProps) {
                 // independent hook calls rather than one shared value.
                 "transition-transform duration-normal ease-standard",
                 hiddenOnScroll && "-translate-y-full",
-            ) }
+            )}
         >
-            <Link href="/" className="font-mono font-bold text-body-lg text-text-primary shrink-0">
-                { site.initials }
-            </Link>
-
-            <nav className="hidden sm:flex items-center gap-md sm:gap-lg">
-                { navLinks }
-            </nav>
-
-            <div className="hidden sm:flex items-center gap-xs sm:gap-sm shrink-0">
-                <LanguageSegmentedToggle/>
-                <ThemeSegmentedToggle/>
+            <div className="flex items-center gap-sm">
+                <Link href="/" className="font-mono font-bold text-body-lg text-text-primary shrink-0">
+                    { site.initials }
+                </Link>
                 <AvailabilityBadge tone={ site.availability } withDot className="whitespace-nowrap">
                     <span className="hidden lg:inline">{ ln(`status.${ site.availability }`) }</span>
                 </AvailabilityBadge>
+            </div>
+
+            <nav className="hidden sm:flex items-center gap-md sm:justify-self-center">
+                {navLinks}
+            </nav>
+
+            <div className="hidden sm:flex items-center gap-xs sm:gap-sm shrink-0 sm:justify-self-end">
+                <LanguageSegmentedToggle />
+                <ThemeDropdown />
             </div>
 
             <button
@@ -159,7 +162,7 @@ export function Nav({ config: site }: NavProps) {
                 <div className="mt-auto flex flex-col gap-md px-lg py-lg border-t border-border-subtle">
                     <div className="flex items-center gap-sm">
                         <LanguageSegmentedToggle/>
-                        <ThemeSegmentedToggle/>
+                        <ThemeDropdown/>
                     </div>
                     <StatusBadge tone="success" withDot className="w-fit whitespace-nowrap">
                         { ln(`status.${ site.availability }`) }
