@@ -19,7 +19,8 @@ runs:
         cache-dependency-path: package-lock.json
 
     - name: Install workspace dependencies (frontend/ + backend/)
-      run: npm ci
+      # Native TypeScript, sharp, Tailwind and Next binaries are optional packages.
+      run: npm ci --include=optional
       shell: bash
 
     - name: Apply migrations to the CI database
