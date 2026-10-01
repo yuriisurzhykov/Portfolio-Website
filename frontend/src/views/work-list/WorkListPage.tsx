@@ -137,7 +137,7 @@ export function WorkListPage({ items, workPage, activeTech }: WorkListPageProps)
                 <Link href="/" className="font-bold text-caption text-text-accent">
                     ← { ln("button.backHome") }
                 </Link>
-                <Text variant={ "h2" } className="m-xs">
+                <Text as="h1" variant="h2" className="m-xs">
                     { pick(workPage.heading) }
                 </Text>
                 <Text variant="body" tone="muted" className="m-xs">

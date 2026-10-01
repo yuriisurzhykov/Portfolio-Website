@@ -98,7 +98,7 @@ export function JournalListPage({ entries, journalPage }: JournalListPageProps) 
                 <Link href="/" className="text-caption text-text-accent font-bold">
                     ← { ln("button.backHome") }
                 </Link>
-                <Text variant={ "h2" } className="m-xs">
+                <Text as="h1" variant="h2" className="m-xs">
                     { pick(journalPage.heading) }
                 </Text>
                 <Text variant="body" tone="muted" className="m-xs">

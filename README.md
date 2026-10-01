@@ -309,10 +309,24 @@ automatic commit — because the judgment "this is no longer a regression,
 but a deliberate design change" is, by its very nature, a human one, not
 something worth delegating to a machine.
 
-Supply-chain hygiene sits alongside these: `npm audit --audit-level=high`
+Supply-chain hygiene sits alongside these: `npm audit --audit-level=low`
 runs as a blocking step in the same CI job, and
 [Dependabot](.github/dependabot.yml) keeps both the npm workspace and the
-GitHub Actions themselves current on a weekly cadence.
+GitHub Actions themselves current on a daily cadence. The audit includes development
+and optional dependencies. Use Node >=24.15 and npm >=11.19 locally; Prisma and
+Stryker CLI dependencies are shared at the workspace root so security overrides
+apply consistently to their dependency trees.
+
+Dependabot patch/minor updates merge only after both CI workflows and all checks
+on the current commit pass. Major updates receive a Codex repair attempt and
+require human review. Configure `OPENAI_API_KEY` and `DEPENDENCY_UPDATE_TOKEN`
+as **repository Actions secrets** to activate this automation. The update token must be a
+fine-grained PAT with repository contents and pull requests
+write access; unlike `GITHUB_TOKEN`, its pushes and merges trigger CI and deployment.
+If publishing an update to workflow files, the token also needs workflow write
+permission. Rotate expiring tokens; missing credentials leave the PR open.
+The secret-free metadata workflow verifies the Dependabot commit first; privileged
+`workflow_run` jobs validate that metadata against the current PR before using secrets.
 
 ## Map of the rest of the documentation
 

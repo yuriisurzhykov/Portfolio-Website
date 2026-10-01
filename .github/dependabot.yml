@@ -8,8 +8,13 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     open-pull-requests-limit: 10
+    groups:
+      npm-patch-minor:
+        update-types:
+          - "minor"
+          - "patch"
 
   # Actions referenced with a floating tag (e.g. actions/checkout@v4) still
   # need their own updates — Dependabot's github-actions ecosystem is what
@@ -18,4 +23,9 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    groups:
+      actions-patch-minor:
+        update-types:
+          - "minor"
+          - "patch"

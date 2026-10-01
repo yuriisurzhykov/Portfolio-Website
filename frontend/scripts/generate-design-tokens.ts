@@ -6,7 +6,7 @@
  * OG-image/WebGL adapters — none of which may import the compiler or the
  * raw theme source directly). See `npm run tokens:generate`/`tokens:check`.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { compileDesignTokens, DesignTokenBuildError } from "@portfolio/design-tokens";
 import compilerInput from "../src/shared/ui/theme/compiler.config";
@@ -39,12 +39,35 @@ async function main(): Promise<void> {
         console.warn(`[tokens:generate] ${warning}`);
     }
 
-    await mkdir(GENERATED_DIR, { recursive: true });
     const cssPath = path.join(GENERATED_DIR, "tokens.css");
     const resolvedPath = path.join(GENERATED_DIR, "resolved.ts");
+    const outputs = [
+        { file: cssPath, content: `${css}\n` },
+        { file: resolvedPath, content: serializeResolvedModule(resolved) },
+    ];
 
-    await writeFile(cssPath, `${css}\n`, "utf8");
-    await writeFile(resolvedPath, serializeResolvedModule(resolved), "utf8");
+    if (process.argv.includes("--check")) {
+        const stale: string[] = [];
+        for (const { file, content } of outputs) {
+            const existing = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return null;
+                throw error;
+            });
+            if (existing?.replace(/\r\n/g, "\n") !== content) {
+                stale.push(path.relative(THEME_DIR, file));
+            }
+        }
+        if (stale.length > 0) {
+            throw new Error(`Design tokens are stale: ${stale.join(", ")}. Run npm run tokens:generate.`);
+        }
+        console.log("Generated design tokens are up to date.");
+        return;
+    }
+
+    await mkdir(GENERATED_DIR, { recursive: true });
+    for (const { file, content } of outputs) {
+        await writeFile(file, content, "utf8");
+    }
 
     console.log(`Generated design tokens: ${cssPath}`);
     console.log(`Generated resolved data: ${resolvedPath}`);

@@ -24,7 +24,9 @@ export const darkTheme = defineTheme(colorContract, mergeTokenTree(sharedColorRo
 
     textPrimary: "{color.neutral.50}",
     textSecondary: "{color.neutral.200}",
-    textMuted: "{color.neutral.400}",
+    // Keep body copy comfortably above WCAG AA on the dark surfaces used
+    // by cards and footer links, including the translucent raised surface.
+    textMuted: "{color.neutral.300}",
     textFaint: "{color.neutral.300}",
     textChip: "{color.neutral.100}",
     textInverse: "{color.neutral.950}",

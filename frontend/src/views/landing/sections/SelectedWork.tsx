@@ -78,8 +78,9 @@ export function SelectedWork({ items }: SelectedWorkProps) {
             id="work"
             className="max-w-(--layout-content-max-width) mx-auto px-2xl py-xs scroll-mt-20"
         >
-            <Text variant={ "body-lg" }
-                  className="mb-md text-accent-text font-bold">{ ln("eyebrow.selectedWork") }</Text>
+            <Text as="h2" variant="body-lg" className="mb-md text-accent-text font-bold">
+                { ln("eyebrow.selectedWork") }
+            </Text>
             <div className="grid gap-lg" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(18.75rem, 1fr))" } }>
                 { items.map((item) => (
                     <WorkCard key={ item.slug } item={ item }/>

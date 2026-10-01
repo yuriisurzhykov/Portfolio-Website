@@ -82,7 +82,7 @@ jobs:
       - name: Prepare workspace
         uses: ./.github/actions/prepare-workspace
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright

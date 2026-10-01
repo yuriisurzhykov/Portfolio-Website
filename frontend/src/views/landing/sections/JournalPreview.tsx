@@ -23,7 +23,7 @@ export function JournalPreview({ post }: JournalPreviewProps) {
             id="journal"
             className="max-w-(--layout-content-max-width) mx-auto px-2xl pb-[clamp(64px,8vw,96px)] scroll-mt-20"
         >
-            <Text variant="body-lg" className="mb-md text-text-primary">{ ln("eyebrow.fromJournal") }</Text>
+            <Text as="h2" variant="body-lg" className="mb-md text-text-primary">{ ln("eyebrow.fromJournal") }</Text>
             <Link
                 href={ `/journal/${ post.slug }` }
                 className="group relative block p-xl pl-2xl bg-surface-base border border-border-subtle rounded-xl hover:border-border-default transition-colors duration-normal"

@@ -3,9 +3,11 @@ import * as React from "react";
 import { cn } from "@/shared/lib/utils";
 
 export type EyebrowTone = "accent" | "muted";
+type EyebrowElement = HTMLParagraphElement | HTMLHeadingElement;
 
-export interface EyebrowProps extends HTMLAttributes<HTMLParagraphElement> {
+export interface EyebrowProps extends HTMLAttributes<HTMLElement> {
     tone?: EyebrowTone;
+    as?: "p" | "h2";
 }
 
 const toneClasses: Record<EyebrowTone, string> = {
@@ -21,13 +23,15 @@ const toneClasses: Record<EyebrowTone, string> = {
  * marks the page-identity kicker (one per page); `tone="muted"` marks
  * in-page section labels — matches the approved design exactly.
  */
-export const Eyebrow = React.forwardRef<HTMLParagraphElement, EyebrowProps>(
+export const Eyebrow = React.forwardRef<EyebrowElement, EyebrowProps>(
     function Eyebrow(
-        { tone = "muted", className, children, ...rest }: EyebrowProps,
-        ref: ForwardedRef<HTMLParagraphElement>,
+        { tone = "muted", as, className, children, ...rest }: EyebrowProps,
+        ref: ForwardedRef<EyebrowElement>,
     ) {
+        const Component = as ?? "p";
+
         return (
-            <p
+            <Component
                 ref={ ref }
                 className={ cn(
                     "font-mono font-bold text-micro uppercase tracking-widest",
@@ -37,7 +41,7 @@ export const Eyebrow = React.forwardRef<HTMLParagraphElement, EyebrowProps>(
                 { ...rest }
             >
                 { children }
-            </p>
+            </Component>
         );
     },
 );

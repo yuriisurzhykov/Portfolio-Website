@@ -18,7 +18,7 @@ export function Principles({ principles }: PrinciplesProps) {
     return (
         <section
             className="max-w-(--layout-content-max-width) mx-auto px-(--layout-section-horizontal-padding) pb-[clamp(64px,8vw,96px)]">
-            <Eyebrow className="mb-md">{ ln("eyebrow.howIWork") }</Eyebrow>
+            <Eyebrow as="h2" className="mb-md">{ ln("eyebrow.howIWork") }</Eyebrow>
             <div className="grid gap-md" style={ { gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))" } }>
                 { principles.map((principle) => (
                     <Card key={ pick(principle.title) } className="p-lg">

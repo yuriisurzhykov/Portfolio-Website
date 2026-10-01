@@ -81,7 +81,7 @@ function backendWebChecks() {
         run("Install workspace dependencies (frontend/ + backend/)", repoRoot, "npm ci", {});
     }
     run("Apply migrations to the CI database", backend, "npx prisma migrate deploy", backendWebEnv);
-    run("Audit dependencies for high/critical vulnerabilities", repoRoot, "npm audit --omit=dev --omit=optional --audit-level=high", {});
+    run("Audit all dependencies", repoRoot, "npm audit --audit-level=low", {});
     run("Typecheck backend", backend, "npm run typecheck", backendWebEnv);
     run("Run backend test suite", backend, "npx vitest run", backendWebEnv);
     if (!skipMutation) run("Run backend mutation tests", backend, "npm run test:mutation", backendWebEnv);
