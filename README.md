@@ -325,8 +325,29 @@ fine-grained PAT with repository contents and pull requests
 write access; unlike `GITHUB_TOKEN`, its pushes and merges trigger CI and deployment.
 If publishing an update to workflow files, the token also needs workflow write
 permission. Rotate expiring tokens; missing credentials leave the PR open.
-The secret-free metadata workflow verifies the Dependabot commit first; privileged
-`workflow_run` jobs validate that metadata against the current PR before using secrets.
+The secret-free metadata workflow verifies the Dependabot commit first. Major-update
+repair runs only trusted default-branch orchestration on the host. PR dependencies
+are prepared without credentials, then Codex runs in a disposable non-root container
+with no host mounts or general internet access. A narrow Responses proxy keeps
+`OPENAI_API_KEY` outside that container. A fresh publication runner validates the
+run-bound patch and uses `DEPENDENCY_UPDATE_TOKEN` through the GitHub Git data API;
+it never executes PR source, install scripts or hooks. Concurrent PR changes stop
+publication when they diverge from the captured commit, and major updates still
+require human review. The GitHub ref API does not guarantee exact-SHA comparison
+against a concurrent branch reset to an ancestor.
+
+Automatic repairs may change regular application source in `frontend/src`,
+`backend/src` and `packages/design-tokens/src`, workspace package manifests and
+the root lockfile. Tests, snapshots, workflows, automation, symlinks, binary files
+and executable-mode changes are rejected. The `Isolated repair security` CI job
+checks helpers and real Ubuntu container isolation with canary credentials and a
+fake Responses upstream; it spends nothing on inference. Repair failures and
+missing credentials are reported in Actions job summaries.
+
+The implementation is bundled as one local
+[Dependabot repair action](.github/actions/dependabot-repair/README.md), with its
+own `scripts/` grouped by responsibility, with tests beside each part; the workflow
+only wires its repair and publication jobs.
 
 ## Map of the rest of the documentation
 

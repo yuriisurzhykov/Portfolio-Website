@@ -1,0 +1,64 @@
+name: Isolated Dependabot repair
+description: Repair a verified major update in a container or publish its validated patch on a fresh runner.
+inputs:
+  operation:
+    description: repair or publish; each operation must run on a separate runner
+    required: true
+  pr-number:
+    description: Verified open same-repository Dependabot PR number
+    required: true
+  pr-sha:
+    description: Verified full head SHA
+    required: true
+  pr-branch:
+    description: Verified head branch
+    required: true
+  api-key:
+    description: OpenAI key; used only by the external proxy during repair
+    required: false
+  publication-token:
+    description: GitHub token; provided only to the publication operation
+    required: false
+outputs:
+  status:
+    description: repaired, failed, unavailable, stale, published or no_changes
+    value: ${{ steps.repair.outputs.status || steps.publish.outputs.status }}
+runs:
+  using: composite
+  steps:
+    - id: repair
+      if: inputs.operation == 'repair'
+      env:
+        REPAIR_ACTION_PATH: ${{ github.action_path }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_SHA: ${{ inputs.pr-sha }}
+        PR_BRANCH: ${{ inputs.pr-branch }}
+        OPENAI_API_KEY: ${{ inputs.api-key }}
+      uses: actions/github-script@v8
+      with:
+        script: await require(process.env.REPAIR_ACTION_PATH + '/scripts/runtime/run.cjs')({ github, context, core });
+    - id: publish
+      if: inputs.operation == 'publish'
+      env:
+        REPAIR_ACTION_PATH: ${{ github.action_path }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_SHA: ${{ inputs.pr-sha }}
+        PR_BRANCH: ${{ inputs.pr-branch }}
+        UPDATE_TOKEN: ${{ inputs.publication-token }}
+      uses: actions/github-script@v8
+      with:
+        github-token: ${{ inputs.publication-token || github.token }}
+        script: |
+          if (!process.env.UPDATE_TOKEN) {
+            core.setOutput('status', 'unavailable');
+            core.setFailed('Configure DEPENDENCY_UPDATE_TOKEN to publish repairs and trigger CI.');
+            return;
+          }
+          const { identityFromEnv } = require(process.env.REPAIR_ACTION_PATH + '/scripts/artifact/identity.cjs');
+          const { validateArtifact } = require(process.env.REPAIR_ACTION_PATH + '/scripts/artifact/artifact.cjs');
+          const { publishRepair } = require(process.env.REPAIR_ACTION_PATH + '/scripts/publication/publish.cjs');
+          const identity = identityFromEnv();
+          const artifact = validateArtifact(require('node:path').join(process.env.RUNNER_TEMP, 'repair-artifact'), identity);
+          const result = await publishRepair({ github, context, identity, artifact });
+          core.setOutput('status', result.status);
+          await core.summary.addRaw(`Repair publication: ${result.status}${result.sha ? ' (' + result.sha + ')' : ''}. Major updates require human review.`).write();

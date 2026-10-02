@@ -26,136 +26,69 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-
       - uses: actions/download-artifact@v4
         with:
           name: dependency-update
           path: dependency-metadata
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Validate the PR and metadata again
+      - name: Validate the PR and metadata
         id: metadata
         uses: actions/github-script@v8
         with:
-          script: |
-            await require('./.github/scripts/read-dependency-update.cjs')({ github, context, core });
+          script: await require('./.github/scripts/read-dependency-update.cjs')({ github, context, core });
 
   repair:
     needs: metadata
     if: needs.metadata.outputs.update-type == 'version-update:semver-major'
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: portfolio
-          POSTGRES_PASSWORD: portfolio_ci
-          POSTGRES_DB: portfolio_test
-        ports: [5432:5432]
-        options: >-
-          --health-cmd pg_isready --health-interval 10s
-          --health-timeout 5s --health-retries 5
-    env:
-      DATABASE_URL: postgresql://portfolio:portfolio_ci@localhost:5432/portfolio_test
-      JWT_ACCESS_SECRET: ci-access-secret-not-for-real-use
-      JWT_REFRESH_SECRET: ci-refresh-secret-not-for-real-use
-      GH_REPO: ${{ github.repository }}
-    permissions:
-      contents: write
-      pull-requests: write
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.repair.outputs.status }}
     steps:
-      - name: Checkout the Dependabot branch
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.metadata.outputs.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-
-      - name: Check for Codex credentials
-        id: codex-key
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          UPDATE_TOKEN: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
-        run: |
-          if [ -n "$OPENAI_API_KEY" ] && [ -n "$UPDATE_TOKEN" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Explain missing Codex credentials
-        if: steps.codex-key.outputs.available != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ needs.metadata.outputs.number }}
-        run: gh pr comment "$PR_NUMBER" --body 'Codex needs repository secrets `OPENAI_API_KEY` and `DEPENDENCY_UPDATE_TOKEN` (fine-grained PAT). The update token must allow branch writes so repaired commits trigger CI. Major updates always require human review.'
-
-      - name: Prepare dependencies and test database
-        id: prepare
-        if: steps.codex-key.outputs.available == 'true'
-        # A broken install or migration is itself a reason for the repair attempt.
-        continue-on-error: true
-        uses: ./.github/actions/prepare-workspace
+      - name: Run the isolated repair action
+        id: repair
+        uses: ./.github/actions/dependabot-repair
         with:
-          node-version: "24"
-
-      - name: Ask Codex to adapt the major update
-        id: codex
-        if: steps.codex-key.outputs.available == 'true'
-        uses: openai/codex-action@v1
+          operation: repair
+          pr-number: ${{ needs.metadata.outputs.number }}
+          pr-sha: ${{ needs.metadata.outputs.sha }}
+          pr-branch: ${{ needs.metadata.outputs.branch }}
+          api-key: ${{ secrets.OPENAI_API_KEY }}
+      - name: Upload untrusted repair data
+        if: always() && steps.repair.outputs.status != 'unavailable' && steps.repair.outputs.status != 'stale'
+        uses: actions/upload-artifact@v4
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          sandbox: workspace-write
-          safety-strategy: drop-sudo
-          allow-bot-users: dependabot[bot]
-          prompt: >-
-            This is a Dependabot major dependency update in the current pull request.
-            Inspect the package and lockfile changes, identify breaking changes, and
-            adapt application code and tests where needed. Keep security checks and
-            test assertions intact; do not weaken or skip checks, and do not update
-            visual snapshots to conceal behavior changes. Run the relevant type,
-            unit, and build checks available in this repository. Make focused code
-            changes even if dependency installation or migrations failed; report
-            checks that could not run and leave the repaired commit for CI validation.
-            changes only. Do not commit, push, merge, change .github files, or alter workflow permissions.
+          name: isolated-repair-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/repair-artifact
+          if-no-files-found: warn
+          retention-days: 1
 
-      - name: Commit and push Codex changes to this pull request
-        if: steps.codex-key.outputs.available == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
-          PR_BRANCH: ${{ needs.metadata.outputs.branch }}
-          PR_NUMBER: ${{ needs.metadata.outputs.number }}
-          PR_SHA: ${{ needs.metadata.outputs.sha }}
-        run: |
-          git diff --check
-          if [ "$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)" != "$PR_SHA" ]; then
-            echo 'PR changed while Codex was running; discard this attempt.'
-            exit 1
-          fi
-          if [ -n "$(git status --porcelain -- .github)" ]; then
-            echo '::error::Codex changed automation files; human review is required before publishing this attempt.'
-            exit 1
-          fi
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "fix: adapt major dependency update"
-            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push origin "HEAD:refs/heads/$PR_BRANCH"
-          fi
-
-      - name: Leave the repair attempt for human review
-        if: always() && steps.codex-key.outputs.available == 'true'
-        env:
-          PR_NUMBER: ${{ needs.metadata.outputs.number }}
-          CODEX_SUMMARY: ${{ steps.codex.outputs.final-message }}
-        uses: actions/github-script@v8
+  publish:
+    needs: [metadata, repair]
+    if: needs.repair.outputs.status == 'repaired'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
         with:
-          script: |
-            const summary = process.env.CODEX_SUMMARY || 'The repair attempt did not finish. Inspect the workflow logs before retrying.';
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number: Number(process.env.PR_NUMBER),
-              body: 'Codex major-update repair attempt (human review required; no automatic merge):\n\n' + summary.slice(0, 12000),
-            });
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: isolated-repair-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/repair-artifact
+      - name: Publish the validated repair on this fresh runner
+        uses: ./.github/actions/dependabot-repair
+        with:
+          operation: publish
+          pr-number: ${{ needs.metadata.outputs.number }}
+          pr-sha: ${{ needs.metadata.outputs.sha }}
+          pr-branch: ${{ needs.metadata.outputs.branch }}
+          publication-token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
