@@ -20,6 +20,6 @@
     "@types/node": "^26",
     "eslint": "^10.8.0",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.2"
   }
 }
