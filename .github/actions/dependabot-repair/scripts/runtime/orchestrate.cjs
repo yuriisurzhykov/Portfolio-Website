@@ -4,7 +4,7 @@ const path = require('node:path');
 const {randomBytes} = require('node:crypto');
 const {validateIdentity, parsePatch} = require('../artifact/artifact.cjs');
 const baseEnv = () => ({PATH: process.env.PATH, HOME: process.env.HOME, SYSTEMROOT: process.env.SYSTEMROOT});
-const executeDefault = (command, args, options) => execFileSync(command, args, {timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], ...options});
+const executeDefault = (command, args, options) => execFileSync(command, args, {timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'], ...options});
 const hardened = ['--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--user=1000:1000', '--memory=4g', '--cpus=2', '--pids-limit=256', '--tmpfs=/tmp:rw,nosuid,nodev,size=2g', '-e', 'HOME=/tmp/repair-home'];
 
 async function runRepair({identity, sourceArchive, outputDirectory, apiKey, execute = executeDefault}) {
@@ -15,8 +15,8 @@ async function runRepair({identity, sourceArchive, outputDirectory, apiKey, exec
     const work = `${id}-work`, output = `${id}-output`, db = `${id}-db`, proxy = `${id}-proxy`, prep = `${id}-prep`, worker = `${id}-worker`;
     const bridges = [`br-${id}`, `be-${id}`];
     const firewall = [];
-    const command = (bin, args, env = {}) => execute(bin, args, {env: {...baseEnv(), ...env}});
-    const docker = args => command('docker', args);
+    const command = (bin, args, env = {}, input) => execute(bin, args, {env: {...baseEnv(), ...env}, input});
+    const docker = (args, input) => command('docker', args, {}, input);
     const bestEffort = (bin, args) => {try {command(bin, args);} catch { /* Cleanup all remaining resources. */ }};
     fs.mkdirSync(outputDirectory, {recursive: true});
     const mount = ['--mount', `type=volume,src=${work},dst=/work`, '--mount', `type=volume,src=${output},dst=/output`];
@@ -35,8 +35,7 @@ async function runRepair({identity, sourceArchive, outputDirectory, apiKey, exec
         docker(['run', '-d', '--rm', '--name', db, '--network', internal, '--network-alias', 'db', '--user=postgres', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=512m', '--pids-limit=128', '-e', 'POSTGRES_USER=portfolio', '-e', 'POSTGRES_PASSWORD=portfolio_ci', '-e', 'POSTGRES_DB=portfolio_test', 'postgres:16-alpine']);
         docker(['run', '-d', '--name', prep, '--network', internal, ...hardened, ...mount, image]);
         docker(['network', 'connect', egress, prep]);
-        docker(['cp', sourceArchive, `${prep}:/tmp/source.tar.gz`]);
-        docker(['exec', prep, 'tar', '-xzf', '/tmp/source.tar.gz', '--strip-components=1', '--no-same-owner', '-C', '/work']);
+        docker(['exec', '-i', prep, 'tar', '-xzf', '-', '--strip-components=1', '--no-same-owner', '-C', '/work'], fs.readFileSync(sourceArchive));
         docker(['exec', prep, 'sh', '-c', 'git -c init.templateDir= init && git -c core.hooksPath=/dev/null add -A && git -c core.hooksPath=/dev/null -c user.name=repair -c user.email=repair@localhost commit --allow-empty -m baseline']);
         let ready = false;
         for (let i = 0; i < 30; i++) {

@@ -6,15 +6,26 @@ const path = require('node:path');
 const identity = {number: 83, headSha: 'a'.repeat(40), branch: 'dependabot/npm/test', updateType: 'version-update:semver-major', runId: 1, runAttempt: 1};
 async function fixture(t, failAt) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'repair-run-')); t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const sourceArchive = path.join(dir, 'source.tar.gz');
+    fs.writeFileSync(sourceArchive, 'archive fixture');
     const calls = [];
     const execute = (command, args, options) => {
         calls.push({command, args, options});
         if (failAt && args.join(' ').includes(failAt)) throw new Error('simulated failure');
         return Buffer.from('');
     };
-    return {calls, execute, outputDirectory: dir, sourceArchive: '/tmp/source.tar.gz', apiKey: 'host-canary-key', identity};
+    return {calls, execute, outputDirectory: dir, sourceArchive, apiKey: 'host-canary-key', identity};
 }
 const run = f => require('./orchestrate.cjs').runRepair(f);
+test('streams source archive into writable volume without docker cp on read-only rootfs', async t => {
+    const f = await fixture(t);
+    assert.equal((await run(f)).status, 'repaired');
+    assert.ok(!f.calls.some(c => c.args[0] === 'cp'));
+    const extraction = f.calls.find(c => c.args[0] === 'exec' && c.args.includes('tar'));
+    assert.ok(extraction.args.includes('-i'));
+    assert.equal(extraction.args[extraction.args.indexOf('-xzf') + 1], '-');
+    assert.deepEqual(extraction.options.input, fs.readFileSync(f.sourceArchive));
+});
 test('only proxy receives key; workloads use volumes and hardened container options', async t => {
     const f = await fixture(t); assert.equal((await run(f)).status, 'repaired');
     const runs = f.calls.filter(c => c.args[0] === 'run');
