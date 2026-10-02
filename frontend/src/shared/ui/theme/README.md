@@ -117,9 +117,9 @@ composites/gradients.ts) содержит комментарий, называю
 
 ### Миграция/отказоустойчивость
 
-`npm run tokens:check` (генерация + `git diff --exit-code`) — часть CI
+`npm run tokens:check` (компиляция и сравнение с файлами без их перезаписи) — часть CI
 (`backend-web-checks.yml`), гарантирует, что закоммиченный
-`generated/tokens.css` никогда не расходится с реальным исходником
+`generated/tokens.css` и `generated/resolved.ts` никогда не расходятся с реальным исходником
 токенов. Визуальные Playwright-baseline'ы (page-level, component-gallery,
 OG-image) требуют регенерации после этого изменения — реальное изменение
 пикселей (danger-цвет, hue брендового акцента), не просто рефакторинг;

@@ -1,6 +1,22 @@
 import "@testing-library/jest-dom/vitest";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+
+// jsdom does not provide the browser API used by MantineProvider.
+Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn((media: string) => ({
+        matches: false,
+        media,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(() => true),
+    })),
+});
 
 /**
  * Without this, every `render(...)` across every test file keeps its DOM

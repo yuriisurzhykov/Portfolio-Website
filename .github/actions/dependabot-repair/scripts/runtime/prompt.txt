@@ -1,0 +1,8 @@
+Repair this verified Dependabot major dependency update. Keep changes focused on
+application source and package manifests. Preserve all tests and security checks.
+Do not change tests, snapshots, workflows, automation or configuration files.
+Run relevant available type and unit checks; report anything blocked by setup
+failure or network isolation. Dependencies were prepared without credentials;
+repair runs with no general internet access. Only the local Responses proxy and
+the disposable database are reachable. Never publish, commit, push or merge.
+Leave changes for human review and ordinary CI. Summarize the result and checks.

@@ -27,7 +27,7 @@ export function ThemeSegmentedToggle() {
     };
 
     return (
-        <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-xxs">
+        <div className="flex items-center gap-0.5 bg-surface-icon border border-border-subtle rounded-pill p-0.75">
             { OPTIONS.map((option) => {
                 const isActive = theme === option;
                 return (

@@ -1,0 +1,94 @@
+name: Try Codex fixes for major dependency updates
+
+on:
+  workflow_run:
+    workflows: [Dependabot update metadata]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: dependabot-major-codex-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      update-type: ${{ steps.metadata.outputs.type }}
+      number: ${{ steps.metadata.outputs.number }}
+      sha: ${{ steps.metadata.outputs.sha }}
+      branch: ${{ steps.metadata.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: dependency-update
+          path: dependency-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate the PR and metadata
+        id: metadata
+        uses: actions/github-script@v8
+        with:
+          script: await require('./.github/scripts/read-dependency-update.cjs')({ github, context, core });
+
+  repair:
+    needs: metadata
+    if: needs.metadata.outputs.update-type == 'version-update:semver-major'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.repair.outputs.status }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Run the isolated repair action
+        id: repair
+        uses: ./.github/actions/dependabot-repair
+        with:
+          operation: repair
+          pr-number: ${{ needs.metadata.outputs.number }}
+          pr-sha: ${{ needs.metadata.outputs.sha }}
+          pr-branch: ${{ needs.metadata.outputs.branch }}
+          api-key: ${{ secrets.OPENAI_API_KEY }}
+      - name: Upload untrusted repair data
+        if: always() && steps.repair.outputs.status != 'unavailable' && steps.repair.outputs.status != 'stale'
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-repair-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/repair-artifact
+          if-no-files-found: warn
+          retention-days: 1
+
+  publish:
+    needs: [metadata, repair]
+    if: needs.repair.outputs.status == 'repaired'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: isolated-repair-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/repair-artifact
+      - name: Publish the validated repair on this fresh runner
+        uses: ./.github/actions/dependabot-repair
+        with:
+          operation: publish
+          pr-number: ${{ needs.metadata.outputs.number }}
+          pr-sha: ${{ needs.metadata.outputs.sha }}
+          pr-branch: ${{ needs.metadata.outputs.branch }}
+          publication-token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}

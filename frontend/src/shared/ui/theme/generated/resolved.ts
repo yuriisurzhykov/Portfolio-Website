@@ -34,7 +34,7 @@ export const resolved = {
             "surfacePlaceholderSecondary": "hsl(219 15% 8%)",
             "textPrimary": "hsl(30 5% 91%)",
             "textSecondary": "hsl(30 3% 73%)",
-            "textMuted": "hsl(30 2% 55%)",
+            "textMuted": "hsl(30 2% 64%)",
             "textFaint": "hsl(30 2% 64%)",
             "textChip": "hsl(30 4% 82%)",
             "textInverse": "hsl(240 8% 5%)",

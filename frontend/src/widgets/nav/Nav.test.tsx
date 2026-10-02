@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SITE_CONTENT_DEFAULTS } from "@portfolio/backend";
-import { I18nProvider } from "@/shared/i18n";
-import { ThemeProvider } from "@/shared/theme";
+import { MainProviders } from "@/app/providers/MainProviders";
 import { Nav } from "./Nav";
 
 vi.mock("next/navigation", () => ({
@@ -12,11 +11,9 @@ vi.mock("next/navigation", () => ({
 
 function renderNav() {
     return render(
-        <ThemeProvider>
-            <I18nProvider>
-                <Nav config={SITE_CONTENT_DEFAULTS.config} />
-            </I18nProvider>
-        </ThemeProvider>,
+        <MainProviders>
+            <Nav config={SITE_CONTENT_DEFAULTS.config} />
+        </MainProviders>,
     );
 }
 

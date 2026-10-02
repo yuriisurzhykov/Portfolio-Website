@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Keep Mantine's global styles below the application's base rules and utilities. */
+@import "@mantine/core/styles.css" layer(base);
 @import "./globals.css";
 @import "./code-theme.css";
 @import "./gradients.css";

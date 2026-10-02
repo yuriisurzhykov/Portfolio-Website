@@ -1,6 +1,10 @@
 {
   "name": "portfolio-website",
   "private": true,
+  "engines": {
+    "node": ">=24.15.0",
+    "npm": ">=11.19.0"
+  },
   "description": "Repo-level workspace root. Wires up the Next.js app (frontend/) and its backend package (backend/) as an npm workspace — the legacy Vite SPA that used to live at frontend/ has been fully retired; this is the renamed Next.js app that replaced it.",
   "workspaces": [
     "frontend",
@@ -13,8 +17,16 @@
     "verify:visual": "node scripts/verify-ci.mjs --only=visual",
     "verify:quick": "node scripts/verify-ci.mjs --skip-mutation --skip-install"
   },
+  "devDependencies": {
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "prisma": "^7.10.0"
+  },
   "overrides": {
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "deepmerge-ts": "8.0.2",
+    "mysql2": "3.24.4",
+    "qs": "6.16.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
