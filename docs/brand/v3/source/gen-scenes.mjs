@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
-import { C, FONTS, markAt, letters, crossRects, G as GEO } from './brand.mjs';
+import { C, FONTS, markAt, markWidth, letters, crossRects, G as GEO } from './brand.mjs';
 const [OUT, TMP, onlyArg] = process.argv.slice(2);
 fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(TMP, { recursive: true });
 
@@ -21,17 +21,16 @@ const dim = (x1, x2, y, label, color = C.haze, size = 12) => `<g stroke="${color
   `<rect x="${(x1 + x2) / 2 - label.length * size * 0.36 - 10}" y="${y - 9}" width="${label.length * size * 0.72 + 20}" height="18" fill="${C.abyss}"/>` +
   `<text x="${(x1 + x2) / 2}" y="${y + 4}" text-anchor="middle" font-family="JB" font-size="${size}" letter-spacing="1.5" fill="${C.haze}">${label}</text>`;
 const ghost = '#0F141B';
-// The seal as a technical drawing: frame and letter outlines in hairline, the
-// cross in gold (the drawing's only colour), dimensioned in drawing convention.
+// The mark as a technical drawing: letter outlines in hairline, the cross in
+// gold (the drawing's only colour), dimensioned in drawing convention.
 function drawing(x, y, h, { color = C.line, dims = true, sw = 1.25, label = 12 } = {}) {
-  const k = h / 96, { Y, S } = letters();
-  let g = `<rect x="${x}" y="${y}" width="${h}" height="${h}" fill="none" stroke="${color}" stroke-width="${sw}"/>`;
-  g += `<g transform="translate(${x} ${y}) scale(${k})"><path d="${Y.d} ${S.d}" fill="none" stroke="${color}" stroke-width="${sw / k}"/>` +
+  const k = h / GEO.h, w = GEO.w * k, { Y, S } = letters();
+  let g = `<g transform="translate(${x} ${y}) scale(${k})"><path d="${Y.d} ${S.d}" fill="none" stroke="${color}" stroke-width="${sw / k}"/>` +
     crossRects().map((r) => `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${C.gold}"/>`).join('') + `</g>`;
   if (dims) {
-    const off = Math.max(28, h * 0.1);
-    g += dimLine(x, x + h, y - off, '96', color, label) + dimLineV(x + h + off, y, y + h, '96', color, label) +
-      dimLineV(x - off, y, y + GEO.cy * k, '40', color, label);
+    const off = Math.max(26, h * 0.09);
+    g += dimLine(x, x + w, y - off, String(GEO.w), color, label) + dimLineV(x + w + off, y, y + h, String(GEO.h), color, label) +
+      dimLineV(x - off, y, y + GEO.cy * k, String(GEO.cy), color, label);
   }
   return g;
 }
@@ -43,7 +42,7 @@ function dimLineV(x, y1, y2, t, color, size) {
 }
 
 const S = {};
-const avatar = (bg, ink, node) => `<body style="background:${bg}">${mark(256, 256, 512, ink, node)}</body>`;
+const avatar = (bg, ink, node) => `<body style="background:${bg}">${mark((1024 - markWidth(560)) / 2, 232, 560, ink, node)}</body>`;
 S['avatar-abyss'] = { w: 1024, h: 1024, html: avatar(C.abyss, C.platinum, C.gold) };
 S['avatar-gold'] = { w: 1024, h: 1024, html: avatar(C.gold, C.abyss, C.abyss) };
 
@@ -59,22 +58,22 @@ S['linkedin-banner'] = { w: 1584, h: 396, html: banner(1584, 396) };
 S['x-header'] = { w: 1500, h: 500, html: banner(1500, 500) };
 
 S['og-image'] = { w: 1200, h: 630, html: `<body>
-  ${layer(1200, 630, drawing(902, 250, 210, { label: 11 }) + dim(80, 1120, 560, 'KOTLIN · AOSP · CAMERA2 · KSP · EVENT-DRIVEN ARCHITECTURE', '#2A3442', 12))}
-  ${mark(80, 72, 56, C.platinum)}
-  <div class="abs x" style="left:164px;top:80px;font-weight:500;font-size:17px;letter-spacing:.16em">YURII SURZHYKOV</div>
-  <div class="abs mono" style="left:164px;top:108px;font-size:11px;color:${C.haze}">Android systems engineer</div>
+  ${layer(1200, 630, drawing(880, 220, 230, { label: 11 }) + dim(80, 1120, 560, 'KOTLIN · AOSP · CAMERA2 · KSP · EVENT-DRIVEN ARCHITECTURE', '#2A3442', 12))}
+  ${mark(80, 66, 64, C.platinum)}
+  <div class="abs x" style="left:160px;top:80px;font-weight:500;font-size:17px;letter-spacing:.16em">YURII SURZHYKOV</div>
+  <div class="abs mono" style="left:160px;top:108px;font-size:11px;color:${C.haze}">Android platform &amp; architecture</div>
   <div class="abs x" style="left:80px;top:230px;width:900px;font-weight:300;font-size:50px;line-height:1.14;letter-spacing:-.01em">I design the systems other engineers <span style="color:${C.gold}">build on top of.</span></div>
   </body>` };
 
-const cardFront = (w, h) => `<div class="abs" style="inset:0;background:${C.abyss}">${mark((w - h * 0.3) / 2, h * 0.3, h * 0.3, C.platinum)}
+const cardFront = (w, h) => `<div class="abs" style="inset:0;background:${C.abyss}">${mark((w - markWidth(h * 0.4)) / 2, h * 0.22, h * 0.4, C.platinum)}
   <div class="abs mono" style="left:0;right:0;bottom:${h * 0.11}px;text-align:center;color:${C.haze};font-size:${h * 0.026}px;letter-spacing:.32em">Engineered end to end</div></div>`;
 const cardBack = (w, h) => `<div class="abs" style="inset:0;background:${C.abyss};padding:${h * 0.12}px ${w * 0.08}px;display:flex;flex-direction:column;justify-content:space-between">
   <div class="abs mono" style="right:${w * 0.08}px;top:${h * 0.12}px;font-size:${h * 0.026}px;letter-spacing:.3em;color:${C.gold}">S·D·G</div>
   <div><div class="x" style="font-weight:500;font-size:${h * 0.05}px;letter-spacing:.16em">YURII SURZHYKOV</div>
-  <div class="mono" style="margin-top:${h * 0.035}px;font-size:${h * 0.028}px;color:${C.haze}">Android systems engineer</div></div>
+  <div class="mono" style="margin-top:${h * 0.035}px;font-size:${h * 0.028}px;color:${C.haze}">Android platform &amp; architecture</div></div>
   <div style="display:flex;justify-content:space-between;align-items:flex-end">
   <div style="font-family:JB;font-size:${h * 0.03}px;line-height:1.95;color:${C.platinum}">yuriisurzhykov@gmail.com<br>github.com/yuriisurzhykov<br>linkedin.com/in/yuriisurzhykov</div>
-  <svg width="${h * 0.13}" height="${h * 0.13}">${markAt(0, 0, h * 0.13, C.platinum)}</svg></div></div>`;
+  <svg width="${markWidth(h * 0.17)}" height="${h * 0.17}">${markAt(0, 0, h * 0.17, C.platinum)}</svg></div></div>`;
 S['card-front'] = { w: 1050, h: 600, html: `<body>${cardFront(1050, 600)}</body>` };
 S['card-back'] = { w: 1050, h: 600, html: `<body>${cardBack(1050, 600)}</body>` };
 // Gilded edge: a 2px gold line on the card's edge, the one place gold meets paper.
@@ -85,8 +84,8 @@ S['card-mockup'] = { w: 1800, h: 1200, html: `<body style="background:radial-gra
   ${card(240, 230, -7, cardBack(700, 400))}${card(880, 600, 4, cardFront(700, 400))}</body>` };
 
 S['slide-title'] = { w: 1920, h: 1080, html: `<body>
-  ${layer(1920, 1080, drawing(1420, 380, 300, { label: 14 }) + dim(120, 1800, 900, 'ADR-014 · 24 SLIDES · 40 MIN', '#2A3442', 14))}
-  ${mark(120, 104, 64, C.platinum)}
+  ${layer(1920, 1080, drawing(1460, 360, 330, { label: 14 }) + dim(120, 1800, 900, 'ADR-014 · 24 SLIDES · 40 MIN', '#2A3442', 14))}
+  ${mark(120, 96, 76, C.platinum)}
   <div class="abs mono" style="right:120px;top:124px;font-size:16px;color:${C.haze}">Architecture review · 2026</div>
   <div class="abs mono" style="left:120px;top:340px;font-size:18px;color:${C.gold}">ADR-014 · Navigation</div>
   <div class="abs x" style="left:120px;top:392px;width:1300px;font-size:76px;font-weight:300;line-height:1.08;letter-spacing:-.015em">A navigation engine that owns its own rendering</div>
@@ -96,7 +95,7 @@ S['slide-title'] = { w: 1920, h: 1080, html: `<body>
 S['post-journal'] = { w: 1080, h: 1350, html: `<body style="padding:96px">
   <div style="display:flex;justify-content:space-between;align-items:center">
     <div style="font-family:JB;font-size:20px;color:${C.haze};letter-spacing:.06em"><span style="color:${C.gold}">commit</span> 7ff1154</div>
-    <svg width="48" height="48">${markAt(0, 0, 48, C.platinum)}</svg></div>
+    <svg width="${markWidth(56)}" height="56">${markAt(0, 0, 56, C.platinum)}</svg></div>
   <div style="height:1px;background:${C.slate};margin:56px 0 72px"></div>
   <div style="font-family:JB;font-size:20px;color:${C.haze}">refactor(camera):</div>
   <div class="x" style="margin-top:28px;font-size:66px;font-weight:300;line-height:1.12;letter-spacing:-.015em">Move frame timing out of the UI thread. <span style="color:${C.gold}">Nothing else.</span></div>

@@ -1,7 +1,6 @@
-// Brand v3 "Seal": a cruciform monogram. A gold Latin cross divides a square
-// seal into quadrants; Y fills the short upper-left quadrant, S the tall
-// lower-right one, as letters sit in the quarters of the cross in the
-// IC XC inscription on icons. To anyone else it reads as a pair of axes.
+// Brand v3 "Cross": a cruciform monogram. Y and S sit in the quarters of a
+// gold Latin cross, as IC XC does on icons and prosphora seals. To anyone else
+// it reads as a pair of coordinate axes.
 import opentype from 'opentype.js';
 import fs from 'node:fs';
 
@@ -14,47 +13,42 @@ export const C = {
 const cache = {};
 const font = (f) => (cache[f] ??= opentype.parse(fs.readFileSync(`${FONTS}/${f}.ttf`).buffer));
 
-// Glyph scaled so its outline is exactly h tall, centred in a box of width w.
-function fit(f, ch, x, y, h, w) {
-  const fo = font(f), g = fo.charToGlyph(ch), b = g.getBoundingBox();
-  const k = h / (b.y2 - b.y1), gw = (b.x2 - b.x1) * k, ox = x + (w - gw) / 2;
-  return { d: g.getPath(ox - b.x1 * k, y + b.y2 * k, fo.unitsPerEm * k).toPathData(3), x: ox, w: gw };
-}
-
-// Geometry on a 96-unit square. Crossbar at y 40 makes it a Latin cross.
-export const G = { size: 96, frame: 2.5, cx: 48, cy: 40, t: 3.5, gap: 5 };
-const q = (() => {
-  const { size, frame, cx, cy, t, gap } = G;
-  const yBox = { x: frame + gap, y: frame + gap, w: cx - t / 2 - gap - frame - gap, h: cy - t / 2 - gap - frame - gap };
-  const sBox = { x: cx + t / 2 + gap, y: cy + t / 2 + gap, w: size - frame - gap - (cx + t / 2 + gap), h: size - frame - gap - (cy + t / 2 + gap) };
-  return { yBox, sBox };
-})();
-export const QUADS = q;
+// Geometry, in units. A compact Latin cross, 80 × 92: top and side arms are
+// 40, the foot is 52, so the mark sits close to a square but still reads as a cross.
+// The letters sit against the crossing, a 5-unit gap from the arms, the way
+// IC XC sits against the cross on a prosphora seal. No frame: when the mark
+// needs a container it gets a filled tile, never an outline.
+export const G = { w: 80, h: 92, cx: 40, cy: 40, t: 2.6, gap: 5, yh: 24, sh: 34 };
+export const BOX = { w: G.w, h: G.h };
 let glyphs;
+function place(f, ch, h, x, y, anchor) {
+  const fo = font(f), g = fo.charToGlyph(ch), b = g.getBoundingBox(), k = h / (b.y2 - b.y1), w = (b.x2 - b.x1) * k;
+  const ox = anchor === 'rb' ? x - w : x, oy = anchor === 'rb' ? y - h : y;
+  return { d: g.getPath(ox - b.x1 * k, oy + b.y2 * k, fo.unitsPerEm * k).toPathData(3), x: ox, y: oy, w, h };
+}
 export function letters() {
+  const { cx, cy, t, gap, yh, sh } = G;
   glyphs ??= {
-    Y: fit('ArchivoX-900', 'Y', q.yBox.x, q.yBox.y, q.yBox.h, q.yBox.w),
-    S: fit('ArchivoN1-800', 'S', q.sBox.x, q.sBox.y, q.sBox.h, q.sBox.w),
+    Y: place('ArchivoX-900', 'Y', yh, cx - t / 2 - gap, cy - t / 2 - gap, 'rb'),
+    S: place('ArchivoN1-800', 'S', sh, cx + t / 2 + gap, cy + t / 2 + gap, 'lt'),
   };
   return glyphs;
 }
-
-export const crossRects = ({ cx, cy, t, size } = G) => [
-  { x: cx - t / 2, y: 0, w: t, h: size },
-  { x: 0, y: cy - t / 2, w: size, h: t },
+export const crossRects = ({ cx, cy, t, w, h } = G, k = 1) => [
+  { x: cx - (t * k) / 2, y: 0, w: t * k, h },
+  { x: 0, y: cy - (t * k) / 2, w, h: t * k },
 ];
 
-// Seal: frame + cross + letters. `accent` colours the cross; pass ink for a one-colour mark.
-export function markInner(ink, accent = C.gold, { frame = true } = {}) {
+// `accent` colours the cross; pass the ink colour for a one-colour mark.
+// `weight` thickens the cross for small sizes (1.6 below 48 px).
+export function markInner(ink, accent = C.gold, { weight = 1 } = {}) {
   const { Y, S } = letters();
-  const f = G.frame;
-  const cross = crossRects().map((r) => `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${accent ?? ink}"/>`).join('');
-  const box = frame ? `<rect x="${f / 2}" y="${f / 2}" width="${G.size - f}" height="${G.size - f}" fill="none" stroke="${ink}" stroke-width="${f}"/>` : '';
-  return box + cross + `<path d="${Y.d}" fill="${ink}"/><path d="${S.d}" fill="${ink}"/>`;
+  const cross = crossRects(G, weight).map((r) => `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${accent ?? ink}"/>`).join('');
+  return cross + `<path d="${Y.d} ${S.d}" fill="${ink}"/>`;
 }
-export const BOX = { w: G.size, h: G.size };
+export const markWidth = (h) => h * G.w / G.h;
 export function markAt(x, y, h, ink, accent = C.gold, opts) {
-  return `<g transform="translate(${x} ${y}) scale(${h / G.size})">${markInner(ink, accent, opts)}</g>`;
+  return `<g transform="translate(${x} ${y}) scale(${h / G.h})">${markInner(ink, accent, opts)}</g>`;
 }
 
 // Glyph-by-glyph layout with pair kerning (Archivo's GSUB trips opentype's shaper).
@@ -73,7 +67,7 @@ export function textPath(str, f, size, x, y, tracking = 0) {
 export const svg = (w, h, body, bg) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${bg ? `<rect width="${w}" height="${h}" fill="${bg}"/>` : ''}${body}</svg>\n`;
 
-const NAME = 'YURII SURZHYKOV', ROLE = 'ANDROID SYSTEMS ENGINEER';
+const NAME = 'YURII SURZHYKOV', ROLE = 'ANDROID PLATFORM & ARCHITECTURE';
 export function wordmark(x, y, capH, ink, sub, center = false) {
   const nameSize = capH / 0.72, subSize = nameSize * 0.46, subCap = subSize * 0.73, gap = capH * 0.9;
   const nw = textPath(NAME, 'ArchivoX-500', nameSize, 0, 0, 160).width;
