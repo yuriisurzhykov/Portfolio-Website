@@ -28,7 +28,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: dependency-update
           path: dependency-metadata
@@ -80,7 +80,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: isolated-repair-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/repair-artifact
