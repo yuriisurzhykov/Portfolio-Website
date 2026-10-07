@@ -31,7 +31,7 @@ jobs:
           node -e 'require("fs").writeFileSync("dependency-update.json", JSON.stringify({number: Number(process.env.PR_NUMBER), sha: process.env.PR_SHA, type: process.env.UPDATE_TYPE}))'
 
       - name: Upload metadata for the trusted privileged workflows
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dependency-update
           path: dependency-update.json
