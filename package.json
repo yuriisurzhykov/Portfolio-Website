@@ -20,7 +20,7 @@
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
-    "prisma": "^7.10.0"
+    "prisma": "^7.10.1"
   },
   "overrides": {
     "deepmerge-ts": "8.0.2",
