@@ -63,7 +63,7 @@ jobs:
           api-key: ${{ secrets.OPENAI_API_KEY }}
       - name: Upload untrusted repair data
         if: always() && steps.repair.outputs.status != 'unavailable' && steps.repair.outputs.status != 'stale'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: isolated-repair-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/repair-artifact
