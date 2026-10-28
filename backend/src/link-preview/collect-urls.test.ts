@@ -3,6 +3,17 @@ import type { BlockInput } from "../content/blocks";
 import { collectLinkUrls, parseInternalTarget, smartLinkUrlsInMarkdown } from "./collect-urls";
 
 describe("smartLinkUrlsInMarkdown", () => {
+    it("stays fast on adversarial bracket runs (CodeQL polynomial-ReDoS shapes)", () => {
+        const started = performance.now();
+        expect(smartLinkUrlsInMarkdown("[".repeat(50_000))).toEqual([]);
+        expect(smartLinkUrlsInMarkdown(`[](${ "![](!".repeat(20_000) }`)).toEqual([]);
+        expect(performance.now() - started).toBeLessThan(500);
+    });
+
+    it("still finds a smart link right after a run of stray brackets", () => {
+        expect(smartLinkUrlsInMarkdown(`${ "[".repeat(100) }[x](https://a.example "smart")`)).toEqual(["https://a.example"]);
+    });
+
     it("finds only links titled \"smart\"", () => {
         const text = 'See [repo](https://github.com/a/b "smart"), [docs](https://kotlinlang.org) and [x](https://x.dev "other").';
         expect(smartLinkUrlsInMarkdown(text)).toEqual(["https://github.com/a/b"]);

@@ -33,7 +33,9 @@ type NonListPortfolioBlock = Exclude<PortfolioBlock, { type: "bulletListItem" } 
  * never be a real page someone linked to.
  */
 const SMART_LINK_SENTINEL = "https://smart-link.invalid/";
-const SMART_LINK_MARKDOWN = /\[((?:\\.|[^\]\\])*)\]\(\s*<?([^\s)>]+)>?\s+"smart"\s*\)/g;
+// Same pattern as `backend/src/link-preview/collect-urls.ts`'s `SMART_LINK`
+// (see its comment for why `[` is excluded and the lengths are capped).
+const SMART_LINK_MARKDOWN = /\[((?:\\.|[^[\]\\]){0,500})\]\(\s*<?([^\s()<>[\]]{1,2048})>?\s+"smart"\s*\)/g;
 const SENTINEL_LINK_MARKDOWN = /\]\(https:\/\/smart-link\.invalid\/([0-9a-f]*)\)/g;
 
 function toHex(text: string): string {

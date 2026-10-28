@@ -8,7 +8,16 @@ import type { Block, BlockInput } from "../content/blocks";
  */
 export const SMART_LINK_TITLE = "smart";
 
-const SMART_LINK = /\[(?:\\.|[^\]\\])*\]\(\s*<?([^\s)>]+)>?\s+"smart"\s*\)/g;
+/**
+ * Linear on any input, which CodeQL's ReDoS check flagged the first version
+ * for: neither the label nor the URL may contain `[`, so a scan that starts
+ * at one `[` can never run past the next one (a page of `[[[[…` or
+ * `[](![](!…` no longer costs O(n²)), and both are length-capped. Nothing
+ * real is lost — the editor percent-encodes `(`/`)` in a smart link's URL
+ * (`convert.ts`), and a raw `(` could never match here anyway, since `)`
+ * ends the destination.
+ */
+const SMART_LINK = /\[(?:\\.|[^[\]\\]){0,500}\]\(\s*<?([^\s()<>[\]]{1,2048})>?\s+"smart"\s*\)/g;
 
 /** Every URL a Markdown text marks as a smart link, in order, duplicates included. */
 export function smartLinkUrlsInMarkdown(markdown: string): string[] {
