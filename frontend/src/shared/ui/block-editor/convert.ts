@@ -14,6 +14,89 @@ type ListItemBlockType = "bulletListItem" | "numberedListItem";
 /** Every `PortfolioBlock` EXCEPT the two list-item types — the type `convertSingleBlock`'s switch is written against, so adding `"list"` grouping above/around it doesn't force that switch to also handle `bulletListItem`/`numberedListItem` (they never reach it — see `editorBlocksToBlockInputs`). */
 type NonListPortfolioBlock = Exclude<PortfolioBlock, { type: "bulletListItem" } | { type: "numberedListItem" }>;
 
+/*
+ * ── Smart links ────────────────────────────────────────────────────────
+ * The site stores an inline smart-link badge as an ordinary Markdown link
+ * with the title "smart": `[label](url "smart")` (see
+ * `backend/src/link-preview/collect-urls.ts`). In the editor it is a
+ * `smartLink` inline atom (`inline/SmartLinkInline.tsx`). BlockNote's own
+ * Markdown round trip can't carry that title — verified in its source, not
+ * assumed: the exporter's `formatLink` writes `[text](href)` only, and its
+ * link mark has no `title` attribute to parse into. So the conversion
+ * tunnels the real URL through a sentinel href instead: before parsing,
+ * `[label](url "smart")` becomes `[label](https://smart-link.invalid/<hex>)`
+ * and every parsed link with that prefix turns into a `smartLink`; on the
+ * way out each `smartLink` becomes such a link again and the exported
+ * Markdown is rewritten back to `[label](url "smart")`. Hex, not
+ * `encodeURIComponent`: the latter leaves `(`/`)` alone, which would end the
+ * Markdown link early. `.invalid` is reserved (RFC 2606) — the sentinel can
+ * never be a real page someone linked to.
+ */
+const SMART_LINK_SENTINEL = "https://smart-link.invalid/";
+// Same pattern as `backend/src/link-preview/collect-urls.ts`'s `SMART_LINK`
+// (see its comment for why `[` is excluded and the lengths are capped).
+const SMART_LINK_MARKDOWN = /\[((?:\\.|[^[\]\\]){0,500})\]\(\s*<?([^\s()<>[\]]{1,2048})>?\s+"smart"\s*\)/g;
+const SENTINEL_LINK_MARKDOWN = /\]\(https:\/\/smart-link\.invalid\/([0-9a-f]*)\)/g;
+
+function toHex(text: string): string {
+    // Stryker disable next-line StringLiteral: equivalent for every URL this
+    // ever sees — only control characters (< 0x10) encode to one hex digit,
+    // and neither the Markdown pattern above nor a pasted URL can contain one.
+    return Array.from(new TextEncoder().encode(text), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function fromHex(hex: string): string {
+    // Stryker disable next-line ArrayDeclaration: `match` is null only for an
+    // empty hex, i.e. a sentinel with no URL, which `toHex` never produces.
+    const bytes = new Uint8Array((hex.match(/../g) ?? []).map((pair) => parseInt(pair, 16)));
+    return new TextDecoder().decode(bytes);
+}
+
+/** Characters that would end or split a Markdown link destination — percent-encoded on the way out, which every browser reads as the same URL. */
+function markdownSafeUrl(url: string): string {
+    return url.replace(/[\s()<>]/g, (char) => `%${ char.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0") }`);
+}
+
+function smartLinksToSentinels(markdown: string): string {
+    return markdown.replace(SMART_LINK_MARKDOWN, (_whole, label: string, url: string) => `[${ label }](${ SMART_LINK_SENTINEL }${ toHex(url) })`);
+}
+
+function sentinelsToSmartLinks(markdown: string): string {
+    return markdown.replace(SENTINEL_LINK_MARKDOWN, (_whole, hex: string) => `](${ markdownSafeUrl(fromHex(hex)) } "smart")`);
+}
+
+type InlineItem = Exclude<InlineContent, undefined>[number];
+
+/** Parsed sentinel links → `smartLink` atoms; everything else untouched. The label keeps the link's text, not its bold/italic — a badge shows the page title anyway. */
+function sentinelLinksToSmartLinks(content: InlineContent): InlineContent {
+    return (content ?? []).map((item): InlineItem => {
+        if (item.type === "link" && item.href.startsWith(SMART_LINK_SENTINEL)) {
+            return {
+                type: "smartLink",
+                props: {
+                    url: fromHex(item.href.slice(SMART_LINK_SENTINEL.length)),
+                    label: item.content.map((run) => run.text).join(""),
+                },
+            } as InlineItem;
+        }
+        return item;
+    }) as InlineContent;
+}
+
+/** The reverse, right before BlockNote's exporter sees the content. */
+function smartLinksToSentinelLinks(content: InlineContent): InlineContent {
+    return (content ?? []).map((item): InlineItem => {
+        if (item.type === "smartLink") {
+            return {
+                type: "link",
+                href: `${ SMART_LINK_SENTINEL }${ toHex(item.props.url) }`,
+                content: [{ type: "text", text: item.props.label || item.props.url, styles: {} }],
+            } as InlineItem;
+        }
+        return item;
+    }) as InlineContent;
+}
+
 /**
  * Markdown text (`Block.text`, from the database) → BlockNote's rich
  * inline content — `**bold**`/`*italic*`/`[link](url)` become real
@@ -51,7 +134,7 @@ export function markdownToInlineContent(parsingEditor: PortfolioEditor, text: st
     if (!text) {
         return [];
     }
-    const [parsed] = parsingEditor.tryParseMarkdownToBlocks(text);
+    const [parsed] = parsingEditor.tryParseMarkdownToBlocks(smartLinksToSentinels(text));
     // Stryker disable next-line ArrayDeclaration: defensive, not confirmed
     // reachable — tried a dozen edge-case inputs by hand (whitespace-only,
     // "---", "> ", "```", zero-width space, an HTML comment) and
@@ -59,7 +142,7 @@ export function markdownToInlineContent(parsingEditor: PortfolioEditor, text: st
     // defined `.content` array for every non-empty string. Kept as a type-
     // safety fallback against `tryParseMarkdownToBlocks`'s own optional
     // typing, not proven unreachable in general.
-    return (parsed?.content as InlineContent | undefined) ?? [];
+    return sentinelLinksToSmartLinks((parsed?.content as InlineContent | undefined) ?? []);
 }
 
 /**
@@ -94,8 +177,8 @@ function stripDanglingTrailingHardBreak(markdown: string): string {
 
 /** The reverse of `markdownToInlineContent` — same "wrap as a bare paragraph first" reasoning, just serializing instead of parsing. */
 function inlineContentToMarkdown(editor: PortfolioEditor, content: InlineContent): string {
-    const markdown = editor.blocksToMarkdownLossy([{type: "paragraph", content} as PortfolioPartialBlock]);
-    return stripDanglingTrailingHardBreak(markdown).trim();
+    const markdown = editor.blocksToMarkdownLossy([{type: "paragraph", content: smartLinksToSentinelLinks(content)} as PortfolioPartialBlock]);
+    return sentinelsToSmartLinks(stripDanglingTrailingHardBreak(markdown).trim());
 }
 
 /**
@@ -177,6 +260,16 @@ function blockToPartialBlocks(parsingEditor: PortfolioEditor, block: Block | Blo
                 type: "diagram",
                 props: {engine: block.data.engine, source: block.data.source, caption: block.text ?? ""}
             }];
+        case "linkCard":
+            return [{
+                type: "linkCard",
+                props: {
+                    url: block.data.url,
+                    view: block.data.view,
+                    titleOverride: block.data.titleOverride ?? "",
+                    caption: block.text ?? "",
+                },
+            }];
         case "list": {
             const itemType: ListItemBlockType = block.data.ordered ? "numberedListItem" : "bulletListItem";
             return block.data.items.map((item) => listItemToPartialBlock(parsingEditor, item, itemType));
@@ -256,7 +349,22 @@ function convertSingleBlock(editor: PortfolioEditor, block: NonListPortfolioBloc
                 text: block.props.caption || undefined,
                 data: {engine: block.props.engine, source: block.props.source},
             };
+        case "linkCard":
+            return {
+                type: "linkCard",
+                text: block.props.caption || undefined,
+                data: {
+                    url: block.props.url.trim(),
+                    view: block.props.view,
+                    titleOverride: block.props.titleOverride.trim() || undefined,
+                },
+            };
     }
+}
+
+/** A link card the author inserted but never gave a URL — dropped on save rather than failing the whole draft's validation over an empty placeholder. */
+function isEmptyLinkCard(block: PortfolioBlock): boolean {
+    return block.type === "linkCard" && block.props.url.trim() === "";
 }
 
 /**
@@ -300,7 +408,9 @@ function blockArrayToBlockInputs(editor: PortfolioEditor, blocks: readonly Portf
             inputs.push({type: "list", data: {ordered: itemType === "numberedListItem", items}});
             continue;
         }
-        inputs.push(convertSingleBlock(editor, block as NonListPortfolioBlock));
+        if (!isEmptyLinkCard(block)) {
+            inputs.push(convertSingleBlock(editor, block as NonListPortfolioBlock));
+        }
         i++;
     }
     return inputs;

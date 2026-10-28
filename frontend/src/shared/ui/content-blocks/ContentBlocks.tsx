@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Block, BlockInput, ListItemInput } from "@portfolio/backend";
+import type { Block, BlockInput, LinkPreviewMap, ListItemInput } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { CodeBlock } from "@/shared/ui/code-block";
 import { Markdown } from "@/shared/ui/markdown";
@@ -9,9 +9,17 @@ import { useTranslation } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import type { CodeLanguage } from "@/shared/lib/highlight/codeHighlighter";
 import { Diagram } from "@/shared/ui/diagram";
+import { LinkPreviewProvider, SmartLinkBlock } from "@/shared/ui/smart-link";
 
 export interface ContentBlocksProps {
     blocks: Block[];
+    /**
+     * Previews for this document's smart links (`getLinkPreviewsForBlocks`,
+     * fetched by the page's Server Component next to the post/case study
+     * itself). Optional: without it every smart link and `linkCard` block
+     * simply renders as a plain link.
+     */
+    linkPreviews?: LinkPreviewMap;
 }
 
 const KNOWN_CODE_LANGUAGES = new Set<CodeLanguage>(["ts", "tsx", "js", "jsx", "kotlin", "kts", "py", "java"]);
@@ -221,6 +229,18 @@ function renderBlock(block: Block | BlockInput, ln: Ln, key: React.Key): React.R
                 </figure>
             );
 
+        case "linkCard":
+            return (
+                <figure key={ key } className="my-sm">
+                    <SmartLinkBlock url={ block.data.url } view={ block.data.view } titleOverride={ block.data.titleOverride }/>
+                    { block.text && (
+                        <Text as="figcaption" variant="caption" tone="faint" className="mt-xs">
+                            <Markdown text={ block.text }/>
+                        </Text>
+                    ) }
+                </figure>
+            );
+
         case "list":
             return <ListItems key={ key } items={ block.data.items } ordered={ block.data.ordered } ln={ ln }/>;
     }
@@ -268,26 +288,31 @@ function groupConsecutiveLists(blocks: Block[]): (Block | Block[])[] {
  * chrome — the copy/copied button labels below) still goes through
  * `useTranslation()`.
  */
-export function ContentBlocks({blocks}: ContentBlocksProps) {
+/** One shared empty map, so a page without previews doesn't hand the context a new object every render. */
+const NO_PREVIEWS: LinkPreviewMap = {};
+
+export function ContentBlocks({blocks, linkPreviews = NO_PREVIEWS}: ContentBlocksProps) {
     const {ln} = useTranslation();
 
     return (
-        <div className="flex flex-col gap-md">
-            { groupConsecutiveLists(blocks).map((item) => {
-                if (!Array.isArray(item)) {
-                    return renderBlock(item, ln, item.id);
-                }
-                // Every single `"list"` block also arrives here as a
-                // length-1 array (not just real multi-block runs) — an
-                // extra `flex flex-col` wrapper around one child has no
-                // visual effect, so this doesn't need a separate branch
-                // for the (far more common) unsplit case.
-                return (
-                    <div key={ item[0].id } className="flex flex-col">
-                        { item.map((block) => renderBlock(block, ln, block.id)) }
-                    </div>
-                );
-            }) }
-        </div>
+        <LinkPreviewProvider previews={ linkPreviews }>
+            <div className="flex flex-col gap-md">
+                { groupConsecutiveLists(blocks).map((item) => {
+                    if (!Array.isArray(item)) {
+                        return renderBlock(item, ln, item.id);
+                    }
+                    // Every single `"list"` block also arrives here as a
+                    // length-1 array (not just real multi-block runs) — an
+                    // extra `flex flex-col` wrapper around one child has no
+                    // visual effect, so this doesn't need a separate branch
+                    // for the (far more common) unsplit case.
+                    return (
+                        <div key={ item[0].id } className="flex flex-col">
+                            { item.map((block) => renderBlock(block, ln, block.id)) }
+                        </div>
+                    );
+                }) }
+            </div>
+        </LinkPreviewProvider>
     );
 }

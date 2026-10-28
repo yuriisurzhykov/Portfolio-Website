@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createWork, getWorkForAdmin, workDraftInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
+import { refreshLinkPreviewsInBackground } from "@/shared/lib/refresh-link-previews";
 
 /**
  * See posts/route.ts's GET comment — same reasoning, and the same 2026-07-31 fix,
@@ -20,6 +21,7 @@ export const POST = defineAdminRoute(async (request) => {
     try {
         const body = await request.json();
         const input = workDraftInputSchema.parse(body);
+        refreshLinkPreviewsInBackground(input.caseStudy?.blocks);
         const created = await createWork(input);
         return NextResponse.json(created, { status: 201 });
     } catch (error) {

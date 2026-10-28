@@ -1,4 +1,4 @@
-import { BlockNoteSchema, createHeadingBlockSpec, defaultBlockSpecs } from "@blocknote/core";
+import { BlockNoteSchema, createHeadingBlockSpec, defaultBlockSpecs, defaultInlineContentSpecs } from "@blocknote/core";
 import { LeadBlock } from "./blocks/LeadBlock";
 import { QuoteBlock } from "./blocks/QuoteBlock";
 import { NoteBlock } from "./blocks/NoteBlock";
@@ -6,6 +6,8 @@ import { ImageBlock } from "./blocks/ImageBlock";
 import { CodeBlock } from "./blocks/CodeBlock";
 import { ApproachListBlock } from "./blocks/ApproachListBlock";
 import { DiagramBlock } from "./blocks/DiagramBlock";
+import { LinkCardBlock } from "./blocks/LinkCardBlock";
+import { SmartLinkInline } from "./inline/SmartLinkInline";
 
 /**
  * The editor's block schema — deliberately curated with `BlockNoteSchema.create({ blockSpecs: {...} })`
@@ -38,6 +40,13 @@ import { DiagramBlock } from "./blocks/DiagramBlock";
  * `convert.ts`/`slash-menu.tsx` still expose it to the rest of the app as
  * `"code"` — only this schema's internal registration needed the
  * different name.
+ *
+ * `linkCard` (block) and `smartLink` (inline content, added on top of
+ * BlockNote's own text/link) are the two smart-link shapes — see
+ * `backend/src/link-preview/README.md` and `convert.ts`'s smart-link
+ * section for how the inline one is stored as `[label](url "smart")`.
+ * `inlineContentSpecs` replaces BlockNote's inline defaults when given, so
+ * it spreads them back in (`text`, `link`) before adding `smartLink`.
  */
 export const blockNoteSchema = BlockNoteSchema.create({
     blockSpecs: {
@@ -56,6 +65,11 @@ export const blockNoteSchema = BlockNoteSchema.create({
         codeSnippet: CodeBlock(),
         approachList: ApproachListBlock(),
         diagram: DiagramBlock(),
+        linkCard: LinkCardBlock(),
+    },
+    inlineContentSpecs: {
+        ...defaultInlineContentSpecs,
+        smartLink: SmartLinkInline,
     },
 });
 

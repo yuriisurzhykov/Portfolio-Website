@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { PostDetail, WorkDetail } from "@portfolio/backend";
+import type { LinkPreviewMap, PostDetail, WorkDetail } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
@@ -26,6 +26,8 @@ export interface JournalDetailPageProps {
     hue: number;
     /** Set only by the route when `?preview=1` came from an authenticated admin (see `(site)/journal/[slug]/page.tsx`) — renders a banner so the page can never be mistaken for what a real reader sees, and `post` in this case is the DRAFT-priority content, not necessarily what's actually live. */
     isPreview?: boolean;
+    /** Previews for the body's smart links — see `ContentBlocks.linkPreviews`. */
+    linkPreviews?: LinkPreviewMap;
 }
 
 /**
@@ -38,7 +40,7 @@ export interface JournalDetailPageProps {
  * data has one (the route file), so the hack goes away rather than
  * carrying it forward.
  */
-export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }: JournalDetailPageProps) {
+export function JournalDetailPage({ post, relatedWork, hue, isPreview = false, linkPreviews }: JournalDetailPageProps) {
     const { ln, pick } = useTranslation();
 
     return (
@@ -80,7 +82,7 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false }:
                     />
                 ) }
 
-                <ContentBlocks blocks={ post.body }/>
+                <ContentBlocks blocks={ post.body } linkPreviews={ linkPreviews }/>
 
                 { relatedWork && relatedWork.caseStudy && (
                     <RelatedContentCallout

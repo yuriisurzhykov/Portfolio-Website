@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { PostSummary, WorkDetail } from "@portfolio/backend";
+import type { LinkPreviewMap, PostSummary, WorkDetail } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { WorkCoverImage } from "@/shared/ui/work-cover-image";
@@ -29,6 +29,8 @@ export interface WorkDetailPageProps {
     hue: number;
     /** Same reasoning as `JournalDetailPage.isPreview` — see its comment. */
     isPreview?: boolean;
+    /** Previews for the body's smart links — see `ContentBlocks.linkPreviews`. */
+    linkPreviews?: LinkPreviewMap;
 }
 
 /**
@@ -42,7 +44,7 @@ export interface WorkDetailPageProps {
  * "sections" became heading+paragraph block pairs and "approach" became
  * an `approachList` block during the Phase 3 data import.
  */
-export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: WorkDetailPageProps) {
+export function WorkDetailPage({ item, relatedPost, hue, isPreview = false, linkPreviews }: WorkDetailPageProps) {
     const { ln, pick } = useTranslation();
     const caseStudy = item.caseStudy!;
     const isShipped = item.status === "shipped";
@@ -92,7 +94,7 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false }: Wo
                     loading="eager"
                 />
 
-                <ContentBlocks blocks={ caseStudy.blocks }/>
+                <ContentBlocks blocks={ caseStudy.blocks } linkPreviews={ linkPreviews }/>
 
                 <Text as="h2" variant="h2" className="mb-sm">
                     { ln("work.caseStudy.stackHeading") }

@@ -63,6 +63,7 @@ export function extractProse(block: BlockInput): string {
         case "code":
             return "";
         case "diagram":
+        case "linkCard":
             return block.text ?? "";
         case "list":
             return extractListItemProse(block.data.items);

@@ -443,6 +443,11 @@ model MediaAsset {
   /// Same reasoning as `posts` above, for `Work.coverAssetId` (added
   /// 2026-08-11).
   works Work[]
+  /// Same reasoning again, for re-hosted link-preview images/favicons
+  /// (`LinkPreview`, added 2026-10-28) — one favicon is commonly shared by
+  /// every link to the same site.
+  linkImages   LinkPreview[] @relation("LinkPreviewImage")
+  linkFavicons LinkPreview[] @relation("LinkPreviewFavicon")
 
   @@index([kind])
 }
@@ -482,4 +487,44 @@ model IdentityHue {
   assignedAt DateTime @default(now())
 
   @@unique([kind, key])
+}
+
+/// A cached "smart link" snapshot of an EXTERNAL page — its OpenGraph /
+/// `<title>` metadata plus re-hosted image and favicon (see
+/// `backend/src/link-preview/README.md`). Written only from the admin side
+/// (pasting a URL in the editor, saving a draft); the public site only ever
+/// reads it, so a visitor never makes this server fetch anything.
+///
+/// Not tied to a `Block` row: blocks store only the URL, and the same URL
+/// in several posts (or in both language versions of one post) shares one
+/// snapshot. Links to this site's own `/work/:slug` and `/journal/:slug`
+/// never get a row here — they are resolved from `Work`/`Post` directly.
+model LinkPreview {
+  id          String   @id @default(cuid())
+  /// `normalizeUrlKey()` of the URL as the author wrote it — fragment and
+  /// `utm_*` tracking params stripped, host lowercased.
+  urlKey      String
+  /// Which `Accept-Language` this snapshot was fetched with. Only `"en"` is
+  /// written today; the column exists so per-locale previews for the
+  /// Russian version of a post are a code change, not a key migration.
+  locale      String   @default("en")
+  /// Where redirects actually ended — the displayed domain comes from here.
+  finalUrl    String
+  title       String?
+  description String?
+  siteName    String?
+  imageAssetId   String?
+  image          MediaAsset? @relation("LinkPreviewImage", fields: [imageAssetId], references: [id])
+  faviconAssetId String?
+  favicon        MediaAsset? @relation("LinkPreviewFavicon", fields: [faviconAssetId], references: [id])
+  /// `"ok"` | `"failed"`. Plain `String`, same reasoning as `Block.type`.
+  status      String
+  /// Last fetch error, kept even when an older successful snapshot is still
+  /// being served — the admin popover shows it, readers never do.
+  lastError   String?
+  fetchedAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([urlKey, locale])
 }

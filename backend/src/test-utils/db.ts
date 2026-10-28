@@ -30,6 +30,7 @@ export async function resetTestDatabase(): Promise<void> {
     // SetNull behavior to clear the reference first, keeps this file's
     // stated ordering rule ("children before parents") true for every row
     // here, not just most of them.
+    await prisma.linkPreview.deleteMany();
     await prisma.mediaAsset.deleteMany();
     await prisma.identityHue.deleteMany();
     await prisma.siteContent.deleteMany();

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import { findCurrentSlug, getPostBySlug, getWorkPreview, resolveWorkHue, type WorkDetail } from "@portfolio/backend";
+import { findCurrentSlug, getLinkPreviewsForBlocks, getPostBySlug, getWorkPreview, resolveWorkHue, type WorkDetail } from "@portfolio/backend";
 import { WorkDetailPage } from "@/views/work-detail";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
@@ -104,9 +104,11 @@ export default async function Page({ params, searchParams }: PageProps) {
             const relatedPost = item.relatedPostSlug ? await getPostBySlug(item.relatedPostSlug) : null;
             const config = await cachedSiteContent("config");
             const hue = await resolveWorkHue(item.slug);
-            return { item, relatedPost, config, hue, isPreview };
+            // Same database-only lookup as journal/[slug]/page.tsx.
+            const linkPreviews = await getLinkPreviewsForBlocks(item.caseStudy.blocks, locale);
+            return { item, relatedPost, config, hue, isPreview, linkPreviews };
         },
-        ({ item, relatedPost, config, hue, isPreview }) => (
+        ({ item, relatedPost, config, hue, isPreview, linkPreviews }) => (
             <>
                 {/* No `BlogPosting` here — a case study is not an article, and
                     the plan's structured-data rule is that markup describes
@@ -128,7 +130,7 @@ export default async function Page({ params, searchParams }: PageProps) {
                         ]),
                     )}
                 />
-                <WorkDetailPage item={item} relatedPost={relatedPost} hue={hue} isPreview={isPreview} />
+                <WorkDetailPage item={item} relatedPost={relatedPost} hue={hue} isPreview={isPreview} linkPreviews={linkPreviews} />
             </>
         ),
     );
