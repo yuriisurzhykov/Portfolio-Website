@@ -123,3 +123,15 @@ export {
 } from "./media/media-store";
 export type { MediaStore } from "./media/media-store";
 export { hueForOrdinal, oklchToSrgbHex } from "./media/cover-hue";
+
+export {
+    collectLinkUrls,
+    getLinkPreviews,
+    getLinkPreviewsForBlocks,
+    normalizeUrlKey,
+    parseInternalTarget,
+    refreshLinkPreviews,
+    refreshLinkPreviewsForBlocks,
+    SMART_LINK_TITLE,
+} from "./link-preview";
+export type { LinkPreviewImage, LinkPreviewMap, LinkPreviewView } from "./link-preview";

@@ -98,6 +98,26 @@ const diagramCore = z.object({
 });
 
 /**
+ * A "smart link" shown as its own block — `view: "row"` is the compact
+ * one-line row, `"card"` the full preview with image (see
+ * `backend/src/link-preview/README.md`). Only the URL and the author's
+ * choices live here; the preview itself is a separate `LinkPreview`
+ * snapshot looked up by URL, so refreshing it never rewrites content or
+ * creates a revision. `text` is an optional caption, same as `image`.
+ * Inline badges are NOT a block — they are `"smart"`-titled Markdown links
+ * inside any block's `text` (`link-preview/collect-urls.ts`).
+ */
+const linkCardCore = z.object({
+    type: z.literal("linkCard"),
+    text: z.string().nullish(),
+    data: z.object({
+        url: safeHrefSchema,
+        view: z.enum(["row", "card"]),
+        titleOverride: z.string().optional(),
+    }),
+});
+
+/**
  * A whole nested bullet/numbered list is ONE block (like `approachList`),
  * not one row per item — a flat `Document.blocks` array has no concept of
  * "these five rows are one list," and the editor (BlockNote) already
@@ -162,6 +182,7 @@ const imageBlock = imageCore.extend(baseFields);
 const codeBlock = codeCore.extend(baseFields);
 const approachListBlock = approachListCore.extend(baseFields);
 const diagramBlock = diagramCore.extend(baseFields);
+const linkCardBlock = linkCardCore.extend(baseFields);
 const listBlock = listCore.extend(baseFields);
 
 export const blockSchema = z.discriminatedUnion("type", [
@@ -174,6 +195,7 @@ export const blockSchema = z.discriminatedUnion("type", [
     codeBlock,
     approachListBlock,
     diagramBlock,
+    linkCardBlock,
     listBlock,
 ]);
 
@@ -188,6 +210,7 @@ export const blockInputSchema = z.discriminatedUnion("type", [
     codeCore,
     approachListCore,
     diagramCore,
+    linkCardCore,
     listCore,
 ]);
 
