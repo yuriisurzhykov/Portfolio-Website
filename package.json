@@ -25,7 +25,7 @@
   "overrides": {
     "deepmerge-ts": "8.0.2",
     "mysql2": "3.24.4",
-    "qs": "6.16.0",
+    "qs": "6.17.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   }
