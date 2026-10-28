@@ -113,5 +113,11 @@
   "error.status.503.caption": "Service Unavailable",
   "error.status.503.title": "Taking a quick nap.",
   "error.status.503.description": "This part of the site couldn't load its data just now. We'll be back in a moment — try again shortly.",
-  "error.status.503.descriptionWithRetry": "This part of the site is catching its breath — try again in about {seconds}s."
+  "error.status.503.descriptionWithRetry": "This part of the site is catching its breath — try again in about {seconds}s.",
+
+  "smartLink.kind.work": "project",
+  "smartLink.kind.post": "post",
+  "smartLink.openExternal": "Open",
+  "smartLink.openInternal": "Read",
+  "smartLink.opensInNewTab": "(opens in a new tab)"
 }

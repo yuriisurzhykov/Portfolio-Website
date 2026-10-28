@@ -91,6 +91,15 @@ describe("extractProse", () => {
         })).toBe("");
     })
 
+    it("counts a link card's caption as prose, never its URL or the fetched page title", () => {
+        expect(extractProse({
+            type: "linkCard",
+            text: "Worth a read",
+            data: {url: "https://example.com/post", view: "card", titleOverride: "Custom"},
+        })).toBe("Worth a read");
+        expect(extractProse({type: "linkCard", data: {url: "https://example.com", view: "row"}})).toBe("");
+    });
+
     it("joins list item text in order, flattening a nested sub-list (via `blocks`) depth-first", () => {
         const block: BlockInput = {
             type: "list",

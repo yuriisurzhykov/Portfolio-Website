@@ -113,5 +113,11 @@
   "error.status.503.caption": "Сервис недоступен",
   "error.status.503.title": "Небольшой перерыв на подзарядку.",
   "error.status.503.description": "Этой части сайта сейчас не удалось загрузить данные. Мы скоро вернёмся — попробуйте ещё раз.",
-  "error.status.503.descriptionWithRetry": "Эта часть сайта переводит дыхание — попробуйте снова примерно через {seconds} с."
+  "error.status.503.descriptionWithRetry": "Эта часть сайта переводит дыхание — попробуйте снова примерно через {seconds} с.",
+
+  "smartLink.kind.work": "проект",
+  "smartLink.kind.post": "статья",
+  "smartLink.openExternal": "Открыть",
+  "smartLink.openInternal": "Читать",
+  "smartLink.opensInNewTab": "(откроется в новой вкладке)"
 }

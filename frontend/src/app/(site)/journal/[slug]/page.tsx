@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
-import { findCurrentSlug, getPostPreview, getWorkBySlug, resolvePostHue, type PostDetail } from "@portfolio/backend";
+import { findCurrentSlug, getLinkPreviewsForBlocks, getPostPreview, getWorkBySlug, resolvePostHue, type PostDetail } from "@portfolio/backend";
 import { JournalDetailPage } from "@/views/journal-detail";
 import { renderOrServiceUnavailable } from "@/shared/lib/render-with-fallback";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
@@ -140,9 +140,13 @@ export default async function Page({ params, searchParams }: PageProps) {
             const relatedWork = post.relatedWorkSlug ? await getWorkBySlug(post.relatedWorkSlug) : null;
             const config = await cachedSiteContent("config");
             const hue = await resolvePostHue({ categoryEn: post.category.en, relatedWorkSlug: post.relatedWorkSlug });
-            return { post, relatedWork, config, hue, isPreview };
+            // Database-only lookup of already-fetched snapshots — a reader's
+            // request never makes the server fetch another site (see
+            // backend/src/link-preview/README.md).
+            const linkPreviews = await getLinkPreviewsForBlocks(post.body, locale);
+            return { post, relatedWork, config, hue, isPreview, linkPreviews };
         },
-        ({ post, relatedWork, config, hue, isPreview }) => (
+        ({ post, relatedWork, config, hue, isPreview, linkPreviews }) => (
             <>
                 {/* Person and BlogPosting travel together in one @graph: Google
                     wants `author` to be a Person object with a `name`, and
@@ -174,7 +178,7 @@ export default async function Page({ params, searchParams }: PageProps) {
                         ]),
                     )}
                 />
-                <JournalDetailPage post={post} relatedWork={relatedWork} hue={hue} isPreview={isPreview} />
+                <JournalDetailPage post={post} relatedWork={relatedWork} hue={hue} isPreview={isPreview} linkPreviews={linkPreviews} />
             </>
         ),
     );

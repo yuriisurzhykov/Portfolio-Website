@@ -4,6 +4,7 @@ import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE, LOGIN_PATH } from "@/shared/lib/au
 import type {
     AdminPostDetail,
     AdminWorkDetail,
+    LinkPreviewView,
     PostInput,
     PostSummary,
     RevisionSummary,
@@ -285,4 +286,9 @@ export const adminApi = {
     // all, and why this half of it is a POST despite being a read.
     resolveTechIcons: (items: { name: string; icon: TechIcon }[]) =>
         request<{ views: TechIconView[] }>("POST", "/api/admin/tech-icons", { items }),
+
+    // The block editor's live smart-link preview (`block-editor/link-preview-client.ts`).
+    // A POST because it may fetch and store a snapshot — see the route's comment.
+    linkPreview: (url: string, force = false) =>
+        request<{ preview: LinkPreviewView | null }>("POST", "/api/admin/link-preview", { url, force }),
 };

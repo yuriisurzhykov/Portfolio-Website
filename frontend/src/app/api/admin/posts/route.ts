@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createPost, getPostsForAdmin, postDraftInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
+import { refreshLinkPreviewsInBackground } from "@/shared/lib/refresh-link-previews";
 
 /**
  * GET is for a future mobile client/script — the admin UI's own list page
@@ -22,6 +23,7 @@ export const POST = defineAdminRoute(async (request) => {
     try {
         const body = await request.json();
         const input = postDraftInputSchema.parse(body);
+        refreshLinkPreviewsInBackground(input.blocks);
         const created = await createPost(input);
         return NextResponse.json(created, { status: 201 });
     } catch (error) {

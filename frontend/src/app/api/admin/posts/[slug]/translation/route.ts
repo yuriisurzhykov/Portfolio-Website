@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPostTranslationForAdmin, translatePost, translatePostInputSchema } from "@portfolio/backend";
 import { toErrorResponse } from "@/shared/lib/api-error-response";
 import { defineAdminRoute } from "@/shared/lib/auth/guard";
+import { refreshLinkPreviewsInBackground } from "@/shared/lib/refresh-link-previews";
 
 interface RouteParams {
     slug: string;
@@ -38,6 +39,7 @@ export const PUT = defineAdminRoute<RouteParams>(async (request, { params }) => 
         const { slug } = await params;
         const body = await request.json();
         const input = translatePostInputSchema.parse(body);
+        refreshLinkPreviewsInBackground(input.blocks);
         const updated = await translatePost(slug, input);
         if (!updated) {
             return NextResponse.json({ error: "Post not found." }, { status: 404 });

@@ -41,3 +41,13 @@ export const ACCENT_CHROMA = 0.17;
 export function accentColorForHue(hue: number): string {
     return `oklch(${ ACCENT_LIGHTNESS } ${ ACCENT_CHROMA } ${ hue })`;
 }
+
+/**
+ * The same accent at partial opacity — the tinted border/background of a
+ * smart link to one of this site's own projects/posts (`shared/ui/smart-link`),
+ * so the badge reads as "that project's color" without a second palette.
+ * `alpha` is 0–1.
+ */
+export function accentTintForHue(hue: number, alpha: number): string {
+    return `oklch(${ ACCENT_LIGHTNESS } ${ ACCENT_CHROMA } ${ hue } / ${ alpha })`;
+}
