@@ -113,6 +113,17 @@ function isEmptyParagraph(block: PortfolioBlock): boolean {
     return block.type === "paragraph" && Array.isArray(block.content) && block.content.length === 0;
 }
 
+/** How many document positions one inline item spans — its text length, or 1 for a `smartLink` atom (ProseMirror counts a leaf node as one position, which is what the cursor offset below is measured in). */
+function inlineItemLength(item: InlineContentItem): number {
+    if (item.type === "text") {
+        return item.text.length;
+    }
+    if (item.type === "link") {
+        return item.content.map((run) => run.text).join("").length;
+    }
+    return 1;
+}
+
 /**
  * Splits one inline-content run at a character offset, preserving each
  * run's own styles — a plain flatten-to-string-and-reslice would silently
@@ -127,8 +138,7 @@ function splitInlineContentAt(content: InlineContentItem[], offset: number): [In
     let consumed = 0;
 
     for (const item of content) {
-        const itemText = item.type === "text" ? item.text : item.content.map((c) => c.text).join("");
-        const itemEnd = consumed + itemText.length;
+        const itemEnd = consumed + inlineItemLength(item);
 
         if (itemEnd <= offset) {
             before.push(item);
@@ -136,8 +146,8 @@ function splitInlineContentAt(content: InlineContentItem[], offset: number): [In
             after.push(item);
         } else {
             const localOffset = offset - consumed;
-            before.push({ ...item, text: itemText.slice(0, localOffset) });
-            after.push({ ...item, text: itemText.slice(localOffset) });
+            before.push({ ...item, text: item.text.slice(0, localOffset) });
+            after.push({ ...item, text: item.text.slice(localOffset) });
         }
         consumed = itemEnd;
     }
@@ -306,10 +316,46 @@ export function normalizeLineEndings(text: string): string {
     return text.replace(/\r\n/g, "\n");
 }
 
+const BARE_URL = /^https?:\/\/\S+$/i;
+
+/** The whole clipboard is one http(s) URL — what "Copy link address" or the browser's address bar puts there. */
+export function bareUrlOf(plainText: string): string | null {
+    const trimmed = plainText.trim();
+    return BARE_URL.test(trimmed) && URL.canParse(trimmed) ? trimmed : null;
+}
+
+/**
+ * A pasted bare URL becomes a smart link, the way Confluence does it: on an
+ * empty line it turns that line into a `linkCard` (card view — the author
+ * can switch to the row); inside text it becomes an inline `smartLink`
+ * badge, which the badge's own "↩" button turns back into a plain link.
+ * Pasting a URL over SELECTED text is left to BlockNote — that gesture
+ * means "make this text a link", not "insert a badge".
+ */
+function pasteBareUrl(editor: PortfolioBlockNoteEditor, url: string): boolean {
+    let selectionEmpty = true;
+    editor.transact((tr) => {
+        selectionEmpty = tr.selection.empty;
+    });
+    if (!selectionEmpty) {
+        return false;
+    }
+    const block = editor.getTextCursorPosition().block;
+    if (isEmptyParagraph(block)) {
+        editor.updateBlock(block, { type: "linkCard", props: { url, view: "card" } } as PortfolioPartialBlock);
+        return true;
+    }
+    if (!Array.isArray(block.content)) {
+        return false;
+    }
+    editor.insertInlineContent([{ type: "smartLink", props: { url, label: url } }, " "]);
+    return true;
+}
+
 /**
  * `useCreateBlockNote`'s `pasteHandler` option (see `BlockNoteEditor.tsx`).
- * Only steps in when the pasted plain text actually contains a fence or a
- * blockquote, OR is a plain-text/markdown-only clipboard that needed CRLF
+ * Only steps in when the pasted plain text is a bare URL (`pasteBareUrl`),
+ * actually contains a fence or a blockquote, OR is a plain-text/markdown-only clipboard that needed CRLF
  * normalization (see `normalizeLineEndings`) — anything else (rich HTML
  * from another app, or already-`\n`-only plain markdown) falls straight
  * through to `defaultPasteHandler()`, unchanged from BlockNote's own
@@ -341,6 +387,11 @@ export function smartPasteHandler({ event, editor, defaultPasteHandler }: PasteH
         return defaultPasteHandler();
     }
     const plainText = normalizeLineEndings(rawPlainText);
+
+    const url = bareUrlOf(plainText);
+    if (url && pasteBareUrl(editor, url)) {
+        return true;
+    }
 
     const segments = splitPastedMarkdown(plainText);
     const hasFenceOrQuote = segments.some((segment) => segment.kind !== "text");

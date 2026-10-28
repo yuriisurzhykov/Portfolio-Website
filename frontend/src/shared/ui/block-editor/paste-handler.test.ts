@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BlockNoteEditor, getBlockInfoFromSelection } from "@blocknote/core";
 import { TextSelection, type Transaction } from "prosemirror-state";
 import { blockNoteSchema } from "./schema";
-import { splitPastedMarkdown, smartPasteHandler, normalizeLineEndings } from "./paste-handler";
+import { bareUrlOf, splitPastedMarkdown, smartPasteHandler, normalizeLineEndings } from "./paste-handler";
 
 /** Places the cursor at a character offset within `block`'s own inline content — same `getBlockInfoFromSelection` technique `paste-handler.ts`'s own split logic uses, so these tests exercise the exact position math it relies on. */
 function placeCursorAt(editor: ReturnType<typeof BlockNoteEditor.create>, block: { id: string }, offset: number) {
@@ -439,5 +439,61 @@ describe("smartPasteHandler", () => {
 
         expect(editor.document.map((b) => b.type)).toEqual(["paragraph", "codeSnippet"]);
         expect(editor.document[0]).toMatchObject({ content: [{ text: "Hello" }] });
+    });
+
+    describe("a pasted bare URL", () => {
+        it("turns an empty line into a linkCard (card view)", () => {
+            const editor = BlockNoteEditor.create({ schema: blockNoteSchema });
+            const result = smartPasteHandler({
+                event: fakeClipboardEvent("https://github.com/a/b\n"),
+                editor: editor as any,
+                defaultPasteHandler: () => undefined,
+            });
+            expect(result).toBe(true);
+            expect(editor.document[0]).toMatchObject({ type: "linkCard", props: { url: "https://github.com/a/b", view: "card" } });
+        });
+
+        it("becomes an inline smartLink badge when pasted inside text", () => {
+            const editor = BlockNoteEditor.create({
+                schema: blockNoteSchema,
+                initialContent: [{ type: "paragraph", content: "See " }],
+            });
+            placeCursorAt(editor, editor.document[0], 4);
+            smartPasteHandler({
+                event: fakeClipboardEvent("https://github.com/a/b"),
+                editor: editor as any,
+                defaultPasteHandler: () => undefined,
+            });
+            expect(editor.document).toHaveLength(1);
+            expect(editor.document[0].content).toContainEqual({ type: "smartLink", props: { url: "https://github.com/a/b", label: "https://github.com/a/b" } });
+        });
+
+        it("is left to BlockNote over a text selection — that means \"link this text\"", () => {
+            const editor = BlockNoteEditor.create({
+                schema: blockNoteSchema,
+                initialContent: [{ type: "paragraph", content: "HelloWorld" }],
+            });
+            placeCursorAt(editor, editor.document[0], 5);
+            editor.transact((tr: Transaction) => {
+                tr.setSelection(TextSelection.create(tr.doc, tr.selection.from, tr.selection.from + 5));
+            });
+            let delegated = false;
+            smartPasteHandler({
+                event: fakeClipboardEvent("https://github.com/a/b"),
+                editor: editor as any,
+                defaultPasteHandler: () => {
+                    delegated = true;
+                    return true;
+                },
+            });
+            expect(delegated).toBe(true);
+        });
+
+        it("only counts a lone http(s) URL — text around it or another scheme is ordinary paste", () => {
+            expect(bareUrlOf("  https://a.example/x  ")).toBe("https://a.example/x");
+            expect(bareUrlOf("see https://a.example")).toBeNull();
+            expect(bareUrlOf("ftp://a.example")).toBeNull();
+            expect(bareUrlOf("javascript:alert(1)")).toBeNull();
+        });
     });
 });

@@ -1,6 +1,6 @@
 import { insertOrUpdateBlockForSlashMenu } from "@blocknote/core";
 import { type DefaultReactSuggestionItem, getDefaultReactSlashMenuItems } from "@blocknote/react";
-import { AlignLeft, Code2, Image as ImageIcon, Info, LayoutGrid, Workflow } from "lucide-react";
+import { AlignLeft, Code2, Image as ImageIcon, Info, LayoutGrid, Link2, Workflow } from "lucide-react";
 import type { PortfolioBlockNoteEditor } from "./schema";
 
 /**
@@ -10,8 +10,8 @@ import type { PortfolioBlockNoteEditor } from "./schema";
  * `../schema.ts` that reuse a BlockNote-known type name, gated behind its
  * own `editorHasBlockWithType` check per type — see
  * `getDefaultSlashMenuItems.ts`), automatically respecting the restricted
- * heading levels (2/3) that schema configured. The other six block types
- * (`lead`/`note`/`image`/`code`/`approachList`/`diagram`) have no BlockNote-native
+ * heading levels (2/3) that schema configured. The other custom block types
+ * (`lead`/`note`/`image`/`code`/`approachList`/`diagram`/`linkCard`) have no BlockNote-native
  * equivalent, so they need an explicit slash item each, added here rather
  * than left undiscoverable.
  */
@@ -58,6 +58,14 @@ function customSlashMenuItems(editor: PortfolioBlockNoteEditor): DefaultReactSug
             group: "Content blocks",
             icon: <Workflow size={ 18 }/>,
             onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, {type: "diagram"}),
+        },
+        {
+            title: "Link card",
+            subtext: "Link preview as a row or a card — or just paste a URL on an empty line",
+            aliases: ["link", "card", "bookmark", "embed", "preview", "url"],
+            group: "Content blocks",
+            icon: <Link2 size={ 18 }/>,
+            onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, {type: "linkCard"}),
         },
         {
             title: "Approach list",

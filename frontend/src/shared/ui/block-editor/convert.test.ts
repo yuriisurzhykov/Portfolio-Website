@@ -411,3 +411,103 @@ describe("blocksToPartialBlocks + BlockNoteEditor.create — the real regression
         })).not.toThrow();
     });
 });
+
+describe("smart links — linkCard blocks and inline `\"smart\"` badges", () => {
+    function roundTrip(blocks: Block[]) {
+        const editor = BlockNoteEditor.create({ schema: blockNoteSchema, initialContent: blocksToPartialBlocks(blocks) });
+        return { editor, result: editorBlocksToBlockInputs(editor, editor.document) };
+    }
+
+    it("round-trips a linkCard's url, view, title override and caption", () => {
+        const { result } = roundTrip([{
+            id: "1", order: 0, type: "linkCard", text: "Worth a read",
+            data: { url: "https://example.com/post", view: "row", titleOverride: "Custom title" },
+        }]);
+        expect(result).toEqual([{
+            type: "linkCard", text: "Worth a read",
+            data: { url: "https://example.com/post", view: "row", titleOverride: "Custom title" },
+        }]);
+    });
+
+    it("drops a linkCard that never got a URL (or only whitespace) instead of failing the save", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [{ type: "linkCard" }, { type: "linkCard", props: { url: "   " } }, { type: "paragraph", content: "Text" }] as never,
+        });
+        expect(editorBlocksToBlockInputs(editor, editor.document)).toEqual([{ type: "paragraph", text: "Text" }]);
+    });
+
+    it("trims the URL and title override the author typed, and omits a blank override", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [
+                { type: "linkCard", props: { url: "  https://a.example  ", view: "card", titleOverride: "  Title  " } },
+                { type: "linkCard", props: { url: "https://b.example", view: "row", titleOverride: "   " } },
+            ] as never,
+        });
+        expect(editorBlocksToBlockInputs(editor, editor.document)).toEqual([
+            { type: "linkCard", data: { url: "https://a.example", view: "card", titleOverride: "Title" } },
+            { type: "linkCard", data: { url: "https://b.example", view: "row" } },
+        ]);
+    });
+
+    it("loads a linkCard with no caption or override as empty fields, not placeholders", () => {
+        const [partial] = blocksToPartialBlocks([{ id: "1", order: 0, type: "linkCard", data: { url: "https://a.example", view: "card" } }]);
+        expect(partial).toEqual({ type: "linkCard", props: { url: "https://a.example", view: "card", titleOverride: "", caption: "" } });
+    });
+
+    it("percent-encodes characters that would break the Markdown link when a pasted URL has them", () => {
+        const editor = BlockNoteEditor.create({
+            schema: blockNoteSchema,
+            initialContent: [{
+                type: "paragraph",
+                content: [{ type: "smartLink", props: { url: "https://a.example/a(b)<c>\td e", label: "x" } }],
+            }] as never,
+        });
+        expect(editorBlocksToBlockInputs(editor, editor.document)).toEqual([
+            { type: "paragraph", text: "[x](https://a.example/a%28b%29%3Cc%3E%09d%20e \"smart\")" },
+        ]);
+    });
+
+    it("round-trips a diagram block's engine, source and caption", () => {
+        const { result } = roundTrip([
+            { id: "1", order: 0, type: "diagram", text: "Fig. 1", data: { engine: "plantuml", source: "A -> B" } },
+            { id: "2", order: 1, type: "diagram", data: { engine: "mermaid", source: "graph TD" } },
+        ]);
+        expect(result).toEqual([
+            { type: "diagram", text: "Fig. 1", data: { engine: "plantuml", source: "A -> B" } },
+            { type: "diagram", data: { engine: "mermaid", source: "graph TD" } },
+        ]);
+    });
+
+    it("parses `[label](url \"smart\")` into a smartLink atom, not a plain link", () => {
+        const { editor } = roundTrip([{ id: "1", order: 0, type: "paragraph", text: "See [the repo](https://github.com/a/b \"smart\") here." }]);
+        const content = editor.document[0].content as { type: string; props?: Record<string, string> }[];
+        expect(content.find((item) => item.type === "smartLink")?.props).toEqual({ url: "https://github.com/a/b", label: "the repo" });
+        expect(content.some((item) => item.type === "link")).toBe(false);
+    });
+
+    it("writes a smartLink back as `[label](url \"smart\")`, next to ordinary links and marks", () => {
+        const text = "A **bold** [plain](https://a.example) and [smart](https://b.example/x?y=1 \"smart\") link.";
+        const { result } = roundTrip([{ id: "1", order: 0, type: "paragraph", text }]);
+        expect(result).toEqual([{ type: "paragraph", text }]);
+    });
+
+    it("keeps URLs with parentheses and non-ASCII intact through the sentinel", () => {
+        const { result } = roundTrip([{
+            id: "1", order: 0, type: "paragraph",
+            text: "[wiki](https://en.wikipedia.org/wiki/Kotlin_%28programming_language%29 \"smart\") and [ru](https://example.com/статья \"smart\")",
+        }]);
+        expect(result[0]).toMatchObject({
+            text: "[wiki](https://en.wikipedia.org/wiki/Kotlin_%28programming_language%29 \"smart\") and [ru](https://example.com/статья \"smart\")",
+        });
+    });
+
+    it("finds smart links inside list items too", () => {
+        const { result } = roundTrip([{
+            id: "1", order: 0, type: "list",
+            data: { ordered: false, items: [{ text: "Item with [link](https://c.example \"smart\")", blocks: [] }] },
+        }]);
+        expect(result[0]).toMatchObject({ type: "list", data: { items: [{ text: "Item with [link](https://c.example \"smart\")" }] } });
+    });
+});
