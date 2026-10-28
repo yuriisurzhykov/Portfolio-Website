@@ -41,6 +41,9 @@ export function MermaidDiagram({source}: MermaidDiagramProps) {
                     startOnLoad: false,
                     theme: mermaidTheme,
                     themeVariables: themeVariables,
+                    // Mermaid 12 made "neo" (drop shadows, larger nodes) the default
+                    // look; keep the flat style the theme adapter was designed for.
+                    look: "classic",
                     securityLevel: "strict",
                 });
 
