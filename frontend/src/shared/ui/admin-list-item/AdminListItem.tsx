@@ -68,7 +68,7 @@ export function AdminListItem({
                 </div>
 
                 <div className="flex items-start justify-between gap-md">
-                    <Text variant="body" className="font-medium line-clamp-3 min-w-0">{ title }</Text>
+                    <Text variant="body" className="font-medium line-clamp-3 min-w-0">{ title.trim() || "Untitled draft" }</Text>
                     <div className="flex items-center gap-xs shrink-0">
                         <RevealAction as="link" href={ editHref } label="Edit"
                                       icon={ <Pencil className="h-md aspect-square w-auto" aria-hidden="true"/> }/>

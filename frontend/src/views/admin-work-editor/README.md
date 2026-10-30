@@ -151,6 +151,7 @@ Work и чем оно отличается от journal": Work — "что ты 
 
 Каждый конкретно-запутанный hint переписан на то, ГДЕ именно поле
 реально показывается, а не абстрактное описание:
+
 - **Cover image** — старый hint ("small ledger/card thumbnail") был
   ПРЯМО НЕВЕРНЫМ: `/work`-леджер вообще не использует `coverImage`,
   только "Selected Work" грид на лендинге. Исправлено на честное
@@ -192,3 +193,11 @@ backslash-escape кавычек — валидный синтаксис), а в�
 **SOLID.** `Checkbox`'s `hint` — Open/Closed: существующий вызов в
 `HeroSettingsForm.tsx` (несвязанная фича) не потребовал никаких
 изменений — новый проп опциональный, старое поведение не изменилось.
+
+## 2026-10-29 Body-first editor controller
+
+Form state, serialization and API result adaptation live in a view-local controller. Metadata and URL features remain controlled; shared actions coordinate operations. The body stays inside BlockNote, with serialization at save boundaries. Loaded blocks are the fallback before editor mount so early metadata edits cannot erase a body. Only Discard or confirmed case-study removal resets body content.
+
+The controller reconciles canonical identity and saved reading metadata without replacing the document. Native History API address replacement keeps the active editor mounted after first creation or publication rename. Publication adopts the hook identity before another save. URL mode and title-free drafts require the accompanying server migration.
+
+The page uses the same workspace/actions/URL features as Journal with an explicit Work controller and payload. Card and case-study property groups remain separate. Removing a case study requires confirmation, clears its draft fields and remounts replacement content. Focus and compact-panel switches preserve the current editor instance. Publication locks all editing, flushes, validates and reviews the latest revision.

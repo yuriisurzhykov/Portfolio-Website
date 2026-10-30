@@ -56,7 +56,7 @@ export {
     translatePostInputSchema,
     unpublishPost,
 } from "./content/admin-posts";
-export type { AdminPostDetail, AdminPostListItem, AdminPostTranslation, PostInput, TranslatePostInput } from "./content/admin-posts";
+export type { AdminPostSummary, AdminPostDetail, AdminPostListItem, AdminPostTranslation, PostInput, TranslatePostInput } from "./content/admin-posts";
 export {
     createWork,
     deleteWork,
@@ -74,7 +74,7 @@ export {
     unpublishWork,
     workDraftInputSchema,
 } from "./content/admin-work";
-export type { AdminWorkDetail, AdminWorkListItem, AdminWorkTranslation, TranslateWorkInput, WorkInput } from "./content/admin-work";
+export type { AdminWorkSummary, AdminWorkDetail, AdminWorkListItem, AdminWorkTranslation, TranslateWorkInput, WorkInput } from "./content/admin-work";
 export type { RevisionSummary } from "./content/content-draft";
 
 export {

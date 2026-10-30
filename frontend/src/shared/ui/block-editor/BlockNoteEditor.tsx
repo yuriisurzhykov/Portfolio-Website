@@ -3,7 +3,7 @@
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import * as React from "react";
-import { filterSuggestionItems } from "@blocknote/core";
+import { filterSuggestionItems, SuggestionMenu } from "@blocknote/core";
 import { useCreateBlockNote, SuggestionMenuController } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import type { Block, BlockInput } from "@portfolio/backend";
@@ -13,13 +13,25 @@ import { blocksToPartialBlocks, editorBlocksToBlockInputs } from "./convert";
 import { getSlashMenuItems } from "./slash-menu";
 import { smartPasteHandler } from "./paste-handler";
 import { fenceShortcutExtension } from "./fence-shortcut";
+import { EditorToolbar, type EditorCommand } from "./EditorToolbar";
+import { Dialog } from "@/shared/ui/dialog";
+import { Field, Input } from "@/shared/ui/form";
+import { Button } from "@/shared/ui/button";
+import "./block-editor.css";
 
 export interface BlockEditorHandle {
     /** Serializes the editor's current document to `BlockInput[]` — called at submit time (`PostEditorPage`/`WorkEditorPage`/the translate pages), not on every keystroke; BlockNote owns its own live document state between mount and submit, this component is deliberately NOT a controlled `value`/`onChange` input like the old `BlockListEditor`. */
     getBlocks: () => BlockInput[];
+    focus?: () => void;
+    captureSelection?: () => unknown;
+    restoreSelection?: (snapshot: unknown) => void;
 }
 
 export interface BlockEditorProps {
+    appearance?: "default" | "authoring";
+    readOnly?: boolean;
+    focusMode?: boolean;
+    onFocusModeChange?: (enabled: boolean) => void;
     /** Read once, at mount — see the component body's comment on why this can't be a live/controlled prop the way `BlockListEditor`'s `blocks` was. */
     initialBlocks: Block[];
     /**
@@ -87,13 +99,21 @@ export const BlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
     // module graph is even evaluated until the browser is definitely
     // present.
     if (!mounted) {
-        return <div className="rounded-md border border-border-strong bg-surface-base h-60 animate-pulse" aria-hidden="true" />;
+        return (
+            <div
+                className="rounded-md border border-border-strong bg-surface-base h-60 animate-pulse"
+                aria-hidden="true"
+            />
+        );
     }
 
     return <MountedBlockEditor {...props} ref={ref} />;
 });
 
-const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>(function MountedBlockEditor({ initialBlocks, onChange }, ref) {
+const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>(function MountedBlockEditor(
+    { initialBlocks, onChange, appearance = "default", readOnly = false, focusMode = false, onFocusModeChange },
+    ref,
+) {
     const { theme } = useTheme();
 
     // `useState(() => ...)`, not a plain call — `initialContent` is only
@@ -105,6 +125,7 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
 
     const editor = useCreateBlockNote({
         schema: blockNoteSchema,
+        domAttributes: { editor: { "aria-label": "Body" } },
         initialContent: initialContent.length > 0 ? initialContent : undefined,
         // See paste-handler.ts — only intercepts a fence/blockquote, everything else falls through to BlockNote's own default paste behavior unchanged.
         pasteHandler: smartPasteHandler,
@@ -112,12 +133,102 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
         extensions: [fenceShortcutExtension],
     });
 
+    const selectionRef = React.useRef<{ from: number; to: number } | null>(null);
+    const [blockType, setBlockType] = React.useState<"paragraph" | "heading2" | "heading3" | "custom">("paragraph");
+    const [activeStyles, setActiveStyles] = React.useState({ bold: false, italic: false });
+    const [linkOpen, setLinkOpen] = React.useState(false);
+    const [linkUrl, setLinkUrl] = React.useState("");
+    const [linkError, setLinkError] = React.useState<string>();
+    const captureSelection = React.useCallback(() => {
+        const { from, to } = editor._tiptapEditor.state.selection;
+        return { from, to };
+    }, [editor]);
+    const restoreSelection = React.useCallback(
+        (snapshot: unknown) => {
+            if (
+                !snapshot ||
+                typeof snapshot !== "object" ||
+                !("from" in snapshot) ||
+                !("to" in snapshot) ||
+                typeof snapshot.from !== "number" ||
+                typeof snapshot.to !== "number"
+            )
+                return;
+            const size = editor._tiptapEditor.state.doc.content.size;
+            editor._tiptapEditor.commands.setTextSelection({
+                from: Math.min(snapshot.from, size),
+                to: Math.min(snapshot.to, size),
+            });
+            editor.focus();
+        },
+        [editor],
+    );
+    React.useEffect(
+        () =>
+            editor.onSelectionChange(() => {
+                selectionRef.current = captureSelection();
+                const block = editor.getTextCursorPosition().block;
+                setBlockType(
+                    block.type === "paragraph"
+                        ? "paragraph"
+                        : block.type === "heading"
+                          ? block.props.level === 3
+                              ? "heading3"
+                              : "heading2"
+                          : "custom",
+                );
+                const styles = editor.getActiveStyles();
+                setActiveStyles({ bold: Boolean(styles.bold), italic: Boolean(styles.italic) });
+            }),
+        [editor, captureSelection],
+    );
+
+    function command(action: EditorCommand) {
+        if (readOnly) return;
+        if (selectionRef.current) restoreSelection(selectionRef.current);
+        editor.focus();
+        if (action === "bold" || action === "italic") editor.toggleStyles({ [action]: true });
+        else if (action === "link") {
+            selectionRef.current = captureSelection();
+            setLinkUrl(editor.getSelectedLinkUrl() ?? "");
+            setLinkError(undefined);
+            setLinkOpen(true);
+        } else if (action === "insert") editor.getExtension(SuggestionMenu)?.openSuggestionMenu("/");
+        else if (action === "code")
+            editor.insertBlocks([{ type: "codeSnippet" }], editor.getTextCursorPosition().block, "after");
+        else {
+            const block = editor.getTextCursorPosition().block;
+            if (block.type !== "paragraph" && block.type !== "heading") return;
+            if (action === "paragraph") editor.updateBlock(block, { type: "paragraph" });
+            else editor.updateBlock(block, { type: "heading", props: { level: action === "heading2" ? 2 : 3 } });
+            setBlockType(action);
+        }
+        const styles = editor.getActiveStyles();
+        setActiveStyles({ bold: Boolean(styles.bold), italic: Boolean(styles.italic) });
+    }
+    function applyLink() {
+        const value = linkUrl.trim();
+        try {
+            const parsed = new URL(value, window.location.origin);
+            if (!value || !["http:", "https:", "mailto:"].includes(parsed.protocol)) throw new Error("invalid");
+        } catch {
+            setLinkError("Enter an HTTP, HTTPS, email or relative link.");
+            return;
+        }
+        restoreSelection(selectionRef.current);
+        editor.createLink(value);
+        setLinkOpen(false);
+    }
+
     React.useImperativeHandle(
         ref,
         () => ({
             getBlocks: () => editorBlocksToBlockInputs(editor, editor.document),
+            focus: () => editor.focus(),
+            captureSelection,
+            restoreSelection,
         }),
-        [editor],
+        [editor, captureSelection, restoreSelection],
     );
 
     // `onChangeRef`, not `onChange` directly in the effect's dependency
@@ -130,16 +241,58 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
     const onChangeRef = React.useRef(onChange);
     onChangeRef.current = onChange;
 
-    React.useEffect(() => editor.onChange(() => onChangeRef.current?.()), [editor]);
+    React.useEffect(
+        () =>
+            editor.onChange((_editor, context) => {
+                // setEditable emits a Tiptap update without a document change. It must
+                // not make a reviewed draft dirty merely because actions lock editing.
+                if (context.getChanges().length > 0) onChangeRef.current?.();
+            }),
+        [editor],
+    );
 
     return (
-        <div className="rounded-md border border-border-strong bg-surface-base overflow-hidden">
-            <BlockNoteView editor={editor} slashMenu={false} theme={theme}>
+        <div
+            className={
+                appearance === "authoring"
+                    ? "portfolio-authoring"
+                    : "rounded-md border border-border-strong bg-surface-base overflow-hidden"
+            }
+            onBlurCapture={() => {
+                selectionRef.current = captureSelection();
+            }}
+        >
+            {appearance === "authoring" && (
+                <EditorToolbar
+                    onCommand={command}
+                    readOnly={readOnly}
+                    blockType={blockType}
+                    canChangeBlockType={blockType !== "custom"}
+                    focusMode={focusMode}
+                    onFocusModeChange={(enabled) => onFocusModeChange?.(enabled)}
+                    activeStyles={activeStyles}
+                />
+            )}
+            <BlockNoteView editor={editor} slashMenu={false} theme={theme} editable={!readOnly}>
                 <SuggestionMenuController
                     triggerCharacter="/"
                     getItems={async (query) => filterSuggestionItems(getSlashMenuItems(editor), query)}
                 />
             </BlockNoteView>
+            <Dialog open={linkOpen} title="Insert link" onClose={() => setLinkOpen(false)}>
+                <div className="flex flex-col gap-lg">
+                    <Field label="Link URL" htmlFor="body-link-url" error={linkError}>
+                        <Input
+                            id="body-link-url"
+                            value={linkUrl}
+                            onChange={(event) => setLinkUrl(event.target.value)}
+                        />
+                    </Field>
+                    <Button appearance="flat" onClick={applyLink}>
+                        Apply link
+                    </Button>
+                </div>
+            </Dialog>
         </div>
     );
 });

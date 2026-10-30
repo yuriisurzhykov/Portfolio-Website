@@ -4,7 +4,7 @@
     ],
     "rules": {
         "at-rule-no-unknown": [true, {
-            "ignoreAtRules": ["theme", "utility", "apply", "config", "plugin", "layer", "variants", "responsive", "screen", "tailwind"]
+            "ignoreAtRules": ["reference", "variant", "theme", "utility", "apply", "config", "plugin", "layer", "variants", "responsive", "screen", "tailwind"]
         }],
         "color-no-hex": true,
         "function-disallowed-list": ["rgb", "rgba", "hsl", "hsla", "oklch", "oklab", "lab", "lch"],

@@ -135,6 +135,8 @@ model Block {
 model Post {
   id               String    @id @default(cuid())
   slug             String    @unique
+  /// Authoring policy; publication permanently freezes automatic updates.
+  urlMode          String    @default("auto")
   /// Set once, automatically, at creation (`createPost`) — never a form
   /// field. `dateLabel` (a free-text override for imprecise/upcoming
   /// dates) has been REMOVED — see backend/src/content/README.md's dated
@@ -207,6 +209,7 @@ model Post {
 /// blocks) — see backend/src/content/README.md.
 model Work {
   id                    String    @id @default(cuid())
+  urlMode               String    @default("auto")
   slug                  String    @unique
   /// `{en, ru}`, same shape as `Post.title` — added 2026-08-11 (Work
   /// Item Covers & Unified Identity Hue). Was a plain `String` (English

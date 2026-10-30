@@ -22,6 +22,7 @@ import { nextState } from "./lifecycle";
 import { localizedTextSchema, type LocalizedText } from "./localized-text";
 import type { ContentLocale } from "./locale";
 import { generateUniqueSlug, slugSchema } from "./slug";
+import { resolveDraftUrl, storedUrlMode, urlModeSchema, type AdminUrlState } from "./draft-url";
 import { toWorkSummary, type WorkDetail, type WorkStatus, type WorkSummary } from "./work";
 import { notifyContentChanged } from "./content-change-notifier";
 import { claimSlug, forgetSlugHistory, recordSlugChange } from "./slug-history";
@@ -100,7 +101,8 @@ export const workPublishSchema = z.object({
  */
 export const workDraftInputSchema = z.object({
     slug: slugSchema.optional(),
-    title: z.string().min(1),
+    title: z.string(),
+    urlMode: urlModeSchema.optional(),
     date: workDateSchema.default(() => new Date().toISOString().slice(0, 10)),
     status: z.enum(["shipped", "in-progress"] satisfies WorkStatus[]).default("shipped"),
     summary: z.string().default(""),
@@ -218,7 +220,9 @@ export interface AdminWorkTranslation {
     caseStudyBlocks: Block[];
 }
 
-export interface AdminWorkDetail extends WorkSummary {
+export interface AdminWorkSummary extends WorkSummary, AdminUrlState {}
+
+export interface AdminWorkDetail extends AdminWorkSummary {
     /**
      * Bilingual, same shape as the public `CaseStudy` (work.ts) — EN side
      * is draft-priority (from `data.caseStudy`), RU side is
@@ -266,6 +270,7 @@ async function materializeDraft(row: WorkRow): Promise<WorkDraftData> {
 
     return {
         slug: row.slug,
+        urlMode: storedUrlMode(row.urlMode),
         title: title.en,
         date: row.date,
         status: row.status as WorkStatus,
@@ -322,6 +327,11 @@ function toEffectiveSummary(row: WorkRow, data: WorkDraftData): WorkSummary {
     };
 }
 
+function toAdminSummary(row: WorkRow, data: WorkDraftData, hasUnpublishedChanges: boolean): AdminWorkSummary {
+    return { ...toEffectiveSummary(row, data), draftSlug: data.slug ?? row.slug,
+        urlMode: row.publishedAt !== null ? "manual" : storedUrlMode(data.urlMode ?? row.urlMode), hasUnpublishedChanges };
+}
+
 async function readWorkDraft(entityId: string): Promise<WorkDraftData | null> {
     const raw = await readDraft(KIND, entityId);
     return raw === null ? null : workDraftDataSchema.parse(raw);
@@ -359,7 +369,7 @@ export async function getWorkDetailForAdmin(slug: string): Promise<AdminWorkDeta
     const data = draft ?? (await materializeDraft(row));
 
     return {
-        ...toEffectiveSummary(row, data),
+        ...toAdminSummary(row, data, draft !== null),
         draftSlug: data.slug ?? row.slug,
         caseStudy: data.caseStudy
             ? {
@@ -433,8 +443,10 @@ async function isSlugTaken(slug: string): Promise<boolean> {
  * generate BEFORE the row exists: `generateCoverForWork`/`resolveWorkHue`
  * only ever read/write by `slug`, never by row id.
  */
-export async function createWork(input: WorkInput): Promise<WorkSummary> {
-    const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
+export async function createWork(input: WorkInput): Promise<AdminWorkSummary> {
+    const slug = input.urlMode === "auto"
+        ? await generateUniqueSlug(input.title, isSlugTaken)
+        : input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
 
     const cover = await generateCoverForWork({
@@ -447,6 +459,7 @@ export async function createWork(input: WorkInput): Promise<WorkSummary> {
     const row = await prisma.work.create({
         data: {
             slug,
+            urlMode: input.urlMode ?? (input.slug ? "manual" : "auto"),
             title: { en: input.title, ru: "" },
             date: input.date,
             status: input.status,
@@ -467,7 +480,7 @@ export async function createWork(input: WorkInput): Promise<WorkSummary> {
     // creation actually succeeds, not upfront.
     await claimSlug("work", slug);
 
-    return toWorkSummary(row);
+    return toAdminSummary(row, { ...input, slug, urlMode: storedUrlMode(row.urlMode), translation: null }, false);
 }
 
 /**
@@ -477,17 +490,19 @@ export async function createWork(input: WorkInput): Promise<WorkSummary> {
  * `ContentDraft`. `null` when `slug` (always the LIVE slug) doesn't
  * exist.
  */
-export async function saveWorkDraft(slug: string, input: WorkInput): Promise<WorkSummary | null> {
+export async function saveWorkDraft(slug: string, input: WorkInput): Promise<AdminWorkSummary | null> {
     const existing = await prisma.work.findUnique({ where: { slug } });
     if (!existing) {
         return null;
     }
 
     const base = (await readWorkDraft(existing.id)) ?? (await materializeDraft(existing));
-    const next = mergeWorkDraftInput(base, input);
+    const address = await resolveDraftUrl({ slug: existing.slug, draftSlug: base.slug ?? existing.slug,
+        urlMode: storedUrlMode(base.urlMode ?? existing.urlMode), publishedAt: existing.publishedAt }, input, isSlugTaken);
+    const next = { ...mergeWorkDraftInput(base, input), ...address };
     await saveDraft(KIND, existing.id, next);
 
-    return toEffectiveSummary(existing, next);
+    return toAdminSummary(existing, next, true);
 }
 
 /** Work's half of `admin-posts.ts`'s `applyPostDraftToRow` — called ONLY by `publishWork`. */
@@ -544,6 +559,7 @@ async function applyWorkDraftToRow(
 
     const updateData: Prisma.WorkUncheckedUpdateInput = {
         slug: newSlug,
+        urlMode: "manual",
         title: { en: data.title, ru: data.translation?.title ?? existingTitle.ru },
         date: data.date,
         status: data.status,
@@ -587,7 +603,7 @@ async function applyWorkDraftToRow(
  * `publishedAt`-preserving when already published). `null` when `slug`
  * doesn't exist.
  */
-export async function publishWork(slug: string): Promise<WorkSummary | null> {
+export async function publishWork(slug: string): Promise<AdminWorkSummary | null> {
     const existing = await prisma.work.findUnique({ where: { slug } });
     if (!existing) {
         return null;
@@ -598,7 +614,7 @@ export async function publishWork(slug: string): Promise<WorkSummary | null> {
     const draft = await readWorkDraft(existing.id);
     const wasAlreadyPublished = existing.lifecycleState === "PUBLISHED";
     if (wasAlreadyPublished && !draft) {
-        return toWorkSummary(existing);
+        return toAdminSummary(existing, await materializeDraft(existing), false);
     }
 
     const data = draft ?? (await materializeDraft(existing));
@@ -622,7 +638,7 @@ export async function publishWork(slug: string): Promise<WorkSummary | null> {
 
     const { row, previousSlug } = await applyWorkDraftToRow(existing, data, {
         lifecycleState: nextState(existing.lifecycleState, "PUBLISH"),
-        publishedAt: wasAlreadyPublished ? existing.publishedAt : new Date(),
+        publishedAt: existing.publishedAt ?? new Date(),
         // See `publishPost`'s identical comment (admin-posts.ts).
         contentUpdatedAt: draft ? new Date() : existing.contentUpdatedAt,
     });
@@ -630,7 +646,7 @@ export async function publishWork(slug: string): Promise<WorkSummary | null> {
 
     const published = toWorkSummary(row);
     announceWorkChange(published, { wasPublic: wasAlreadyPublished, isPublic: true, previousSlug });
-    return published;
+    return toAdminSummary(row, { ...data, slug: row.slug, urlMode: "manual" }, false);
 }
 
 /** `PUBLISHED → DRAFT` — see admin-posts.ts's `unpublishPost` for the full reasoning. `null` when `slug` doesn't exist; throws `InvalidLifecycleTransitionError` if already DRAFT. */

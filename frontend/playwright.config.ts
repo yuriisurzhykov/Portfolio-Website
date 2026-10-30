@@ -108,12 +108,12 @@ export default defineConfig({
             // engine from "Desktop Chrome" and just override the viewport/touch metrics.
             name: "Tablet",
             use: {...devices["Desktop Chrome"], viewport: {width: 834, height: 1194}, isMobile: true, hasTouch: true},
-            testMatch: /visual\.spec\.ts/,
+            testMatch: /(?:visual|admin-content-editor)\.spec\.ts/,
         },
         {
             name: "Mobile",
             use: {...devices["Desktop Chrome"], viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
-            testMatch: /visual\.spec\.ts/,
+            testMatch: /(?:visual|admin-content-editor)\.spec\.ts/,
         },
     ],
 

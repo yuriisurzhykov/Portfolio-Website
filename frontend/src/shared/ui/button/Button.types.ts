@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import * as React from "react";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 export type ButtonSize = "sm" | "md" | "lg";
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    appearance?: "default" | "flat";
     variant?: ButtonVariant;
     size?: ButtonSize;
     /** Icon to the left of text */

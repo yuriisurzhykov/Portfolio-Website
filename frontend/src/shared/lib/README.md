@@ -244,3 +244,10 @@ flush-перед-навигацией, а не просто "потому что
 необязательный `onBlur` в JSX вызывающих страниц, ни сигнатура хука, ни
 его внутренняя логика (`performSave`/`runSave`/коалессинг) не менялись
 структурно.
+
+
+## 2026-10-29 Draft revision and resource identity
+
+Autosave marks local revisions dirty immediately and clears the marker only when the newest revision was acknowledged. It exposes synchronous resource identity for create-then-review and explicit identity adoption after a publication rename. External reset cancels retry state after Discard. The original single-flight, coalesced flush, debounce and retry contracts remain intact.
+
+Controllers skip a no-op flush when the draft is already clean, so preview does not create artificial unpublished changes. Save callbacks receive the submitted input to avoid replacing a newer local URL candidate with an older response.

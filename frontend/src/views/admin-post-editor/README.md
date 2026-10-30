@@ -16,6 +16,7 @@
 не может тронуть живую строку — он только сохраняет `ContentDraft`
 (`backend/src/content/README.md`'s дневник за эту же дату). Единственная
 кнопка Publish/Unpublish превратилась в Publish/Update/Unpublish:
+
 - **Publish** (пост никогда не публиковался) или **Update** (уже
   опубликован, есть черновик) — это ОДИН и тот же эндпоинт
   (`adminApi.publishPost`), просто разная подпись кнопки в зависимости от
@@ -363,3 +364,11 @@ editable here"), а не оставляет пользователя гадат�
 **SOLID.** Не изменилось структурно — `PostEditorPage` и раньше не знало,
 как блоки превращаются в JSON, теперь оно точно так же не знает, как
 вычисляется `readMins` — обе детали инкапсулированы на backend.
+
+## 2026-10-29 Body-first editor controller
+
+Form state, serialization and API result adaptation live in a view-local controller. Metadata and URL features remain controlled; shared actions coordinate operations. The body stays inside BlockNote, with serialization at save boundaries. Loaded blocks are the fallback before editor mount so early metadata edits cannot erase a body. Only Discard or confirmed case-study removal resets body content.
+
+The controller reconciles canonical identity and saved reading metadata without replacing the document. Native History API address replacement keeps the active editor mounted after first creation or publication rename. Publication adopts the hook identity before another save. URL mode and title-free drafts require the accompanying server migration.
+
+The page now composes `widgets/content-editor`, `edit-content-properties`, `edit-content-url` and `manage-content`. Its local controller owns the English Post payload, persisted URL policy and saved metadata. Creation updates browser history without navigating/remounting BlockNote. Save failure blocks deliberate navigation, preview and publication. Discard is the only ordinary action that remounts the body with replacement content.

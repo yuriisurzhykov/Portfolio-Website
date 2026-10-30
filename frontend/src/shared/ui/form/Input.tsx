@@ -1,12 +1,14 @@
+"use client";
 import * as React from "react";
 import { cn } from "@/shared/lib/utils";
+import { insetControlStyles } from "./control-styles";
+import { useFieldControl } from "./field-context";
 
-export const inputBaseStyles = [
+const inputCommonStyles = [
     "w-full h-11 px-sm",
     "rounded-md",
-    "bg-surface-base",
-    "border border-border-strong",
-    "text-body text-text-primary",
+    "border",
+    "text-text-primary",
     "placeholder:text-text-faint",
     "transition-colors duration-fast",
     "focus-visible:outline-none focus-visible:border-border-highlight",
@@ -14,10 +16,27 @@ export const inputBaseStyles = [
     "disabled:opacity-60 disabled:cursor-not-allowed",
 ].join(" ");
 
-export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-    function Input({ className, ...rest }, ref) {
-        return <input ref={ref} className={cn(inputBaseStyles, className)} {...rest} />;
-    },
-);
+export const inputBaseStyles = cn(inputCommonStyles, "bg-surface-base border-border-strong text-body");
+export const insetInputStyles = cn(inputCommonStyles, insetControlStyles);
+
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    appearance?: "default" | "inset";
+}
+
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
+    { className, appearance = "default", ...rest },
+    ref,
+) {
+    const field = useFieldControl();
+    return (
+        <input
+            ref={ref}
+            aria-invalid={field.invalid || undefined}
+            aria-describedby={field.descriptionId}
+            className={cn(appearance === "inset" ? insetInputStyles : inputBaseStyles, className)}
+            {...rest}
+        />
+    );
+});
 
 Input.displayName = "Input";

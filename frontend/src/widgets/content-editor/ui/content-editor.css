@@ -1,0 +1,49 @@
+@reference "../../../app/styles/index.css";
+
+.content-editor-workspace {
+    @apply flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-app text-text-primary;
+}
+
+.content-editor-columns {
+    --editor-properties-width: calc(var(--spacing-5xl) + var(--spacing-5xl) + var(--spacing-5xl) + var(--spacing-2xl));
+    --editor-actions-width: calc(var(--spacing-5xl) + var(--spacing-5xl) + var(--spacing-5xl));
+
+    @apply grid min-h-0 flex-1 grid-cols-1;
+
+    @variant xl {
+        grid-template-columns: var(--editor-properties-width) minmax(0, 1fr) var(--editor-actions-width);
+    }
+}
+
+.workspace-region {
+    @apply min-h-0 min-w-0 overflow-y-auto;
+}
+
+.workspace-region[data-active="false"] {
+    @apply hidden;
+
+    @variant xl {
+        @apply block;
+    }
+}
+
+.workspace-properties {
+    @apply border-r border-border-subtle bg-surface-base p-lg;
+}
+
+.workspace-actions {
+    @apply border-l border-border-subtle bg-surface-base p-lg;
+}
+
+.content-editor-workspace[data-focus="true"] .content-editor-columns {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.content-editor-workspace[data-focus="true"] .workspace-body {
+    @apply block;
+}
+
+.content-editor-workspace[data-focus="true"] .workspace-properties,
+.content-editor-workspace[data-focus="true"] .workspace-actions {
+    @apply hidden;
+}

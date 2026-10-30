@@ -1393,3 +1393,7 @@ all pass against the new token pipeline; `component-gallery.manifest.ts` and
 sync by construction (one new entry added to both in the same change), so the
 suite's own guard test should pass without needing a real browser to check
 that specific claim.
+
+## Content editor integration
+
+`admin-content-editor.spec.ts` runs in all three viewport projects. The standard fixture reset creates `editor-e2e@example.com` with the test-only password `editor-e2e-password-123`; this account exists only in the isolated test database. The suite exercises body-first draft creation, URL mode through reload/publication, Work card/case-study behavior, formatting/selection/undo continuity, failed-save recovery, themes, accessibility and clipping under CSS zoom. Screenshots are test artifacts for visual review, not automatically accepted baselines.
