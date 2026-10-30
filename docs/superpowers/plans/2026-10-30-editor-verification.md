@@ -42,3 +42,9 @@ Actual production-build screenshots against deterministic fixtures are in [the s
 - URL/controller wiring followed dependency order: server policy first, controllers next, page composition last.
 - Local infrastructure workarounds affect verification only. Repository CI remains the native-environment gate.
 - The pre-existing general ESLint backlog stays outside this editor change. Changed editor files pass the compatible linter and the repository's required CSS/token gates.
+
+## CI integration correction
+
+The first full Visual & Accessibility run (41002002166) had 134 passing tests and six failed Work-list snapshots. The new editor suite published Work cards in the same database while public snapshots ran in parallel, changing page height/content. The editor-only local run did not exercise that interaction.
+
+The Playwright project graph now completes all public Desktop/Tablet/Mobile checks before editor mutations start, then executes editor viewports sequentially. Snapshot baselines and thresholds are unchanged. The fix must be verified by the full native CI run, not by editor-only tests.

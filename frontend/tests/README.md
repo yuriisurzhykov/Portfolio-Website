@@ -1397,3 +1397,11 @@ that specific claim.
 ## Content editor integration
 
 `admin-content-editor.spec.ts` runs in all three viewport projects. The standard fixture reset creates `editor-e2e@example.com` with the test-only password `editor-e2e-password-123`; this account exists only in the isolated test database. The suite exercises body-first draft creation, URL mode through reload/publication, Work card/case-study behavior, formatting/selection/undo continuity, failed-save recovery, themes, accessibility and clipping under CSS zoom. Screenshots are test artifacts for visual review, not automatically accepted baselines.
+
+### Editor test ordering and fixture ownership
+
+The `Desktop`, `Tablet`, and `Mobile` projects run public screenshot/SEO/accessibility checks without content editor tests. The separate `EditorDesktop` project depends on all three public projects. `EditorTablet` then depends on `EditorDesktop`, and `EditorMobile` depends on `EditorTablet`. Editor files are not fully parallel. This creates an explicit read-before-write boundary for the shared seeded database.
+
+Editor scenarios publish real fixture content. Running them concurrently with public screenshots adds cards to `/work` and can change `/journal` while it is being captured. Cleanup after a test does not prevent that race. Preserve these project dependencies; do not update screenshot baselines or raise diff tolerances to accept mutation-contaminated captures.
+
+`npm run test:e2e` runs the complete graph. `playwright test --project=Desktop` runs the public desktop checks; `playwright test --project=EditorDesktop` also runs its public dependencies. Use `--no-deps` only for a deliberately isolated editor-only debug run against freshly seeded data.

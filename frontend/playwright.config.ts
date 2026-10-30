@@ -95,7 +95,8 @@ export default defineConfig({
         {
             name: "Desktop",
             use: {...devices["Desktop Chrome"], viewport: {width: 1440, height: 900}},
-            // No testMatch restriction: this is the only project a11y.spec.ts runs under
+            testIgnore: /admin-content-editor\.spec\.ts/,
+            // This is the only project a11y.spec.ts runs under
             // (contrast/DOM checks don't depend on viewport size, so running them 3x would be
             // pure waste), and it also runs the full visual.spec.ts suite.
         },
@@ -108,12 +109,37 @@ export default defineConfig({
             // engine from "Desktop Chrome" and just override the viewport/touch metrics.
             name: "Tablet",
             use: {...devices["Desktop Chrome"], viewport: {width: 834, height: 1194}, isMobile: true, hasTouch: true},
-            testMatch: /(?:visual|admin-content-editor)\.spec\.ts/,
+            testMatch: /visual\.spec\.ts/,
         },
         {
             name: "Mobile",
             use: {...devices["Desktop Chrome"], viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
-            testMatch: /(?:visual|admin-content-editor)\.spec\.ts/,
+            testMatch: /visual\.spec\.ts/,
+        },
+        // Editor scenarios publish content in the shared fixture database. They must
+        // start only after EVERY public screenshot/SEO/a11y project has finished.
+        // Chain editor viewports and keep their file serial so concurrent body-only
+        // creates do not compete for the same generated slug either.
+        {
+            name: "EditorDesktop",
+            testMatch: /admin-content-editor\.spec\.ts/,
+            fullyParallel: false,
+            dependencies: ["Desktop", "Tablet", "Mobile"],
+            use: {...devices["Desktop Chrome"], viewport: {width: 1440, height: 900}},
+        },
+        {
+            name: "EditorTablet",
+            testMatch: /admin-content-editor\.spec\.ts/,
+            fullyParallel: false,
+            dependencies: ["EditorDesktop"],
+            use: {...devices["Desktop Chrome"], viewport: {width: 834, height: 1194}, isMobile: true, hasTouch: true},
+        },
+        {
+            name: "EditorMobile",
+            testMatch: /admin-content-editor\.spec\.ts/,
+            fullyParallel: false,
+            dependencies: ["EditorTablet"],
+            use: {...devices["Desktop Chrome"], viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true},
         },
     ],
 
