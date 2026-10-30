@@ -22,6 +22,7 @@ import { nextState } from "./lifecycle";
 import { localizedTextSchema, type LocalizedText } from "./localized-text";
 import { estimateReadMins } from "./reading-time";
 import { generateUniqueSlug, slugSchema } from "./slug";
+import { resolveDraftUrl, storedUrlMode, urlModeSchema, type AdminUrlState } from "./draft-url";
 import type { ContentLocale } from "./locale";
 import { toPostSummary, type PostDetail, type PostStatus, type PostSummary } from "./posts";
 import { notifyContentChanged } from "./content-change-notifier";
@@ -108,7 +109,8 @@ export const postPublishSchema = z.object({
  */
 export const postDraftInputSchema = z.object({
     slug: slugSchema.optional(),
-    title: z.string().min(1),
+    title: z.string(),
+    urlMode: urlModeSchema.optional(),
     category: z.string().default(""),
     excerpt: z.string().default(""),
     status: z.enum(["published", "upcoming"] satisfies PostStatus[]).default("published"),
@@ -153,7 +155,9 @@ export const postDraftDataSchema = postDraftInputSchema.extend({
 });
 export type PostDraftData = z.infer<typeof postDraftDataSchema>;
 
-export interface AdminPostDetail extends PostSummary {
+export interface AdminPostSummary extends PostSummary, AdminUrlState {}
+
+export interface AdminPostDetail extends AdminPostSummary {
     blocks: Block[];
     /**
      * The draft's pending slug, or `slug` itself when no rename is
@@ -208,6 +212,7 @@ async function materializeDraft(row: PostRow): Promise<PostDraftData> {
 
     return {
         slug: row.slug,
+        urlMode: storedUrlMode(row.urlMode),
         title: title.en,
         category: category.en,
         excerpt: excerpt.en,
@@ -282,6 +287,11 @@ function toEffectiveSummary(row: PostRow, data: PostDraftData): PostSummary {
     };
 }
 
+function toAdminSummary(row: PostRow, data: PostDraftData, hasUnpublishedChanges: boolean): AdminPostSummary {
+    return { ...toEffectiveSummary(row, data), draftSlug: data.slug ?? row.slug,
+        urlMode: row.publishedAt !== null ? "manual" : storedUrlMode(data.urlMode ?? row.urlMode), hasUnpublishedChanges };
+}
+
 async function readPostDraft(entityId: string): Promise<PostDraftData | null> {
     const raw = await readDraft(KIND, entityId);
     return raw === null ? null : postDraftDataSchema.parse(raw);
@@ -325,7 +335,7 @@ export async function getPostForAdmin(slug: string): Promise<AdminPostDetail | n
     const data = draft ?? (await materializeDraft(row));
 
     return {
-        ...toEffectiveSummary(row, data),
+        ...toAdminSummary(row, data, draft !== null),
         draftSlug: data.slug ?? row.slug,
         blocks: toDisplayBlocks(data.blocks),
         hasUnpublishedChanges: draft !== null,
@@ -403,8 +413,10 @@ async function assertSlugAvailable(slug: string, excludingCurrentSlug?: string):
  * post's row id, only its slug/title/category/excerpt, all of which are
  * already known here.
  */
-export async function createPost(input: PostInput): Promise<PostSummary> {
-    const slug = input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
+export async function createPost(input: PostInput): Promise<AdminPostSummary> {
+    const slug = input.urlMode === "auto"
+        ? await generateUniqueSlug(input.title, isSlugTaken)
+        : input.slug ?? (await generateUniqueSlug(input.title, isSlugTaken));
     await assertSlugAvailable(slug);
 
     const bodyDocumentId = await replaceDocumentContent(null, input.blocks);
@@ -420,6 +432,7 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
     const row = await prisma.post.create({
         data: {
             slug,
+            urlMode: input.urlMode ?? (input.slug ? "manual" : "auto"),
             date,
             title: { en: input.title, ru: "" },
             category: { en: input.category, ru: "" },
@@ -440,7 +453,7 @@ export async function createPost(input: PostInput): Promise<PostSummary> {
     // owning, with no way to get it back).
     await claimSlug("post", slug);
 
-    return toPostSummary(row);
+    return toAdminSummary(row, { ...input, slug, urlMode: storedUrlMode(row.urlMode), translation: null }, false);
 }
 
 async function isSlugTaken(slug: string): Promise<boolean> {
@@ -476,17 +489,19 @@ async function isSlugTaken(slug: string): Promise<boolean> {
  * the live cover, for the same reason it's the one place any other
  * content change is allowed to.
  */
-export async function savePostDraft(slug: string, input: PostInput): Promise<PostSummary | null> {
+export async function savePostDraft(slug: string, input: PostInput): Promise<AdminPostSummary | null> {
     const existing = await prisma.post.findUnique({ where: { slug } });
     if (!existing) {
         return null;
     }
 
     const base = (await readPostDraft(existing.id)) ?? (await materializeDraft(existing));
-    const next = mergePostDraftInput(base, input);
+    const address = await resolveDraftUrl({ slug: existing.slug, draftSlug: base.slug ?? existing.slug,
+        urlMode: storedUrlMode(base.urlMode ?? existing.urlMode), publishedAt: existing.publishedAt }, input, isSlugTaken);
+    const next = { ...mergePostDraftInput(base, input), ...address };
     await saveDraft(KIND, existing.id, next);
 
-    return toEffectiveSummary(existing, next);
+    return toAdminSummary(existing, next, true);
 }
 
 /**
@@ -561,6 +576,7 @@ async function applyPostDraftToRow(
         where: { slug: existing.slug },
         data: {
             slug: newSlug,
+            urlMode: "manual",
             title: { en: data.title, ru: titleRu },
             category: { en: data.category, ru: categoryRu },
             readMins: estimateReadMins(data.blocks),
@@ -625,7 +641,7 @@ async function applyPostDraftToRow(
  * being published for the first time has nothing live yet worth
  * preserving (see `content-draft.ts`'s `snapshotRevision`).
  */
-export async function publishPost(slug: string): Promise<PostSummary | null> {
+export async function publishPost(slug: string): Promise<AdminPostSummary | null> {
     const existing = await prisma.post.findUnique({ where: { slug } });
     if (!existing) {
         return null;
@@ -634,7 +650,7 @@ export async function publishPost(slug: string): Promise<PostSummary | null> {
     const draft = await readPostDraft(existing.id);
     const wasAlreadyPublished = existing.lifecycleState === "PUBLISHED";
     if (wasAlreadyPublished && !draft) {
-        return toPostSummary(existing);
+        return toAdminSummary(existing, await materializeDraft(existing), false);
     }
 
     const data = draft ?? (await materializeDraft(existing));
@@ -655,7 +671,7 @@ export async function publishPost(slug: string): Promise<PostSummary | null> {
 
     const { row, previousSlug } = await applyPostDraftToRow(existing, data, {
         lifecycleState: nextState(existing.lifecycleState, "PUBLISH"),
-        publishedAt: wasAlreadyPublished ? existing.publishedAt : new Date(),
+        publishedAt: existing.publishedAt ?? new Date(),
         // Only a REAL pending draft counts as "the content changed" — a
         // first publish with nothing ever drafted (a post published right
         // after `createPost`, with no edit in between) re-applies content
@@ -669,7 +685,7 @@ export async function publishPost(slug: string): Promise<PostSummary | null> {
 
     const summary = toPostSummary(row);
     announcePostChange(summary, { wasPublic: wasAlreadyPublished, isPublic: true, previousSlug });
-    return summary;
+    return toAdminSummary(row, { ...data, slug: row.slug, urlMode: "manual" }, false);
 }
 
 /** `PUBLISHED → DRAFT` — the deliberate, admin-initiated counterpart to `publishPost`. Never touches the pending draft (if any) — unpublishing hides the live content, it isn't an editing action. `null` when `slug` doesn't exist; throws `InvalidLifecycleTransitionError` (via `nextState`) if the post is already a draft — see `lifecycle.ts`'s comment on why UNPUBLISH isn't idempotent the way PUBLISH is. */

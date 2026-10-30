@@ -12,6 +12,7 @@ export interface StatusToggleOption<T extends string> {
 
 export interface StatusToggleProps<T extends string> {
     value: T;
+    ariaLabel?: string;
     onChange: (value: T) => void;
     options: StatusToggleOption<T>[];
 }
@@ -35,9 +36,14 @@ export interface StatusToggleProps<T extends string> {
  * mapping (`published`/`upcoming` vs. `shipped`/`in-progress`), and there's
  * no shared enum to hang a single non-generic component off of.
  */
-export function StatusToggle<T extends string>({ value, onChange, options }: StatusToggleProps<T>) {
+export function StatusToggle<T extends string>({
+    value,
+    onChange,
+    options,
+    ariaLabel = "Status",
+}: StatusToggleProps<T>) {
     return (
-        <div className="flex items-center gap-xs" role="radiogroup">
+        <div className="flex items-center gap-xs" role="radiogroup" aria-label={ariaLabel}>
             {options.map((option) => {
                 const isActive = value === option.value;
                 return (
@@ -48,8 +54,7 @@ export function StatusToggle<T extends string>({ value, onChange, options }: Sta
                         aria-checked={isActive}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "rounded-pill transition-opacity duration-fast",
-                            !isActive && "opacity-50 hover:opacity-80",
+                            "rounded-pill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-highlight",
                         )}
                     >
                         <StatusBadge tone={isActive ? option.tone : "neutral"} withDot>

@@ -59,13 +59,22 @@ export interface UseAutosaveDraftOptions<TInput, TResult> {
      * `lifecycleState` against the auto-unpublish safety net (`backend/src/content/admin-posts.ts`'s `updatePost`)
      * without this hook knowing that concept exists.
      * */
-    onSaved?: (result: TResult) => void;
+    onSaved?: (result: TResult, input: TInput) => void;
     onError?: (error: unknown) => void;
     debounceMs?: number;
 }
 
 export interface UseAutosaveDraftResult {
     status: AutosaveStatus;
+    isDirty: boolean;
+    getIsDirty: () => boolean;
+    getEditRevision: () => number;
+    getResourceSlug: () => string | null;
+    /** Called after an explicit publication rename, after the save chain settles. */
+    adoptResourceSlug: (slug: string) => void;
+    /** Cancels retry state after Discard/restore intentionally adopts server content. */
+    resetSavedState: () => void;
+    cancelScheduledSave: () => void;
     /**
      * Call after every field/body edit — (re)starts the debounce timer. Safe to call many times in a row;
      * only the last call before the delay elapses actually triggers a save.
@@ -96,14 +105,13 @@ export function useAutosaveDraft<TInput, TResult>(
     options: UseAutosaveDraftOptions<TInput, TResult>,
 ): UseAutosaveDraftResult {
     const [status, setStatus] = React.useState<AutosaveStatus>("idle");
+    const [isDirty, setIsDirty] = React.useState(false);
+    const dirtyRef = React.useRef(false);
+    const revisionRef = React.useRef(0);
 
-    // Re-assigned every render (not inside an effect) so any save that runs
-    // later — after a debounce delay, after a retry, from inside another
-    // save's `finally` — always calls into the LATEST render's closures
-    // (latest `form` state, latest callbacks), never a stale one captured
-    // when the hook was first set up.
+    // Commit the latest callbacks before browser events or timers can save.
     const optionsRef = React.useRef(options);
-    optionsRef.current = options;
+    React.useLayoutEffect(() => { optionsRef.current = options; });
 
     const slugRef = React.useRef(options.slug);
     const savingRef = React.useRef(false);
@@ -114,11 +122,14 @@ export function useAutosaveDraft<TInput, TResult>(
 
     // Does NOT flush a pending edit on unmount — unsafe, not just ineffective; see the README for why. Callers flush explicitly before navigating instead.
     React.useEffect(
-        () => () => {
+        () => {
+            mountedRef.current = true;
+            return () => {
             mountedRef.current = false;
             if (timerRef.current !== null) {
                 clearTimeout(timerRef.current);
             }
+            };
         },
         [],
     );
@@ -147,6 +158,7 @@ export function useAutosaveDraft<TInput, TResult>(
 
     async function runSave(): Promise<void> {
         const input = optionsRef.current.buildInput();
+        const savingRevision = revisionRef.current;
         if (slugRef.current === null && optionsRef.current.isEmpty(input)) {
             return;
         }
@@ -169,7 +181,11 @@ export function useAutosaveDraft<TInput, TResult>(
                 slugRef.current = resolvedSlug;
                 optionsRef.current.onSlugChanged?.(result);
             }
-            optionsRef.current.onSaved?.(result);
+            optionsRef.current.onSaved?.(result, input);
+            if (savingRevision === revisionRef.current) {
+                dirtyRef.current = false;
+                if (mountedRef.current) setIsDirty(false);
+            }
             if (mountedRef.current) {
                 setStatus("saved");
             }
@@ -203,6 +219,9 @@ export function useAutosaveDraft<TInput, TResult>(
     }
 
     function scheduleSave() {
+        revisionRef.current++;
+        dirtyRef.current = true;
+        if (mountedRef.current) setIsDirty(true);
         clearTimer();
         timerRef.current = setTimeout(() => {
             timerRef.current = null;
@@ -216,5 +235,20 @@ export function useAutosaveDraft<TInput, TResult>(
         return performSave();
     }
 
-    return { status, scheduleSave, flush };
+    function adoptResourceSlug(slug: string) {
+        if (savingRef.current) throw new Error("Wait for the current save before changing resource identity.");
+        slugRef.current = slug;
+    }
+
+    function resetSavedState() {
+        if (savingRef.current) throw new Error("Wait for the current save before adopting server content.");
+        clearTimer();
+        pendingRef.current = false;
+        dirtyRef.current = false;
+        if (mountedRef.current) { setIsDirty(false); setStatus("saved"); }
+    }
+
+    return { status, isDirty, scheduleSave, flush, adoptResourceSlug, resetSavedState,
+        cancelScheduledSave: clearTimer,
+        getResourceSlug: () => slugRef.current, getEditRevision: () => revisionRef.current, getIsDirty: () => dirtyRef.current };
 }

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { createAdminUser } from "../src/auth/create-admin-user";
 import { createPost, publishPost, savePostDraft, translatePost } from "../src/content/admin-posts";
 import { createWork, publishWork, translateWork } from "../src/content/admin-work";
 import { resetTestDatabase } from "../src/test-utils/db";
@@ -243,6 +244,9 @@ const TRANSLATIONS = {
 
 async function main(): Promise<void> {
     await resetTestDatabase();
+    // Isolated test database only; these credentials have no production account.
+    const admin = await createAdminUser("editor-e2e@example.com", "editor-e2e-password-123");
+    if (!admin.ok) throw new Error(admin.error);
 
     // Each FIXTURES.* entry's shape already matches WorkInput/PostInput
     // field-for-field (see admin-work.ts/admin-posts.ts), so it's passed

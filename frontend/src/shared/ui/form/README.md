@@ -91,3 +91,8 @@ case study" — не самоочевиден по одному лейблу (ч
 скопировано с `Field`'s hint-стиля), не новую, придуманную с нуля идею.
 Опциональный проп — существующий вызов в `HeroSettingsForm.tsx` (несвязанная
 фича) не потребовал ни одной правки.
+
+
+## 2026-10-29 Unified editor controls
+
+The editor reuses the shared controls rather than adding private copies. Flat buttons and inset fields preserve existing defaults. Field context connects hints and errors to inputs. Relationship selection delegates to the shared single-value combobox in closed mode; arbitrary text cannot become a relationship. Unit tests cover keyboard selection and error descriptions.

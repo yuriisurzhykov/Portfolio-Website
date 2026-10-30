@@ -68,3 +68,5 @@ JS-таймера/слушателя сверх обычных `onClick`/`onDele
 `Work` вообще (только про badges/meta/title/slug/editHref/onDelete) —
 `AdminJournalListPage`/`AdminWorkListPage` решают, ЧТО подставить в каждый
 слот, `AdminListItem` только решает, КАК это расположить и анимировать.
+
+Body-first drafts may have an empty title. The shared row presents them as “Untitled draft” until metadata is added, while retaining their stable edit link and slug.

@@ -1583,3 +1583,9 @@ data"): напрямую вставляют старую форму через `
 `getWorkForAdmin` (список), `publishWork` (полный цикл записи) и
 `restoreWorkRevision`, проверяя, что старый `year` возвращается как
 `"<year>-01-01"`, а старый перевод без `title` не бросает исключение.
+
+## 2026-10-29 Body-first drafts and persistent URL policy
+
+Draft title may be empty; publication keeps the existing strict contract. A temporary unique untitled address identifies an incomplete draft. URL mode is stored on the record and in pending draft data. Automatic candidates follow title changes until the first publication; autosave never renames the canonical resource. Publication freezes the mode, preserves its historical marker, and applies a pending rename through the existing slug-history path. Manual candidates survive subsequent title edits and reload.
+
+The migration initializes all legacy records to manual mode conservatively, then defaults new records to auto. Admin-only mutation summaries expose the resolved candidate and mode without adding authoring fields to public summary types. Existing translations and draft history remain independent. Integration tests cover body-only creation, reload, collision resolution, and the publication/unpublish boundary.

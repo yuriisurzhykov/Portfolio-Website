@@ -1,0 +1,21 @@
+@reference "../../../app/styles/index.css";
+
+.portfolio-authoring .bn-container {
+    --bn-font-family: var(--font-body);
+    --bn-colors-editor-background: var(--color-bg-app);
+    --bn-colors-editor-text: var(--color-text-primary);
+    --bn-colors-menu-background: var(--color-surface-base);
+    --bn-colors-menu-text: var(--color-text-primary);
+
+    @apply font-body;
+}
+
+.portfolio-authoring .bn-editor {
+    @apply mx-auto w-full max-w-(--layout-content-reading) bg-bg-app px-lg py-3xl font-body text-body-lg leading-relaxed;
+    min-height: var(--layout-code-editor-min-height);
+}
+
+.portfolio-authoring .bn-editor h2 { @apply text-h2 font-semibold leading-tight; }
+.portfolio-authoring .bn-editor h3 { @apply text-h3 font-semibold; }
+.portfolio-authoring .bn-editor pre,
+.portfolio-authoring .bn-editor code { @apply font-mono; }

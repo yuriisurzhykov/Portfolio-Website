@@ -822,3 +822,7 @@ Single Responsibility: `schema.ts` знает только "какие блок�
 структурно (только добавляется `case` в двух `switch`) — кроме `"list"`,
 чья особая group/expand-логика в `convert.ts` — намеренное исключение,
 задокументированное там же, а не нарушение этого правила по недосмотру.
+
+The optional `authoring` appearance adds the shared keyboard-accessible toolbar and scoped reading typography. Commands operate on the same BlockNote document. The handle exposes opaque selection snapshots for panel/focus transitions. `readOnly` locks document editing and toolbar commands during content actions; translations retain the default appearance.
+
+Editor update notifications with no changed blocks are ignored: toggling editability during save/review must not create an unsaved revision. The text block-type selector is disabled on custom blocks to prevent discarding their structured props. Browser tests verify formatting, links, code insertion, selection/focus continuity, undo, and accessible naming.

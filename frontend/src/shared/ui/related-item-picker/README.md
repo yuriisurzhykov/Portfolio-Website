@@ -64,3 +64,8 @@
 ценность (фаззи-выпадающий список, навигация с клавиатуры, откат при потере
 фокуса) проявляется только через взаимодействие, которое статичный
 скриншот не проверяет. Покрыт напрямую `RelatedItemPicker.test.tsx`.
+
+
+## 2026-10-29 Unified editor controls
+
+The editor reuses the shared controls rather than adding private copies. Flat buttons and inset fields preserve existing defaults. Field context connects hints and errors to inputs. Relationship selection delegates to the shared single-value combobox in closed mode; arbitrary text cannot become a relationship. Unit tests cover keyboard selection and error descriptions.

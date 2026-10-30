@@ -72,3 +72,8 @@ describe("AdminListItem", () => {
         expect(screen.queryByText(/Linked to/)).not.toBeInTheDocument();
     });
 });
+
+it('keeps a body-only draft identifiable before a title is added', () => {
+    renderItem({ title: '' });
+    expect(screen.getByText('Untitled draft')).toBeVisible();
+});

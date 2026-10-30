@@ -19,14 +19,14 @@ const toneClasses: Record<StatusTone, string> = {
     success: cn("text-status-on-solid", "bg-status-success"),
     warning: cn("text-status-on-solid", "bg-status-warning"),
     accent: cn("text-accent-on-solid", "bg-accent-solid"),
-    neutral: cn("text-text-muted", "bg-surface-raised"),
+    neutral: cn("text-text-secondary", "bg-surface-raised"),
 };
 
 const dotClasses: Record<StatusTone, string> = {
     success: "bg-status-on-solid",
     warning: "bg-status-on-solid",
     accent: "bg-accent-on-solid",
-    neutral: "bg-text-muted",
+    neutral: "bg-text-secondary",
 };
 
 /**
