@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getAllWork, getJournalEntries, type ContentLocale } from "@portfolio/backend";
 import { orDatabaseOutageFallback } from "@/shared/lib/db-outage-fallback";
-import { localizedPath } from "@/shared/lib/seo/alternates";
+import { alternatesFor, localizedPath } from "@/shared/lib/seo/alternates";
 import { SITE_URL } from "@/shared/lib/seo/site-url";
 
 // Without this the map is baked at build time and stops reflecting content
@@ -25,20 +25,19 @@ const ALL_LOCALES: ContentLocale[] = ["en", "ru"];
  */
 const STATIC_PATHS = ["/", "/journal", "/work"];
 
-function entryFor(path: string, availableLocales: ContentLocale[], lastModified?: string): MetadataRoute.Sitemap[number] {
-    // `localizedPath`, not a second inline `/ru` concatenation — the first
-    // version of this file had one, and it emitted `.../ru/` for the
-    // landing page where the site serves `.../ru`.
-    const languages: Record<string, string> = {};
-    for (const locale of availableLocales) {
-        languages[locale] = `${ SITE_URL }${ localizedPath(path, locale) }`;
-    }
+function entriesFor(path: string, availableLocales: ContentLocale[], lastModified?: string): MetadataRoute.Sitemap {
+    const { languages } = alternatesFor(path, "en", availableLocales);
+    const absoluteLanguages = Object.fromEntries(
+        Object.entries(languages).map(([locale, href]) => [locale, `${ SITE_URL }${ href }`]),
+    );
 
-    return {
-        url: `${ SITE_URL }${ path }`,
+    // Every language variant needs its own <url>, with the same reciprocal
+    // hreflang set. A link under the English <url> is not a Russian entry.
+    return availableLocales.map((locale) => ({
+        url: `${ SITE_URL }${ localizedPath(path, locale) }`,
         ...(lastModified ? { lastModified } : {}),
-        alternates: { languages },
-    };
+        alternates: { languages: absoluteLanguages },
+    }));
 }
 
 /**
@@ -67,7 +66,7 @@ function entryFor(path: string, availableLocales: ContentLocale[], lastModified?
  * `orDatabaseOutageFallback`.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    const staticEntries = STATIC_PATHS.map((path) => entryFor(path, ALL_LOCALES));
+    const staticEntries = STATIC_PATHS.flatMap((path) => entriesFor(path, ALL_LOCALES));
 
     return orDatabaseOutageFallback(async () => {
         const [posts, work] = await Promise.all([getJournalEntries(), getAllWork()]);
@@ -76,13 +75,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             ...staticEntries,
             ...posts
                 .filter((post) => post.status === "published" && post.hasBody)
-                .map((post) =>
-                    entryFor(`/journal/${ post.slug }`, post.availableLocales, post.contentUpdatedAt ?? post.publishedAt ?? undefined),
+                .flatMap((post) =>
+                    entriesFor(`/journal/${ post.slug }`, post.availableLocales, post.contentUpdatedAt ?? post.publishedAt ?? undefined),
                 ),
             ...work
                 .filter((item) => item.hasCaseStudy)
-                .map((item) =>
-                    entryFor(`/work/${ item.slug }`, item.availableLocales, item.contentUpdatedAt ?? item.publishedAt ?? undefined),
+                .flatMap((item) =>
+                    entriesFor(`/work/${ item.slug }`, item.availableLocales, item.contentUpdatedAt ?? item.publishedAt ?? undefined),
                 ),
         ];
     }, staticEntries, "sitemap.xml");

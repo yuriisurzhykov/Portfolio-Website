@@ -1,0 +1,496 @@
+{
+  "kind": "post",
+  "slug": "how-we-disabled-privacy-indicators-on-custom-android-image",
+  "source": {
+    "title": "How we disabled privacy indicators on custom Android image",
+    "category": "AOSP",
+    "excerpt": "A history and brief instruction for those trying to disable privacy indicators on their hardware. This requires modifying the Android source code, and I don't recommend disabling it completely; it's better to customize it, which is what this article will cover.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Introduction",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "**Backstory:** At work, we're building a device with kiosk mode that helps protect your home. When we were working on taking camera snapshots during dangerous operations (arm/disarm), we had a requirement to show the camera indicator when taking the snapshot. However, since we're using an Android 13 build, it already included a special feature introduced with Android 12 - privacy indicators (you can read more about it here: [link](https://source.android.com/docs/core/permissions/privacy-indicators))."
+      },
+      {
+        "type": "paragraph",
+        "text": "There were two problems:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": true,
+          "items": [
+            {
+              "text": "We needed to display our own camera icon, and display it in a completely different location than Android's default.",
+              "blocks": []
+            },
+            {
+              "text": "In some scenarios, we needed to show nothing at all, even if the camera was taking snapshots. This was done for user security.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "We decided to do it this way: completely disable the system indicator and display the icon overlaying the app ourselves. Sounds simple. It all started with a simple flag:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "bash",
+          "code": "adb shell cmd device_config put privacy camera_mic_icons_enabled false default"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "This flag worked, but the problem was that the command with the flag had to be run by someone, which is completely out of the question, because we wouldn't tell the user: \"You need to buy a cable here, and then run another command.\". So, another way was needed. A rather simple option, like this boolean config in SystemUI properties, seemed like the answer."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "XML",
+          "code": "<bool name=\"config_enablePrivacyDot\">true</bool>"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "We set this flag to false, built the image, installed it on the device, and got \"50 percent performance.\" It turned out that this flag only disables the camera itself, which remains active during extended camera use. However, the camera/microphone icon that appears when launching the camera or AudioRecord doesn't use this flag, and the camera remains visible during use."
+      },
+      {
+        "type": "paragraph",
+        "text": "The next instance was the `PrivacyConfig` class, which contained the `DEFAULT_MIC_CAMERA` property. The name, frankly, is completely meaningless, but it turns out it was supposed to enable/disable the visibility of the camera icon."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "code": "frameworks/base/packages/SystemUI/src/com/android/systemui/privacy/PrivacyConfig.kt"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "We changed the value to `false`:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "private const val DEFAULT_MIC_CAMERA = false"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Technically, everything worked now. But there was one problem: this configuration completely disabled the privacy indicator, meaning any other app that used the camera would go undetected. So, we needed to make the \"hide system privacy indicator\" option apply only to our system app."
+      },
+      {
+        "type": "heading",
+        "text": "A new solution is needed",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "I started digging deeper and discovered this:"
+      },
+      {
+        "type": "note",
+        "text": "All permissions have different levels of sensitivity, and the system typically sets a sensitivity flag for a specific permission for all apps. Even dangerous permissions can be marked as insensitive, and it turns out you can specify different logic for different packages.",
+        "data": {
+          "variant": "info"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Technically, this meant that we could set a specific insensitive flag for the camera for our app, while the system would automatically mark such permissions as sensitive for other apps. So, if there were a way to tell the system, *\"Consider this specific permission safe for this app\",* that would solve our problem. The question remained: how to do it?"
+      },
+      {
+        "type": "paragraph",
+        "text": "After a brief search for answers, it was decided to write a small system application with a system signature that would say exactly what was needed when the system was launched: consider this application safe when it uses the camera. In code it would look like this:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "Java",
+          "code": "context.getPackageManager().updatePermissionFlags(\n    Manifest.permission.CAMERA,\n    \"your.production.app\",\n    PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED,\n    0,\n    Process.myUserHandle()\n);\n\ncontext.getPackageManager().updatePermissionFlags(\n    Manifest.permission.RECORD_AUDIO,\n    \"your.production.app\",\n    PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED,\n    0,\n    Process.myUserHandle()\n);"
+        }
+      },
+      {
+        "type": "heading",
+        "text": "Writing system application",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Before writing the code let's suggest the architecture and describe how the OS works, and how it decides to display the indicator:"
+      },
+      {
+        "type": "diagram",
+        "text": "Diagrams of architectural pieces",
+        "data": {
+          "engine": "plantuml",
+          "source": "@startuml\ntitle Architecture: hiding the privacy indicator for one specific app\n\nskinparam componentStyle rectangle\n\npackage \"System partition of the firmware\\n(signed with the platform key)\" as SystemPartition {\n  [PrivacyExemptionHelper\\n(priv-app, contains BootReceiver)] as Helper\n  [privapp-permissions-example-privacyhelper.xml\\n(grants Helper the\\nADJUST_RUNTIME_PERMISSIONS_POLICY permission)] as Allowlist\n}\n\npackage \"system_server (OS process)\" {\n  [ActivityManagerService\\n(sends system broadcasts)] as AMS\n  [PackageManagerService\\n(stores and checks permission flags)] as PMS\n  database \"runtime-permissions.xml\\n(permission flags on disk)\" as PermStorage\n}\n\npackage \"SystemUI (also an OS process, separate one)\" {\n  [AppOpsControllerImpl\\n(watches active\\nCAMERA/RECORD_AUDIO ops)] as AppOpsCtrl\n  [PrivacyItemController /\\nHeaderPrivacyIconsController\\n(draws the status bar icon)] as PrivacyUI\n}\n\npackage \"Regular apps\\n(not platform-signed)\" {\n  [your.production.app\\n(target app)] as TargetApp\n  [Any other app] as OtherApp\n}\n\nAMS --> Helper : BOOT_COMPLETED /\\nPACKAGE_ADDED\nHelper --> PMS : updatePermissionFlags(\\nCAMERA, \"your.production.app\",\\nclear USER_SENSITIVE_WHEN_GRANTED)\nAllowlist ..> PMS : PMS checks:\\ndoes the caller hold\\nADJUST_RUNTIME_PERMISSIONS_POLICY?\nPMS --> PermStorage : persists the updated flag\n\nTargetApp --> AppOpsCtrl : startOp/noteOp(CAMERA)\nOtherApp --> AppOpsCtrl : startOp/noteOp(CAMERA)\nAppOpsCtrl --> PMS : getPermissionFlags(CAMERA, package)\nAppOpsCtrl --> PrivacyUI : notification —\\nonly sent if the\\nUSER_SENSITIVE_WHEN_GRANTED flag\\nis still present\n\nnote right of PrivacyUI\n  your.production.app: flag cleared →\n  no notification sent →\n  icon is NOT shown\n\n  any other app: flag still present →\n  icon is shown as usual\nend note\n\n@enduml"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "And here is the sequence diagram of the process:"
+      },
+      {
+        "type": "diagram",
+        "text": "Sequence of operations",
+        "data": {
+          "engine": "plantuml",
+          "source": "@startuml\ntitle Sequence: applying the exemption and how it's used at runtime\n\nbox \"Firmware (platform-signed)\" #LightBlue\nparticipant \"BootReceiver\\n(PrivacyExemptionHelper)\" as Helper\nend box\n\nbox \"system_server\" #LightYellow\nparticipant \"ActivityManagerService\" as AMS\nparticipant \"PackageManagerService\" as PMS\nend box\n\nbox \"SystemUI\" #LightGreen\nparticipant \"AppOpsControllerImpl\" as AppOps\nparticipant \"PrivacyItemController /\\nHeaderPrivacyIconsController\" as PrivacyUI\nend box\n\nparticipant \"your.production.app\\n(target app)\" as Target\nparticipant \"Any other app\" as Other\n\n== Phase 1. Device boot / app install ==\n\nAMS -> Helper : broadcast BOOT_COMPLETED\\n(or PACKAGE_ADDED/PACKAGE_REPLACED)\nactivate Helper\n\nHelper -> PMS : updatePermissionFlags(\\n  CAMERA, \"your.production.app\",\\n  mask = USER_SENSITIVE_WHEN_GRANTED,\\n  value = 0)\nactivate PMS\n\nPMS -> PMS : checks the caller:\\ndoes it hold ADJUST_RUNTIME_PERMISSIONS_POLICY?\\n(yes — Helper is platform-signed\\nand listed in privapp-permissions.xml)\n\nPMS -> PMS : clears the\\nUSER_SENSITIVE_WHEN_GRANTED bit\\nfor the pair (CAMERA, your.production.app)\n\nPMS --> Helper : OK\ndeactivate PMS\ndeactivate Helper\n\n== Phase 2. App turns the camera on ==\n\nTarget -> AppOps : AppOpsManager.startOp(OP_CAMERA)\nactivate AppOps\nAppOps -> PMS : getPermissionFlags(CAMERA, \"your.production.app\")\nPMS --> AppOps : flags WITHOUT USER_SENSITIVE_WHEN_GRANTED\nAppOps -> AppOps : isUserSensitive() == false\nnote right: nothing is forwarded\\ndown the chain —\\nno indicator needed\ndeactivate AppOps\n\nOther -> AppOps : AppOpsManager.startOp(OP_CAMERA)\nactivate AppOps\nAppOps -> PMS : getPermissionFlags(CAMERA, \"com.other.app\")\nPMS --> AppOps : flags WITH USER_SENSITIVE_WHEN_GRANTED\nAppOps -> AppOps : isUserSensitive() == true\nAppOps -> PrivacyUI : notifySubscribers(active = true)\nactivate PrivacyUI\nPrivacyUI -> PrivacyUI : draws the icon\\nin the status bar\ndeactivate PrivacyUI\ndeactivate AppOps\n\nnote over AppOps, PrivacyUI\n  Separately: even if this app's flag is cleared,\n  this whole chain never runs at all if the\n  global switch PrivacyConfig.micCameraAvailable == false\n  (the one controlled by DEFAULT_MIC_CAMERA).\n  These are two independent \"kill switches\".\nend note\n\n@enduml"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The suggested architecture for the app was the following:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "code": "packages/apps/PrivacyExemptionHelper/\n├── Android.bp\n├── AndroidManifest.xml\n└── src/\n    └── com/\n        └── example/\n            └── privacyhelper/\n                └── BootReceiver.java\n\nframeworks/base/data/etc/\n└── privapp-permissions-example-privacyhelper.xml\n\ndevice/<vendor>/<device>/\n└── device.mk                      ← add PRODUCT_COPY_FILES + PRODUCT_PACKAGES"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The next step is to create our main application component - broadcast receiver:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "packages/apps/PrivacyExemptionHelper/src/com/example/privacyhelper/BootReceiver.java",
+          "language": "Java",
+          "code": "package com.example.privacyhelper;\n\nimport android.Manifest;\nimport android.content.BroadcastReceiver;\nimport android.content.Context;\nimport android.content.Intent;\nimport android.content.pm.PackageManager;\nimport android.os.Process;\nimport android.util.Log;\n\npublic class BootReceiver extends BroadcastReceiver {\n\n    // The package name of the target application, for which camera icon should NOT\n    // be displayed.\n    private static final String TARGET_PACKAGE = \"your.production.app\";\n\n    @Override\n    public void onReceive(Context context, Intent intent) {\n        PackageManager pm = context.getPackageManager();\n        try {\n            pm.updatePermissionFlags(\n                Manifest.permission.CAMERA, TARGET_PACKAGE,\n                PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED, 0,\n                Process.myUserHandle()\n            );\n            pm.updatePermissionFlags(\n                Manifest.permission.RECORD_AUDIO, TARGET_PACKAGE,\n                PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED, 0,\n                Process.myUserHandle()\n            );\n            Log.i(\"PrivacyExemptionHelper\", \"Exemption applied for \" + TARGET_PACKAGE);\n        } catch (Exception e) {\n            Log.e(\"PrivacyExemptionHelper\", \"Failed to apply exemption\", e);\n        }\n    }\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "After this we can create a AndroidManifext.xml file to configure the application:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "packages/apps/PrivacyExemptionHelper/AndroidManifest.xml",
+          "language": "XML",
+          "code": "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    package=\"com.example.privacyhelper\">\n\n    <uses-permission android:name=\"android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY\" />\n    <uses-permission android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\" />\n\n    <application android:label=\"PrivacyExemptionHelper\">\n        <receiver android:name=\".BootReceiver\" android:exported=\"true\">\n            <intent-filter>\n                <action android:name=\"android.intent.action.BOOT_COMPLETED\" />\n                <action android:name=\"android.intent.action.PACKAGE_ADDED\" />\n                <action android:name=\"android.intent.action.PACKAGE_REPLACED\" />\n                <data android:scheme=\"package\" />\n            </intent-filter>\n        </receiver>\n    </application>\n</manifest>"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "When two primary pieces are built, we need to say the make engine how to build the app:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "packages/apps/PrivacyExemptionHelper/Android.bp",
+          "code": "android_app {\n    name: \"PrivacyExemptionHelper\",\n    srcs: [\"src/**/*.java\"],\n    manifest: \"AndroidManifest.xml\",\n    platform_apis: true,\n    certificate: \"platform\",\n    privileged: true,\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "And also, of course, we need to tell the Android OS, that this application requires some unusual permissions, such as `ADJUST_RUNTIME_PERMIOSSION_POLICY`"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "frameworks/base/data/etc/privapp-permissions-example-privacyhelper.xml",
+          "language": "XML",
+          "code": "<permissions>\n    <privapp-permissions package=\"com.example.privacyhelper\">\n        <permission name=\"android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY\" />\n    </privapp-permissions>\n</permissions>"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "And the final part is we need to tell declare this new system application within the build tree:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "code": "PRODUCT_PACKAGES += PrivacyExemptionHelper\n\nPRODUCT_COPY_FILES += \\\n    frameworks/base/data/etc/privapp-permissions-example-privacyhelper.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/privapp-permissions-example-privacyhelper.xml"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "**This is it!**"
+      },
+      {
+        "type": "paragraph",
+        "text": "Now we need to run the build and make sure it's working for our application only!"
+      },
+      {
+        "type": "paragraph",
+        "text": ""
+      },
+      {
+        "type": "quote",
+        "text": "Glad you learned something new today!~",
+        "data": {
+          "attribution": "Y.S."
+        }
+      }
+    ]
+  },
+  "translation": {
+    "title": "Как мы отключили индикаторы конфиденциальности в собственном образе Android",
+    "category": "AOSP",
+    "excerpt": "История и краткая инструкция для тех, кто пытается отключить индикаторы конфиденциальности на своём оборудовании. Для этого требуется изменить исходный код Android. Я не рекомендую отключать их полностью: лучше адаптировать их поведение, чему и посвящена эта статья.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Введение",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "**Предыстория:** На работе мы создаём устройство с режимом киоска, которое помогает защищать ваш дом. Когда мы работали над получением снимков с камеры при выполнении потенциально опасных операций, постановке на охрану и снятии с неё, у нас было требование показывать индикатор камеры во время снимка. Однако мы используем сборку Android 13, в которую уже входила специальная функция, появившаяся в Android 12: индикаторы конфиденциальности. Подробнее о ней можно прочитать здесь: [ссылка](https://source.android.com/docs/core/permissions/privacy-indicators)."
+      },
+      {
+        "type": "paragraph",
+        "text": "Возникли две проблемы:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": true,
+          "items": [
+            {
+              "text": "Нам требовалось показывать собственный значок камеры, причём совсем в другом месте, чем предусмотрено в Android по умолчанию.",
+              "blocks": []
+            },
+            {
+              "text": "В некоторых сценариях нам требовалось вообще ничего не показывать, даже если камера делала снимки. Это было необходимо для безопасности пользователя.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Мы решили поступить следующим образом: полностью отключить системный индикатор и самостоятельно показывать значок поверх приложения. Звучит просто. Всё началось с простого флага:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "bash",
+          "code": "adb shell cmd device_config put privacy camera_mic_icons_enabled false default"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Этот флаг работал, но проблему создавало то, что кто-то должен был выполнить соответствующую команду. Это было совершенно неприемлемо: мы не могли сказать пользователю: «Вам нужно купить кабель, а затем выполнить ещё одну команду». Поэтому требовался другой способ. Достаточно простой вариант, такой как этот логический параметр в свойствах SystemUI, казался подходящим решением."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "XML",
+          "code": "<bool name=\"config_enablePrivacyDot\">true</bool>"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Мы установили этот флаг в false, собрали образ, установили его на устройство и получили «работоспособность на 50 процентов». Оказалось, что этот флаг отключает только саму камеру, которая остаётся активной при длительном использовании камеры. Однако значок камеры или микрофона, появляющийся при запуске камеры или AudioRecord, не использует этот флаг, и камера остаётся видимой во время использования."
+      },
+      {
+        "type": "paragraph",
+        "text": "Следующим объектом исследования стал класс `PrivacyConfig`, содержавший свойство `DEFAULT_MIC_CAMERA`. Название, откровенно говоря, совершенно неинформативное, но оказалось, что оно должно было включать и отключать отображение значка камеры."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "code": "frameworks/base/packages/SystemUI/src/com/android/systemui/privacy/PrivacyConfig.kt"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Мы изменили значение на `false`:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "private const val DEFAULT_MIC_CAMERA = false"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Технически теперь всё работало. Но оставалась одна проблема: эта конфигурация полностью отключала индикатор конфиденциальности, то есть использование камеры любым другим приложением оставалось бы незаметным. Поэтому нам требовалось сделать так, чтобы параметр «скрыть системный индикатор конфиденциальности» применялся только к нашему системному приложению."
+      },
+      {
+        "type": "heading",
+        "text": "Требуется новое решение",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Я начал изучать вопрос глубже и обнаружил следующее:"
+      },
+      {
+        "type": "note",
+        "text": "Все разрешения имеют разные уровни чувствительности, и система обычно устанавливает флаг чувствительности конкретного разрешения для всех приложений. Даже опасные разрешения можно пометить как нечувствительные. Оказалось, что для разных пакетов можно задать разную логику.",
+        "data": {
+          "variant": "info"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Технически это означало, что мы могли установить для разрешения камеры нашего приложения специальный флаг нечувствительности, тогда как для других приложений система автоматически помечала бы такие разрешения как чувствительные. Следовательно, возможность сообщить системе: *«Считай это конкретное разрешение безопасным для этого приложения»* решила бы нашу проблему. Оставался вопрос: как это сделать?"
+      },
+      {
+        "type": "paragraph",
+        "text": "После недолгого поиска ответов было решено написать небольшое системное приложение с системной подписью, которое при запуске системы сообщало бы именно то, что требовалось: считать это приложение безопасным при использовании камеры. В коде это выглядело бы так:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "Java",
+          "code": "context.getPackageManager().updatePermissionFlags(\n    Manifest.permission.CAMERA,\n    \"your.production.app\",\n    PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED,\n    0,\n    Process.myUserHandle()\n);\n\ncontext.getPackageManager().updatePermissionFlags(\n    Manifest.permission.RECORD_AUDIO,\n    \"your.production.app\",\n    PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED,\n    0,\n    Process.myUserHandle()\n);"
+        }
+      },
+      {
+        "type": "heading",
+        "text": "Написание системного приложения",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Прежде чем писать код, предложим архитектуру и опишем, как работает ОС и как она решает, нужно ли показывать индикатор:"
+      },
+      {
+        "type": "diagram",
+        "text": "Диаграммы архитектурных компонентов",
+        "data": {
+          "engine": "plantuml",
+          "source": "@startuml\ntitle Architecture: hiding the privacy indicator for one specific app\n\nskinparam componentStyle rectangle\n\npackage \"System partition of the firmware\\n(signed with the platform key)\" as SystemPartition {\n  [PrivacyExemptionHelper\\n(priv-app, contains BootReceiver)] as Helper\n  [privapp-permissions-example-privacyhelper.xml\\n(grants Helper the\\nADJUST_RUNTIME_PERMISSIONS_POLICY permission)] as Allowlist\n}\n\npackage \"system_server (OS process)\" {\n  [ActivityManagerService\\n(sends system broadcasts)] as AMS\n  [PackageManagerService\\n(stores and checks permission flags)] as PMS\n  database \"runtime-permissions.xml\\n(permission flags on disk)\" as PermStorage\n}\n\npackage \"SystemUI (also an OS process, separate one)\" {\n  [AppOpsControllerImpl\\n(watches active\\nCAMERA/RECORD_AUDIO ops)] as AppOpsCtrl\n  [PrivacyItemController /\\nHeaderPrivacyIconsController\\n(draws the status bar icon)] as PrivacyUI\n}\n\npackage \"Regular apps\\n(not platform-signed)\" {\n  [your.production.app\\n(target app)] as TargetApp\n  [Any other app] as OtherApp\n}\n\nAMS --> Helper : BOOT_COMPLETED /\\nPACKAGE_ADDED\nHelper --> PMS : updatePermissionFlags(\\nCAMERA, \"your.production.app\",\\nclear USER_SENSITIVE_WHEN_GRANTED)\nAllowlist ..> PMS : PMS checks:\\ndoes the caller hold\\nADJUST_RUNTIME_PERMISSIONS_POLICY?\nPMS --> PermStorage : persists the updated flag\n\nTargetApp --> AppOpsCtrl : startOp/noteOp(CAMERA)\nOtherApp --> AppOpsCtrl : startOp/noteOp(CAMERA)\nAppOpsCtrl --> PMS : getPermissionFlags(CAMERA, package)\nAppOpsCtrl --> PrivacyUI : notification —\\nonly sent if the\\nUSER_SENSITIVE_WHEN_GRANTED flag\\nis still present\n\nnote right of PrivacyUI\n  your.production.app: flag cleared →\n  no notification sent →\n  icon is NOT shown\n\n  any other app: flag still present →\n  icon is shown as usual\nend note\n\n@enduml"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "А вот диаграмма последовательности этого процесса:"
+      },
+      {
+        "type": "diagram",
+        "text": "Последовательность операций",
+        "data": {
+          "engine": "plantuml",
+          "source": "@startuml\ntitle Sequence: applying the exemption and how it's used at runtime\n\nbox \"Firmware (platform-signed)\" #LightBlue\nparticipant \"BootReceiver\\n(PrivacyExemptionHelper)\" as Helper\nend box\n\nbox \"system_server\" #LightYellow\nparticipant \"ActivityManagerService\" as AMS\nparticipant \"PackageManagerService\" as PMS\nend box\n\nbox \"SystemUI\" #LightGreen\nparticipant \"AppOpsControllerImpl\" as AppOps\nparticipant \"PrivacyItemController /\\nHeaderPrivacyIconsController\" as PrivacyUI\nend box\n\nparticipant \"your.production.app\\n(target app)\" as Target\nparticipant \"Any other app\" as Other\n\n== Phase 1. Device boot / app install ==\n\nAMS -> Helper : broadcast BOOT_COMPLETED\\n(or PACKAGE_ADDED/PACKAGE_REPLACED)\nactivate Helper\n\nHelper -> PMS : updatePermissionFlags(\\n  CAMERA, \"your.production.app\",\\n  mask = USER_SENSITIVE_WHEN_GRANTED,\\n  value = 0)\nactivate PMS\n\nPMS -> PMS : checks the caller:\\ndoes it hold ADJUST_RUNTIME_PERMISSIONS_POLICY?\\n(yes — Helper is platform-signed\\nand listed in privapp-permissions.xml)\n\nPMS -> PMS : clears the\\nUSER_SENSITIVE_WHEN_GRANTED bit\\nfor the pair (CAMERA, your.production.app)\n\nPMS --> Helper : OK\ndeactivate PMS\ndeactivate Helper\n\n== Phase 2. App turns the camera on ==\n\nTarget -> AppOps : AppOpsManager.startOp(OP_CAMERA)\nactivate AppOps\nAppOps -> PMS : getPermissionFlags(CAMERA, \"your.production.app\")\nPMS --> AppOps : flags WITHOUT USER_SENSITIVE_WHEN_GRANTED\nAppOps -> AppOps : isUserSensitive() == false\nnote right: nothing is forwarded\\ndown the chain —\\nno indicator needed\ndeactivate AppOps\n\nOther -> AppOps : AppOpsManager.startOp(OP_CAMERA)\nactivate AppOps\nAppOps -> PMS : getPermissionFlags(CAMERA, \"com.other.app\")\nPMS --> AppOps : flags WITH USER_SENSITIVE_WHEN_GRANTED\nAppOps -> AppOps : isUserSensitive() == true\nAppOps -> PrivacyUI : notifySubscribers(active = true)\nactivate PrivacyUI\nPrivacyUI -> PrivacyUI : draws the icon\\nin the status bar\ndeactivate PrivacyUI\ndeactivate AppOps\n\nnote over AppOps, PrivacyUI\n  Separately: even if this app's flag is cleared,\n  this whole chain never runs at all if the\n  global switch PrivacyConfig.micCameraAvailable == false\n  (the one controlled by DEFAULT_MIC_CAMERA).\n  These are two independent \"kill switches\".\nend note\n\n@enduml"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Предлагаемая архитектура приложения была следующей:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "code": "packages/apps/PrivacyExemptionHelper/\n├── Android.bp\n├── AndroidManifest.xml\n└── src/\n    └── com/\n        └── example/\n            └── privacyhelper/\n                └── BootReceiver.java\n\nframeworks/base/data/etc/\n└── privapp-permissions-example-privacyhelper.xml\n\ndevice/<vendor>/<device>/\n└── device.mk                      ← add PRODUCT_COPY_FILES + PRODUCT_PACKAGES"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Следующий шаг: создать основной компонент нашего приложения, приёмник широковещательных сообщений:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "packages/apps/PrivacyExemptionHelper/src/com/example/privacyhelper/BootReceiver.java",
+          "language": "Java",
+          "code": "package com.example.privacyhelper;\n\nimport android.Manifest;\nimport android.content.BroadcastReceiver;\nimport android.content.Context;\nimport android.content.Intent;\nimport android.content.pm.PackageManager;\nimport android.os.Process;\nimport android.util.Log;\n\npublic class BootReceiver extends BroadcastReceiver {\n\n    // The package name of the target application, for which camera icon should NOT\n    // be displayed.\n    private static final String TARGET_PACKAGE = \"your.production.app\";\n\n    @Override\n    public void onReceive(Context context, Intent intent) {\n        PackageManager pm = context.getPackageManager();\n        try {\n            pm.updatePermissionFlags(\n                Manifest.permission.CAMERA, TARGET_PACKAGE,\n                PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED, 0,\n                Process.myUserHandle()\n            );\n            pm.updatePermissionFlags(\n                Manifest.permission.RECORD_AUDIO, TARGET_PACKAGE,\n                PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED, 0,\n                Process.myUserHandle()\n            );\n            Log.i(\"PrivacyExemptionHelper\", \"Exemption applied for \" + TARGET_PACKAGE);\n        } catch (Exception e) {\n            Log.e(\"PrivacyExemptionHelper\", \"Failed to apply exemption\", e);\n        }\n    }\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "После этого можно создать файл AndroidManifext.xml для настройки приложения:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "packages/apps/PrivacyExemptionHelper/AndroidManifest.xml",
+          "language": "XML",
+          "code": "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    package=\"com.example.privacyhelper\">\n\n    <uses-permission android:name=\"android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY\" />\n    <uses-permission android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\" />\n\n    <application android:label=\"PrivacyExemptionHelper\">\n        <receiver android:name=\".BootReceiver\" android:exported=\"true\">\n            <intent-filter>\n                <action android:name=\"android.intent.action.BOOT_COMPLETED\" />\n                <action android:name=\"android.intent.action.PACKAGE_ADDED\" />\n                <action android:name=\"android.intent.action.PACKAGE_REPLACED\" />\n                <data android:scheme=\"package\" />\n            </intent-filter>\n        </receiver>\n    </application>\n</manifest>"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда два основных компонента готовы, нужно указать системе сборки make, как собирать приложение:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "packages/apps/PrivacyExemptionHelper/Android.bp",
+          "code": "android_app {\n    name: \"PrivacyExemptionHelper\",\n    srcs: [\"src/**/*.java\"],\n    manifest: \"AndroidManifest.xml\",\n    platform_apis: true,\n    certificate: \"platform\",\n    privileged: true,\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Кроме того, разумеется, нужно сообщить ОС Android, что этому приложению требуются некоторые нестандартные разрешения, например `ADJUST_RUNTIME_PERMIOSSION_POLICY`"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "frameworks/base/data/etc/privapp-permissions-example-privacyhelper.xml",
+          "language": "XML",
+          "code": "<permissions>\n    <privapp-permissions package=\"com.example.privacyhelper\">\n        <permission name=\"android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY\" />\n    </privapp-permissions>\n</permissions>"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Последний шаг: объявить это новое системное приложение в дереве сборки:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "code": "PRODUCT_PACKAGES += PrivacyExemptionHelper\n\nPRODUCT_COPY_FILES += \\\n    frameworks/base/data/etc/privapp-permissions-example-privacyhelper.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/privapp-permissions-example-privacyhelper.xml"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "**Готово!**"
+      },
+      {
+        "type": "paragraph",
+        "text": "Теперь нужно запустить сборку и убедиться, что это работает только для нашего приложения!"
+      },
+      {
+        "type": "paragraph",
+        "text": ""
+      },
+      {
+        "type": "quote",
+        "text": "Рад, что сегодня вы узнали что-то новое!~",
+        "data": {
+          "attribution": "Y.S."
+        }
+      }
+    ]
+  }
+}

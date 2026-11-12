@@ -18,6 +18,13 @@ describe("ogAlternateLocales", () => {
     });
 });
 
+describe("available Open Graph locales", () => {
+    it("does not advertise a translation that does not exist", () => {
+        expect(ogAlternateLocales("en", ["en"])).toEqual([]);
+        expect(ogAlternateLocales("ru", ["en", "ru"])).toEqual(["en_US"]);
+    });
+});
+
 describe("TWITTER_CARD", () => {
     it("is the large variant — the small one shows a side thumbnail instead of a full-width image", () => {
         expect(TWITTER_CARD).toBe("summary_large_image");

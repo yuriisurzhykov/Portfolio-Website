@@ -1,0 +1,26 @@
+{
+  "kind": "post",
+  "slug": "i-continue-to-struggle-with-onvif-video-streaming",
+  "source": {
+    "title": "I continue to struggle with ONVIF video streaming",
+    "category": "Video Streaming",
+    "excerpt": "It's not as simple as it might seem at first glance. There's a huge amount of stuff I never even knew about throughout my entire career.",
+    "blocks": [
+      {
+        "type": "paragraph",
+        "text": "Working with video turns out to be quite challenging, with so much new data, new areas you weren't even aware of, and all of this in completely unfamiliar territory. But the most important thing I've learned is that you need to take things step by step, rather than trying to do everything at once, and certainly not with neural networks. Using a neural network to write code you don't understand is the worst thing you can do for your progress, or for the project you're working on."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Продолжаю разбираться с потоковой передачей видео ONVIF",
+    "category": "Потоковое видео",
+    "excerpt": "Всё не так просто, как может показаться на первый взгляд. Существует огромное количество вещей, о которых я даже не знал за всю свою карьеру.",
+    "blocks": [
+      {
+        "type": "paragraph",
+        "text": "Работа с видео оказывается довольно сложной: столько новой информации, новых областей, о существовании которых вы даже не подозревали, и всё это на совершенно незнакомой территории. Но главное, что я усвоил: нужно двигаться шаг за шагом, а не пытаться сделать всё сразу, и уж точно не с помощью нейросетей. Использовать нейросеть для написания кода, который вы не понимаете, это худшее, что можно сделать для собственного развития или для проекта, над которым вы работаете."
+      }
+    ]
+  }
+}

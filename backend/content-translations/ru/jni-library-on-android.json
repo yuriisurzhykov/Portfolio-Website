@@ -1,0 +1,946 @@
+{
+  "kind": "work",
+  "slug": "jni-library-on-android",
+  "source": {
+    "title": "JNI library on Android",
+    "summary": "A journey with the handful, simple and solid JNI library that allows the developers to work with JNI quickly, simply, reliably and stress-free. Local references, threads, close() and callbacks: what goes wrong in Android JNI code, and how to design a safe native layer. With diagrams.",
+    "startedLabel": "Aug 2026",
+    "shippedLabel": "Sep 2026",
+    "role": "Architect and Lead Engineer",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "JNI without the boilerplate: what I learned building a layer over it",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "I started with a plain question: where do I keep a C++ object between calls from Kotlin? I ended up writing a small library that sits on top of JNI. This is not a post about the library. That comes later. This is about the problems I ran into, the decisions I took, and what I would check first if I were you."
+      },
+      {
+        "type": "heading",
+        "text": "Why I needed JNI at all",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The idea was a library for IP cameras. Not a big idea, honestly. We needed one feature: work with a lot of cameras and switch between the sub stream and the main stream of a camera."
+      },
+      {
+        "type": "paragraph",
+        "text": "I looked for an existing library that supports many camera vendors, is free, and has an open source license. I couldn't find a normal one. So the decision was to write it."
+      },
+      {
+        "type": "paragraph",
+        "text": "Writing it meant not writing it in Kotlin. Some cameras give 4K, and we need to show several of them at the same time. That needs direct access to memory and fast execution, and that is C++. JNI is what connects the C++ code to the API the library gives to the end user."
+      },
+      {
+        "type": "paragraph",
+        "text": "I had worked with a JNI layer before, and I remember how hard it was. You write a pile of instructions to turn one field into another, one class into another, to call each method, to return callbacks. Callbacks were a real mess. You have to remember to free memory, you can't overload memory in loops, you have to clean up objects every time. And this code never gets smaller. It grows with every method. On top of that, errors: you have to check every exception, and the errors themselves look strange."
+      },
+      {
+        "type": "paragraph",
+        "text": "So I decided I wasn't doing it like this again. I wanted a layer that does it by itself: allocates and frees memory, registers subscribers, registers callbacks, deals with the ProGuard rules."
+      },
+      {
+        "type": "heading",
+        "text": "What already exists",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "I have to be honest about this part. I didn't look. I found out only recently that a library very close to what I built already exists: Facebook's [fbjni](https://github.com/facebookincubator/fbjni). I had spent a lot of time by then. That one hurt."
+      },
+      {
+        "type": "paragraph",
+        "text": "So this isn't a comparison I made before starting. It's what I know after. The fbjni README shows a C++ struct that describes a Java class, descriptors worked out by the compiler, references managed for you, exceptions translated both ways. That is close to what I wanted. Its quick reference also lists strings, arrays, collections, direct `ByteBuffer` and \"hybrid\" objects that hold C++ state. I didn't find in the documentation anything about what `close()` should do while another thread is inside the object, or about who runs a callback and on which thread. I haven't read the source and I haven't used it, so I'm not saying it can't. I'm saying I didn't find it. A proper comparison belongs in the post about my library."
+      },
+      {
+        "type": "heading",
+        "text": "Where it actually hurts",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "For me the worst part of JNI is the boilerplate. Not that any single piece is hard. It's boring to write, you can make a mistake in it, and then you debug it. That is the real cost."
+      },
+      {
+        "type": "paragraph",
+        "text": "What decides whether a native layer survives in production is two things: memory and threads. Those are where people go wrong most often, so most of this post is about them."
+      },
+      {
+        "type": "paragraph",
+        "text": "The reason is that there are two directions of call, and they are not the same problem."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    subgraph A[Kotlin calls C++]\n        K1[JVM thread] --> N1[native function<br/>env is given<br/>references are local]\n    end\n    subgraph B[C++ calls Kotlin]\n        T1[Thread the JVM has never seen<br/>camera, SDK, timer] --> N2[no env<br/>no references<br/>no one turns exceptions into Kotlin ones]\n    end"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "When Kotlin calls in, the JVM gives you everything. When C++ calls out from its own thread, you have to build every guarantee yourself."
+      },
+      {
+        "type": "heading",
+        "text": "Memory",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A reference in JNI isn't the object. It is a handle that the JVM treats as a garbage collector root. There are three kinds, and each fails in its own way."
+      },
+      {
+        "type": "paragraph",
+        "text": "ReferenceLivesHow it goes wronglocaluntil the native function returns, one thread onlythe table is small, about 512 entries on ART. A loop that doesn't delete overflows it. On a native thread nobody ever frees them.globaluntil you delete it, any threadforgot to delete: the object lives forever.weak globaluntil the object is collected\"check that it is alive, then use it\" leaves a gap in which it can be collected."
+      },
+      {
+        "type": "paragraph",
+        "text": "What I wanted was for the type to say who owns the reference, so I don't have to remember. In C++ that is RAII: an object whose destructor does the cleanup, like `use {}` in Kotlin. The library has `LocalRef`, `GlobalRef` and `WeakGlobalRef`. They can be moved but not copied, because two owners of one reference would delete it twice. If the compiler says the copy is deleted, it's asking who owns this now."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Q{How long do I need the object?} -->|only inside this call| P[a parameter<br/>use the raw jobject]\n    Q -->|inside this block, JNI gave it to me| L[LocalRef<br/>dies at the end of the block]\n    Q -->|after this call, I own it| G[GlobalRef<br/>strong, any thread]\n    Q -->|after this call, someone else owns it| W[WeakGlobalRef<br/>promote before use]\n    Q -->|give it back to Kotlin| R[LocalRef + release]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A few details came out of this that I wouldn't have guessed:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "A weak reference can't be asked \"are you alive?\". The only operation is `promote()`, which gives a local reference or an empty one, so there is no gap.",
+              "blocks": []
+            },
+            {
+              "text": "`GlobalRef` doesn't go in a `static` variable. Static destructors run during `exit()`, when the VM may already be going away, and `DeleteGlobalRef` there crashes the process on its way out.",
+              "blocks": []
+            },
+            {
+              "text": "A `LocalRef` keeps the `env` of the thread that made it. Its destructor must not call for a new `env`, because after a detach that would attach the thread again.",
+              "blocks": []
+            },
+            {
+              "text": "A native object points back to its Kotlin owner weakly. If it holds the owner strongly, the pair forms a cycle through a GC root and neither is ever collected. Same as a `ViewModel` holding an `Activity`.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "On the garbage collector: every global reference is a root, so it keeps its object, and everything that object references, alive. That is the cost of a listener held strongly, and it's why the type says it. The other direction is memory the collector can't see at all. I come back to that below."
+      },
+      {
+        "type": "heading",
+        "text": "Threads",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A `JNIEnv*` belongs to one thread. You can't pass it to another one, and you can't keep it in a field. When I first read this my reaction was: so, there's a small problem, we need to design something so that access from different threads is painless. I'll be honest that I'm not sure I still hold every detail in my head. Here's the design."
+      },
+      {
+        "type": "paragraph",
+        "text": "Only the `JavaVM*` is cached. It's the same for the whole process. The `env` for the current thread is looked up each time, and `GetEnv` is cheap."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    A[env called] --> B{GetEnv}\n    B -->|OK| C[return env<br/>Java thread, or attached by someone else]\n    B -->|not attached| D[AttachCurrentThread<br/>with the thread's own name]\n    D --> E[mark in a pthread_key:<br/>we attached this one]\n    E --> C\n    F[thread exits] --> G{marked as ours?}\n    G -->|yes| H[DetachCurrentThread]\n    G -->|no| I[leave it alone]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Three decisions here:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "Detach only what we attached. A thread that someone else attached stays attached after our call.",
+              "blocks": []
+            },
+            {
+              "text": "Attach with the real thread name, so the thread shows up in ANR traces and in the profiler as `camera-rx` and not as `Thread-12`.",
+              "blocks": []
+            },
+            {
+              "text": "If attach fails, crash with a clear message. There is nothing sensible to do next.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "`FindClass` on a native thread sees only system classes, because the thread has no app class loader. So classes and methods are looked up once, at startup, never in a hot path."
+      },
+      {
+        "type": "heading",
+        "text": "Startup, and the strings I hated",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Raw JNI wants a signature string like `\"(Ljava/lang/String;I)V\"` for every method. They aren't hard, but I had to keep those codes in my head, and the syntax is awful. One wrong letter and you find out at runtime."
+      },
+      {
+        "type": "paragraph",
+        "text": "So signatures are built by the compiler from C++ types. A type that has no Java equivalent doesn't compile: `bool` isn't `jboolean`, and a bare `jobject` doesn't say which class it is. You describe a Kotlin class once, and from then on you call it like a C++ class."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "cpp",
+          "code": "// camera/bindings: a plain C++ function. Strings, optionals and lists are converted for you.\nstd::string redactUrl(JNIEnv *, jclass, const std::string &url) { return camera::redactUrl(url); }"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The other half is what happens when something is missing. I decided that if something is missing at startup, the app should fail, right there. A missing method means the programmer made a mistake or forgot something, and we must tell them clearly. A compile error would be nicer, but we can't have one: we can't walk the graph of what's registered at compile time, and it would be very hard to do. So the one simple way is to go through everything that is registered and everything that isn't, at launch, and say it plainly. The check collects every problem, writes each one with the exact name, and only then returns `JNI_ERR`. It's at startup, so it's far more useful than a crash on the first call."
+      },
+      {
+        "type": "heading",
+        "text": "Errors: whose fault is it?",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "My first design for errors was big. Errors built on `std::error_code`, a result type of its own, macros to unwrap it, a global switch that changed how checks behaved. I read it and understood almost nothing. I said that to me this looked like Elvish, and that I had a feeling it wasn't thought through cleanly. When we looked again, there were two ways to report one error, five macros and a global setting. None of it was needed."
+      },
+      {
+        "type": "paragraph",
+        "text": "What helped was to stop talking about syntax and ask one question. When something goes wrong, whose fault is it?"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    A[Something went wrong] --> B{Whose fault?}\n    B -->|The caller passed garbage or called at the wrong time| C[REQUIRE / CHECK<br/>throws a C++ exception]\n    B -->|The world: network, timeout, camera not answering| D[throw jnirt::Error<br/>domain + code]\n    B -->|Our own bug: this cannot happen| E[ASSERT / FATAL<br/>abort + tombstone]\n    C --> F[Kotlin: IllegalArgumentException<br/>or IllegalStateException]\n    D --> G[Kotlin: NativeException,<br/>mapped to the library's enum]\n    E --> H[The process dies,<br/>the log and tombstone say why]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The third case I didn't get at first. It is our own bug inside the native code, the \"this cannot happen\". The caller did everything right and nothing outside can fix it. You can only crash, before the bad state spreads."
+      },
+      {
+        "type": "paragraph",
+        "text": "For the first case I said the app should crash at once, and that raised a question: with what? A native abort gives a C++ stack that doesn't show which Kotlin line passed `-1`. An `IllegalArgumentException` also kills the app if nobody catches it, and its stack points at the exact Kotlin line, the way `require()` does. The answer was one set of macros for both worlds. The wrapper around every native function turns the C++ exception into the Kotlin one. If the call was pure C++, nobody catches it and the process dies with a tombstone."
+      },
+      {
+        "type": "paragraph",
+        "text": "Errors that the world causes are flat: a domain, a code and a message. No class hierarchy, because a hierarchy would mean generating Java classes for every code. A code `1` in one library never meets a code `1` in another. I also didn't want a long `when` over many codes in app code, so every error carries a kind: `Transient`, `NeedsUser` or `Fatal`. The app looks at the kind first, and at the exact code only when it needs a special reaction."
+      },
+      {
+        "type": "paragraph",
+        "text": "One more thing the review found. The error class derived from `std::exception` and held a `std::string`. Copying an exception isn't allowed to throw, but copying a string can, if memory runs out, and then the program ends in `std::terminate`. Basing the class on `std::runtime_error` makes the copy safe."
+      },
+      {
+        "type": "heading",
+        "text": "Who owns the native object",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The classic trick is to create the object in C++, cast the pointer to a `long`, return the `long` to Kotlin, and cast it back on every call. When I first saw it my reaction was, how does this even work. It works. I just didn't like it."
+      },
+      {
+        "type": "paragraph",
+        "text": "My complaint, at first, was debugging. You stop on a breakpoint, open a Kotlin object, and there's a `long` in it. A pointer? A reference? Some id? You can't tell what's behind it, you read comments, and then you open the C++ code. A field that you can only understand by reading another language is a bad field."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then the crash. You want to close the object, you free the memory, and the app dies, not always and not on the line you just wrote."
+      },
+      {
+        "type": "paragraph",
+        "text": "The reason is that there are two objects with two lifetimes. The Kotlin one lives in the JVM. The native one lives in the native heap, and nobody looks after it unless you do. `close()` on the Kotlin side only sees a number."
+      },
+      {
+        "type": "paragraph",
+        "text": "The caller does thisThe raw pointer does this`start()` after `close()`reads freed memory`close()` twicefrees twice`close()` while another thread readsdeletes the object under the running readnever calls `close()`the socket lives as long as the process"
+      },
+      {
+        "type": "paragraph",
+        "text": "So I stopped giving Kotlin an address. The library keeps a table, Kotlin gets a number, and every call looks the number up. A closed or unknown number is an `IllegalStateException`, not a crash. The counter starts at 1 and never goes back, so an old number can't mean a different object later. The table holds the object in a `shared_ptr`, and each running call holds one too, so `close()` in the middle can't pull the object from under a call."
+      },
+      {
+        "type": "paragraph",
+        "text": "Now `close()` is safe but useless. Say a thread is blocked in `recv()` inside the object. It holds a reference, so the object is alive, so the socket is open, so `recv()` keeps blocking."
+      },
+      {
+        "type": "paragraph",
+        "text": "My rule is this: when you call `close()` you expect the resource to be freed right now, not when the last call finishes. For a camera that's obvious. I think many people writing code today, with or without help from a tool, miss this. A resource that is \"closed\" in a year and a half isn't closed."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "sequenceDiagram\n    participant R as Reader thread\n    participant K as Kotlin close()\n    participant T as Handle table\n    participant O as Native object\n\n    R->>T: acquire(handle)\n    T-->>R: shared_ptr, the call holds the object\n    R->>O: read() blocks in recv()\n    K->>T: close(handle)\n    T->>T: erase entry\n    T->>O: onClose(): shutdown(fd), does not wait\n    O-->>R: recv() returns, read() throws\n    R-->>T: call ends, drops its reference\n    T->>O: last reference gone, destructor closes fd"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The C++ class gets an `onClose()` hook that `close()` calls at once. It runs while other threads are still inside the object, so it can't wait for anything. It sets a flag, shuts the socket down and wakes the sleepers. The memory goes later, when the last call is done. Two rules follow for whoever writes the class: use `shutdown(fd)` in the hook and `close(fd)` only in the destructor, otherwise the system can hand the same descriptor number to another file while a thread still reads the old one; and the object's own worker thread must not hold a `shared_ptr` to the object, or the destructor ends up joining its own thread."
+      },
+      {
+        "type": "paragraph",
+        "text": "I'll also say what isn't there. Some tasks want a close that waits for the work in progress. Looking back, I should have split it in two, a `close()` that frees now and a separate \"await close\" or a forced one. The library has only the first today."
+      },
+      {
+        "type": "heading",
+        "text": "Callbacks: when native code calls you",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A callback means C++ calls Kotlin on a thread of its own, and every guarantee from the first diagram is gone."
+      },
+      {
+        "type": "paragraph",
+        "text": "The first draft of the design said native code should hold the listener weakly. It sounded careful. I think it was wrong, and what I'd say is what I said when I came back to it: as long as there is a subscriber, we have to notify it. If the system clears the reference, the listener waits for an event and then never gets one. A lambda passed to `subscribe { ... }` is referenced by nobody else, the collector takes it, and the events silently stop. `SharedPreferences` listeners have this trap. The design was changed before any callback code: native code holds the listener strongly while the subscription is open. The price is the usual one, a listener that captures an `Activity` keeps it alive until the subscription is closed."
+      },
+      {
+        "type": "paragraph",
+        "text": "The second decision is about threads. A subscription takes an `Executor`, with no default. The callback never runs on the camera's thread, where user code could block the stream or close the camera from inside its own callback."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    A[Camera thread<br/>owned by the SDK] -->|event| B[ListenerSet<br/>snapshot of listeners,<br/>no lock during the call]\n    B --> C[Listener<br/>strong GlobalRef,<br/>attach + local frame per event]\n    C --> D[Delivery<br/>queue + Executor<br/>chosen at subscribe]\n    D --> E[Your listener<br/>on your thread]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Then memory the collector can't see. A `ByteBuffer` over native memory doesn't tell the collector how big the memory behind it is. A frame of a megabyte looks like a tiny object. If a slow listener makes the queue drop frames, they can pile up in native memory before the collector decides to run. This was written down as a risk during the design review, and I said callbacks were too critical a part of the foundation to leave it at a note, so it was measured. In a test with frames of 1 MiB and a slow consumer on a small Java heap, native memory grew to **3000 MiB**. The fix is small: the runtime counts the bytes of live native buffers, and above 64 MiB asks for a collection, at most every 200 ms. The same test then peaks at **83 MiB**. That is a host test with simulated frames, not a phone, and what `System.gc()` costs on Android hasn't been measured."
+      },
+      {
+        "type": "paragraph",
+        "text": "A slow consumer also needs a policy, and it isn't the source's business: keep everything in order, keep only the latest event (video wants this), or keep the last N and drop the oldest."
+      },
+      {
+        "type": "heading",
+        "text": "Release builds",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "R8 looks at Kotlin and Java code. It can't see that a C++ function looks up a class by name, so it removes or renames exactly what only native code uses. I've had this happen more than once, in two companies. [YURII: one concrete case here if you remember one.]"
+      },
+      {
+        "type": "paragraph",
+        "text": "What does the error look like on the C++ side? There is no \"symbol not found\" in C++. JNI returns `NULL` and leaves a Java exception pending."
+      },
+      {
+        "type": "paragraph",
+        "text": "Native code does thisR8 removed...What happens`FindClass`the class`NULL`, `NoClassDefFoundError` pending`GetMethodID`the method`NULL`, `NoSuchMethodError` pending`GetFieldID`the field`NULL`, `NoSuchFieldError` pendinga native found by namethe name`UnsatisfiedLinkError` on first call"
+      },
+      {
+        "type": "paragraph",
+        "text": "If you don't check, the next line uses `NULL` and the app crashes far from the cause. That is why everything is looked up at startup and every missing name is reported. A wrongly minified build then tells you the exact class at launch. That check exists and is tested on the host. An instrumented test on a minified build is still not done."
+      },
+      {
+        "type": "heading",
+        "text": "What I would throw away on day one",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "A pointer in a `long`. Give Kotlin a number that native code can refuse.",
+              "blocks": []
+            },
+            {
+              "text": "`finalize()`. It runs on a finalizer thread, in no order, and a watchdog can kill the app. Use `Cleaner` or a `PhantomReference` as a safety net, and make `close()` the real mechanism.",
+              "blocks": []
+            },
+            {
+              "text": "Signature strings written by hand.",
+              "blocks": []
+            },
+            {
+              "text": "`JNIEnv*` kept in a field.",
+              "blocks": []
+            },
+            {
+              "text": "A weak reference to a listener.",
+              "blocks": []
+            },
+            {
+              "text": "Many small calls across the border. A number costs nothing, a string is a copy, a list costs a call per element, so make fewer, bigger calls.",
+              "blocks": []
+            },
+            {
+              "text": "A separate `.so` per library. Two copies of the runtime in one process each had their own state and their own startup, and I saw the startup log twice. One `.so`, one `JNI_OnLoad`.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "heading",
+        "text": "Where I would start",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "With the same thing I did: the fundamentals. How the JNI `env` works. How pointers and references work, local and global. How the `env` is passed around, and how classes and methods are found. Before any helper library, you need that picture, because every bug later comes from one of those places."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then think hard about memory: how objects are created, how they're cleaned up, what each one costs, what load the garbage collector carries, what lands in native memory that nobody sees. Use RAII, and count local references. And think hard about threads, which is the other area where most mistakes happen."
+      },
+      {
+        "type": "paragraph",
+        "text": "Last, if the library is going to be public, think about the developer who uses it. The whole point is to remove boilerplate, so every piece of ceremony you leave in is a place where they can make a mistake."
+      },
+      {
+        "type": "heading",
+        "text": "Where it stands",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "I've started using the library in my camera library. So far it flies: callbacks and object registration are connected and working, with no problems yet. Most of the functionality isn't connected there yet."
+      },
+      {
+        "type": "paragraph",
+        "text": "The library is here:"
+      },
+      {
+        "type": "linkCard",
+        "text": null,
+        "data": {
+          "url": "https://github.com/yuriisurzhykov/jni-runtime/",
+          "view": "row"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "It will be the topic of the next post, and the project has its own section."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Библиотека JNI для Android",
+    "summary": "История создания удобной, простой и надёжной библиотеки JNI, позволяющей разработчикам работать с JNI быстро, просто, надёжно и без лишнего напряжения. Локальные ссылки, потоки, close() и обратные вызовы: что идёт не так в коде Android JNI и как спроектировать безопасный нативный слой. С диаграммами.",
+    "startedLabel": "авг. 2026",
+    "shippedLabel": "сент. 2026",
+    "role": "Архитектор и ведущий инженер",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "JNI без шаблонного кода: чему меня научило создание слоя над ним",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Я начал с простого вопроса: где хранить объект C++ между вызовами из Kotlin? В результате я написал небольшую библиотеку поверх JNI. Эта статья не о самой библиотеке. О ней будет позже. Здесь я рассказываю о проблемах, с которыми столкнулся, принятых решениях и о том, что проверил бы в первую очередь на вашем месте."
+      },
+      {
+        "type": "heading",
+        "text": "Зачем мне вообще понадобился JNI",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Идея заключалась в создании библиотеки для IP-камер. Честно говоря, ничего масштабного. Нам требовалась одна возможность: работать с большим количеством камер и переключаться между дополнительным и основным потоками камеры."
+      },
+      {
+        "type": "paragraph",
+        "text": "Я искал готовую бесплатную библиотеку с открытой лицензией и поддержкой камер многих производителей. Подходящей не нашёл. Поэтому было решено написать её самостоятельно."
+      },
+      {
+        "type": "paragraph",
+        "text": "Написать её означало отказаться от реализации на Kotlin. Некоторые камеры выдают 4K, а нам нужно показывать сразу несколько. Для этого необходимы прямой доступ к памяти и высокая скорость выполнения, то есть C++. JNI соединяет код C++ с API, который библиотека предоставляет конечному пользователю."
+      },
+      {
+        "type": "paragraph",
+        "text": "Я уже работал со слоем JNI и помню, насколько это было трудно. Пишешь множество инструкций, чтобы преобразовать одно поле в другое, один класс в другой, вызвать каждый метод и передать обратные вызовы. С обратными вызовами была настоящая путаница. Нужно помнить об освобождении памяти, нельзя переполнять её в циклах, объекты требуется каждый раз очищать. И этот код никогда не становится меньше. Он растёт с каждым методом. Вдобавок есть ошибки: нужно проверять каждое исключение, а сами ошибки выглядят странно."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому я решил, что больше так делать не буду. Мне нужен был слой, который выполняет это самостоятельно: выделяет и освобождает память, регистрирует подписчиков, регистрирует обратные вызовы и обрабатывает правила ProGuard."
+      },
+      {
+        "type": "heading",
+        "text": "Что уже существует",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Здесь нужно быть честным. Я не искал. Лишь недавно я узнал, что библиотека, очень близкая к моей разработке, уже существует: [fbjni](https://github.com/facebookincubator/fbjni) от Facebook. К тому моменту я уже потратил много времени. Это было неприятно."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому это не сравнение, проведённое до начала работы. Это то, что я узнал впоследствии. В README fbjni показана структура C++, описывающая класс Java, дескрипторы, вычисляемые компилятором, автоматическое управление ссылками и преобразование исключений в обоих направлениях. Это близко к тому, чего я хотел. В кратком справочнике также перечислены строки, массивы, коллекции, прямой `ByteBuffer` и «гибридные» объекты, хранящие состояние C++. Я не нашёл в документации ничего о том, что должен делать `close()`, пока другой поток находится внутри объекта, или о том, кто выполняет обратный вызов и в каком потоке. Я не читал исходный код и не пользовался этой библиотекой, поэтому не утверждаю, что она этого не умеет. Я утверждаю, что не нашёл описания. Полноценное сравнение должно быть в статье о моей библиотеке."
+      },
+      {
+        "type": "heading",
+        "text": "Где возникают настоящие трудности",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Для меня худшая часть JNI состоит в шаблонном коде. Не потому, что какой-то отдельный фрагмент сложен. Его скучно писать, в нём можно ошибиться, а затем приходится заниматься отладкой. Такова реальная цена."
+      },
+      {
+        "type": "paragraph",
+        "text": "Работоспособность нативного слоя в промышленной эксплуатации определяют две вещи: память и потоки. Именно здесь ошибаются чаще всего, поэтому им посвящена большая часть этой статьи."
+      },
+      {
+        "type": "paragraph",
+        "text": "Причина в том, что вызовы идут в двух направлениях, и задачи в этих направлениях различаются."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    subgraph A[Kotlin calls C++]\n        K1[JVM thread] --> N1[native function<br/>env is given<br/>references are local]\n    end\n    subgraph B[C++ calls Kotlin]\n        T1[Thread the JVM has never seen<br/>camera, SDK, timer] --> N2[no env<br/>no references<br/>no one turns exceptions into Kotlin ones]\n    end"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда вызов приходит из Kotlin, JVM предоставляет всё необходимое. Когда C++ делает обратный вызов из собственного потока, каждую гарантию приходится обеспечивать самостоятельно."
+      },
+      {
+        "type": "heading",
+        "text": "Память",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Ссылка в JNI не является самим объектом. Это дескриптор, который JVM считает корнем сборщика мусора. Есть три вида ссылок, и у каждого свой характерный способ привести к ошибке."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ссылка; срок жизни; возможная ошибка. local: до возврата из нативной функции, только в одном потоке; таблица небольшая, около 512 записей в ART. Цикл без удаления ссылок переполняет её. В нативном потоке их вообще никто не освобождает. global: до явного удаления, в любом потоке; если забыть удалить ссылку, объект будет жить вечно. weak global: до сборки объекта; между «проверить, что объект жив, затем использовать его» остаётся промежуток, в котором объект может быть собран."
+      },
+      {
+        "type": "paragraph",
+        "text": "Я хотел, чтобы тип сообщал, кто владеет ссылкой, и мне не приходилось это помнить. В C++ для этого служит RAII: объект, деструктор которого выполняет очистку, подобно `use {}` в Kotlin. В библиотеке есть `LocalRef`, `GlobalRef` и `WeakGlobalRef`. Их можно перемещать, но нельзя копировать, поскольку два владельца одной ссылки удалили бы её дважды. Когда компилятор сообщает, что копирование удалено, он фактически спрашивает, кто теперь этим владеет."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Q{How long do I need the object?} -->|only inside this call| P[a parameter<br/>use the raw jobject]\n    Q -->|inside this block, JNI gave it to me| L[LocalRef<br/>dies at the end of the block]\n    Q -->|after this call, I own it| G[GlobalRef<br/>strong, any thread]\n    Q -->|after this call, someone else owns it| W[WeakGlobalRef<br/>promote before use]\n    Q -->|give it back to Kotlin| R[LocalRef + release]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Из этого следовало несколько деталей, о которых я бы не догадался:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "У слабой ссылки нельзя спросить: «Ты ещё жива?» Единственная операция, `promote()`, возвращает локальную ссылку или пустую, поэтому промежутка между проверкой и использованием нет.",
+              "blocks": []
+            },
+            {
+              "text": "`GlobalRef` нельзя помещать в переменную `static`. Статические деструкторы выполняются во время `exit()`, когда VM уже может завершать работу, и вызов `DeleteGlobalRef` в этот момент аварийно завершает выходящий процесс.",
+              "blocks": []
+            },
+            {
+              "text": "`LocalRef` сохраняет `env` создавшего её потока. Её деструктор не должен запрашивать новый `env`, поскольку после отсоединения это снова присоединило бы поток.",
+              "blocks": []
+            },
+            {
+              "text": "Нативный объект хранит слабую обратную ссылку на своего владельца в Kotlin. Если ссылка на владельца сильная, пара образует цикл через корень GC, и ни один объект никогда не будет собран. Аналогично ситуации, когда `ViewModel` удерживает `Activity`.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "О сборщике мусора: каждая глобальная ссылка является корнем, поэтому сохраняет жизнь своему объекту и всем объектам, на которые он ссылается. Такова цена сильной ссылки на слушатель, поэтому тип явно это обозначает. Другая сторона вопроса состоит в памяти, которую сборщик вообще не видит. К ней я вернусь ниже."
+      },
+      {
+        "type": "heading",
+        "text": "Потоки",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "`JNIEnv*` принадлежит одному потоку. Его нельзя передавать другому потоку и нельзя хранить в поле. Когда я впервые это прочитал, моя реакция была такой: есть небольшая проблема, нужно что-то спроектировать, чтобы доступ из разных потоков не создавал затруднений. Признаюсь, я не уверен, что до сих пор держу в голове все детали. Вот выбранное решение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Кешируется только `JavaVM*`. Он один для всего процесса. `env` текущего потока запрашивается каждый раз, а `GetEnv` стоит дёшево."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    A[env called] --> B{GetEnv}\n    B -->|OK| C[return env<br/>Java thread, or attached by someone else]\n    B -->|not attached| D[AttachCurrentThread<br/>with the thread's own name]\n    D --> E[mark in a pthread_key:<br/>we attached this one]\n    E --> C\n    F[thread exits] --> G{marked as ours?}\n    G -->|yes| H[DetachCurrentThread]\n    G -->|no| I[leave it alone]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Здесь приняты три решения:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "Отсоединять только те потоки, которые присоединили мы. Поток, присоединённый кем-то другим, остаётся присоединённым после нашего вызова.",
+              "blocks": []
+            },
+            {
+              "text": "Присоединять поток с его настоящим именем, чтобы в трассировках ANR и профилировщике он отображался как `camera-rx`, а не как `Thread-12`.",
+              "blocks": []
+            },
+            {
+              "text": "Если присоединение не удалось, аварийно завершать работу с понятным сообщением. Осмысленно продолжать выполнение невозможно.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "`FindClass` в нативном потоке видит только системные классы, поскольку у потока нет загрузчика классов приложения. Поэтому классы и методы ищутся один раз при запуске, никогда в часто выполняемом коде."
+      },
+      {
+        "type": "heading",
+        "text": "Запуск и строки, которые я ненавидел",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Обычный JNI требует для каждого метода строку сигнатуры вроде `\"(Ljava/lang/String;I)V\"`. Они несложные, но мне приходилось держать эти обозначения в голове, а синтаксис ужасен. Одна неверная буква, и об ошибке узнаёшь только во время выполнения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому сигнатуры формируются компилятором из типов C++. Тип без эквивалента в Java не компилируется: `bool` не является `jboolean`, а сам по себе `jobject` не указывает, к какому классу относится объект. Класс Kotlin описывается один раз, после чего его можно вызывать как класс C++."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "cpp",
+          "code": "// camera/bindings: a plain C++ function. Strings, optionals and lists are converted for you.\nstd::string redactUrl(JNIEnv *, jclass, const std::string &url) { return camera::redactUrl(url); }"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Вторая половина задачи состоит в том, что происходит, когда чего-то не хватает. Я решил: если чего-то не хватает при запуске, приложение должно завершиться с ошибкой сразу же. Отсутствующий метод означает, что программист ошибся или что-то забыл, и нужно ясно ему об этом сообщить. Ошибка компиляции была бы лучше, но получить её нельзя: мы не можем обойти граф регистраций во время компиляции, и реализовать это было бы очень трудно. Поэтому есть один простой способ: при запуске пройти по всему, что зарегистрировано и что не зарегистрировано, и явно сообщить результат. Проверка собирает все проблемы, выводит каждую с точным именем и только после этого возвращает `JNI_ERR`. Это происходит при запуске, поэтому гораздо полезнее, чем аварийное завершение при первом вызове."
+      },
+      {
+        "type": "heading",
+        "text": "Ошибки: кто виноват?",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Мой первый проект обработки ошибок был большим. Ошибки на основе `std::error_code`, собственный тип результата, макросы для извлечения его значения, глобальный переключатель, меняющий поведение проверок. Я прочитал это и почти ничего не понял. Я сказал, что для меня это похоже на эльфийский язык и что у меня есть ощущение недостаточно ясной проработки. Когда мы посмотрели ещё раз, оказалось, что для сообщения об одной ошибке есть два способа, пять макросов и глобальная настройка. Ничего из этого не требовалось."
+      },
+      {
+        "type": "paragraph",
+        "text": "Помогло прекращение обсуждения синтаксиса и один вопрос. Когда что-то идёт не так, кто виноват?"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    A[Something went wrong] --> B{Whose fault?}\n    B -->|The caller passed garbage or called at the wrong time| C[REQUIRE / CHECK<br/>throws a C++ exception]\n    B -->|The world: network, timeout, camera not answering| D[throw jnirt::Error<br/>domain + code]\n    B -->|Our own bug: this cannot happen| E[ASSERT / FATAL<br/>abort + tombstone]\n    C --> F[Kotlin: IllegalArgumentException<br/>or IllegalStateException]\n    D --> G[Kotlin: NativeException,<br/>mapped to the library's enum]\n    E --> H[The process dies,<br/>the log and tombstone say why]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Третий случай я сначала не понял. Это наша собственная ошибка внутри нативного кода, то самое «этого не может быть». Вызывающая сторона сделала всё правильно, и никакое внешнее действие не может это исправить. Остаётся только аварийно завершить работу до того, как некорректное состояние распространится."
+      },
+      {
+        "type": "paragraph",
+        "text": "Для первого случая я сказал, что приложение должно аварийно завершаться немедленно, и возник вопрос: каким способом? Нативный abort даёт стек C++, который не показывает, какая строка Kotlin передала `-1`. `IllegalArgumentException` тоже завершает приложение, если его никто не перехватывает, а его стек указывает на точную строку Kotlin, как это делает `require()`. Решением стал единый набор макросов для обеих сред. Обёртка каждой нативной функции преобразует исключение C++ в исключение Kotlin. Если вызов был только из C++, исключение никто не перехватывает, и процесс завершается с tombstone."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ошибки, вызванные внешним миром, имеют плоскую структуру: домен, код и сообщение. Иерархии классов нет, поскольку она потребовала бы генерации классов Java для каждого кода. Код `1` из одной библиотеки никогда не смешивается с кодом `1` из другой. Я также не хотел длинных `when` с множеством кодов в коде приложения, поэтому каждая ошибка имеет категорию: `Transient`, `NeedsUser` или `Fatal`. Приложение сначала смотрит на категорию и только при необходимости особой реакции проверяет точный код."
+      },
+      {
+        "type": "paragraph",
+        "text": "При проверке обнаружилась ещё одна деталь. Класс ошибки наследовался от `std::exception` и содержал `std::string`. Копирование исключения не должно выбрасывать исключений, но копирование строки может это сделать при нехватке памяти, после чего программа завершится через `std::terminate`. Наследование от `std::runtime_error` делает копирование безопасным."
+      },
+      {
+        "type": "heading",
+        "text": "Кто владеет нативным объектом",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Классический приём: создать объект в C++, привести указатель к `long`, вернуть этот `long` в Kotlin и выполнять обратное приведение при каждом вызове. Когда я впервые это увидел, моя реакция была: как это вообще работает? Работает. Просто мне это не нравилось."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сначала моя претензия касалась отладки. Останавливаешься на точке останова, открываешь объект Kotlin, а в нём `long`. Указатель? Ссылка? Какой-то идентификатор? Непонятно, что за ним скрывается: читаешь комментарии, а затем открываешь код C++. Поле, которое можно понять только после чтения кода на другом языке, является плохим полем."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем происходит аварийное завершение. Хочешь закрыть объект, освобождаешь память, и приложение падает, причём не всегда и не на только что написанной строке."
+      },
+      {
+        "type": "paragraph",
+        "text": "Причина в том, что есть два объекта с двумя разными сроками жизни. Объект Kotlin живёт в JVM. Нативный объект живёт в нативной куче, и никто за ним не следит, если этого не делаешь ты. `close()` на стороне Kotlin видит только число."
+      },
+      {
+        "type": "paragraph",
+        "text": "Действие вызывающей стороны; результат при использовании сырого указателя. `start()` после `close()`: чтение освобождённой памяти. Двойной `close()`: двойное освобождение. `close()`, пока другой поток читает: удаление объекта во время выполняющегося чтения. Отсутствие вызова `close()`: сокет живёт столько же, сколько процесс."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому я перестал передавать Kotlin адрес. Библиотека хранит таблицу, Kotlin получает число, а каждый вызов ищет это число в таблице. Закрытому или неизвестному номеру соответствует `IllegalStateException`, а не аварийное завершение. Счётчик начинается с 1 и никогда не уменьшается, поэтому старый номер не сможет позднее обозначать другой объект. Таблица хранит объект в `shared_ptr`, и каждый выполняющийся вызов тоже удерживает такой указатель, поэтому `close()` посреди выполнения не может удалить объект из-под вызова."
+      },
+      {
+        "type": "paragraph",
+        "text": "Теперь `close()` безопасен, но бесполезен. Допустим, поток заблокирован в `recv()` внутри объекта. Он удерживает ссылку, поэтому объект жив, следовательно, сокет открыт, а значит, `recv()` продолжает блокироваться."
+      },
+      {
+        "type": "paragraph",
+        "text": "Моё правило таково: вызывая `close()`, ожидаешь освобождения ресурса прямо сейчас, а не после завершения последнего вызова. Для камеры это очевидно. Мне кажется, многие из тех, кто сегодня пишет код, с помощью инструментов или без неё, упускают это. Ресурс, который «закрывается» через полтора года, не является закрытым."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "sequenceDiagram\n    participant R as Reader thread\n    participant K as Kotlin close()\n    participant T as Handle table\n    participant O as Native object\n\n    R->>T: acquire(handle)\n    T-->>R: shared_ptr, the call holds the object\n    R->>O: read() blocks in recv()\n    K->>T: close(handle)\n    T->>T: erase entry\n    T->>O: onClose(): shutdown(fd), does not wait\n    O-->>R: recv() returns, read() throws\n    R-->>T: call ends, drops its reference\n    T->>O: last reference gone, destructor closes fd"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Класс C++ получает обработчик `onClose()`, который `close()` вызывает немедленно. Он выполняется, пока другие потоки ещё находятся внутри объекта, поэтому не может ничего ждать. Он устанавливает флаг, останавливает работу сокета и пробуждает ожидающие потоки. Память освобождается позже, когда завершится последний вызов. Отсюда следуют два правила для автора класса: использовать `shutdown(fd)` в обработчике, а `close(fd)` только в деструкторе, иначе система может выдать тот же номер дескриптора другому файлу, пока поток ещё читает из старого; собственный рабочий поток объекта не должен удерживать `shared_ptr` на этот объект, иначе деструктор попытается дождаться завершения собственного потока."
+      },
+      {
+        "type": "paragraph",
+        "text": "Укажу также, чего здесь нет. Для некоторых задач нужно закрытие, которое ждёт завершения текущей работы. Оглядываясь назад, я должен был разделить его на два механизма: `close()`, освобождающий ресурс немедленно, и отдельное «ожидание закрытия» либо принудительное закрытие. Сегодня библиотека предоставляет только первый вариант."
+      },
+      {
+        "type": "heading",
+        "text": "Обратные вызовы: когда нативный код вызывает ваш код",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Обратный вызов означает, что C++ вызывает Kotlin из собственного потока, и все гарантии с первой диаграммы исчезают."
+      },
+      {
+        "type": "paragraph",
+        "text": "В первом варианте проекта предполагалось, что нативный код должен удерживать слушатель слабой ссылкой. Звучало осторожно. Я считаю это ошибкой и повторю то, что сказал, вернувшись к этому вопросу: пока есть подписчик, мы обязаны его уведомлять. Если система очистит ссылку, слушатель будет ждать событие, которое так и не получит. На лямбду, переданную в `subscribe { ... }`, больше никто не ссылается, сборщик забирает её, и события незаметно прекращаются. У слушателей `SharedPreferences` есть такая ловушка. Проект был изменён ещё до написания кода обратных вызовов: пока подписка открыта, нативный код удерживает слушатель сильной ссылкой. Цена обычная: слушатель, захвативший `Activity`, сохраняет её жизнь до закрытия подписки."
+      },
+      {
+        "type": "paragraph",
+        "text": "Второе решение касается потоков. Подписка принимает `Executor`, без значения по умолчанию. Обратный вызов никогда не выполняется в потоке камеры, где пользовательский код мог бы заблокировать поток данных или закрыть камеру изнутри её собственного обратного вызова."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    A[Camera thread<br/>owned by the SDK] -->|event| B[ListenerSet<br/>snapshot of listeners,<br/>no lock during the call]\n    B --> C[Listener<br/>strong GlobalRef,<br/>attach + local frame per event]\n    C --> D[Delivery<br/>queue + Executor<br/>chosen at subscribe]\n    D --> E[Your listener<br/>on your thread]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Далее идёт память, которую сборщик не видит. `ByteBuffer` поверх нативной памяти не сообщает сборщику размер памяти, стоящей за ним. Кадр размером в мегабайт выглядит как крошечный объект. Если из-за медленного слушателя очередь отбрасывает кадры, они могут накапливаться в нативной памяти до того, как сборщик решит запуститься. При проверке проекта это было записано как риск, и я сказал, что обратные вызовы слишком важны для основы системы, чтобы ограничиться примечанием, поэтому были проведены измерения. В тесте с кадрами по 1 MiB, медленным потребителем и небольшой кучей Java объём нативной памяти вырос до **3000 MiB**. Исправление небольшое: среда выполнения подсчитывает байты живых нативных буферов и при превышении 64 MiB запрашивает сборку мусора, не чаще одного раза в 200 мс. После этого в том же тесте пиковое значение составило **83 MiB**. Это тест на хосте с имитированными кадрами, а не на телефоне; стоимость `System.gc()` на Android не измерялась."
+      },
+      {
+        "type": "paragraph",
+        "text": "Медленному потребителю также нужна политика, причём это не задача источника: сохранять всё по порядку, оставлять только последнее событие, что требуется для видео, или хранить последние N событий, отбрасывая самые старые."
+      },
+      {
+        "type": "heading",
+        "text": "Релизные сборки",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "R8 анализирует код Kotlin и Java. Он не видит, что функция C++ ищет класс по имени, поэтому удаляет или переименовывает именно то, что используется только нативным кодом. Я сталкивался с этим неоднократно, в двух компаниях. [YURII: здесь нужен один конкретный случай, если вспомнишь.]"
+      },
+      {
+        "type": "paragraph",
+        "text": "Как выглядит ошибка со стороны C++? В C++ нет сообщения «символ не найден». JNI возвращает `NULL` и оставляет ожидающее обработки исключение Java."
+      },
+      {
+        "type": "paragraph",
+        "text": "Действие нативного кода; что удалил R8; результат. `FindClass`: класс; `NULL`, ожидает обработки `NoClassDefFoundError`. `GetMethodID`: метод; `NULL`, ожидает обработки `NoSuchMethodError`. `GetFieldID`: поле; `NULL`, ожидает обработки `NoSuchFieldError`. Нативный метод, найденный по имени: имя; `UnsatisfiedLinkError` при первом вызове."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если не выполнить проверку, следующая строка использует `NULL`, и приложение падает далеко от причины. Именно поэтому всё ищется при запуске и сообщается о каждом отсутствующем имени. Тогда сборка с некорректной минификацией указывает точный класс сразу при запуске. Эта проверка существует и протестирована на хосте. Инструментальный тест минифицированной сборки пока не выполнен."
+      },
+      {
+        "type": "heading",
+        "text": "От чего я отказался бы в первый же день",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "Указатель в `long`. Передавайте Kotlin число, которое нативный код может отклонить.",
+              "blocks": []
+            },
+            {
+              "text": "`finalize()`. Он выполняется в потоке финализаторов без определённого порядка, а сторожевой механизм может завершить приложение. Используйте `Cleaner` или `PhantomReference` как страховку, а основным механизмом сделайте `close()`.",
+              "blocks": []
+            },
+            {
+              "text": "Строки сигнатур, написанные вручную.",
+              "blocks": []
+            },
+            {
+              "text": "`JNIEnv*`, сохранённый в поле.",
+              "blocks": []
+            },
+            {
+              "text": "Слабая ссылка на слушатель.",
+              "blocks": []
+            },
+            {
+              "text": "Множество мелких вызовов через границу. Число практически ничего не стоит, строка требует копирования, список требует вызова для каждого элемента, поэтому делайте меньше вызовов, передавая больше данных за раз.",
+              "blocks": []
+            },
+            {
+              "text": "Отдельная `.so` для каждой библиотеки. Две копии среды выполнения в одном процессе имели каждая собственное состояние и собственный запуск, и я видел сообщение о запуске в журнале дважды. Одна `.so`, один `JNI_OnLoad`.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "heading",
+        "text": "С чего я бы начал",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "С того же, с чего начал сам: с основ. Как работает JNI `env`. Как работают указатели и ссылки, локальные и глобальные. Как передаётся `env` и как находятся классы и методы. Эта картина нужна до любой вспомогательной библиотеки, поскольку каждая последующая ошибка возникает в одном из этих мест."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем нужно тщательно продумать память: как создаются объекты, как они очищаются, сколько стоит каждый из них, какую нагрузку несёт сборщик мусора, что попадает в невидимую для него нативную память. Используйте RAII и подсчитывайте локальные ссылки. И тщательно продумайте потоки, вторую область, в которой возникает большинство ошибок."
+      },
+      {
+        "type": "paragraph",
+        "text": "Наконец, если библиотека будет публичной, подумайте о разработчике, который ею пользуется. Вся цель состоит в устранении шаблонного кода, поэтому каждая оставшаяся обязательная формальность создаёт место для его ошибки."
+      },
+      {
+        "type": "heading",
+        "text": "Текущее состояние",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Я начал использовать эту библиотеку в своей библиотеке для камер. Пока всё работает быстро: обратные вызовы и регистрация объектов подключены и работают, проблем ещё не возникало. Большая часть функциональности там пока не подключена."
+      },
+      {
+        "type": "paragraph",
+        "text": "Библиотека находится здесь:"
+      },
+      {
+        "type": "linkCard",
+        "text": null,
+        "data": {
+          "url": "https://github.com/yuriisurzhykov/jni-runtime/",
+          "view": "row"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Она станет темой следующей статьи, а у проекта есть собственный раздел."
+      }
+    ]
+  }
+}

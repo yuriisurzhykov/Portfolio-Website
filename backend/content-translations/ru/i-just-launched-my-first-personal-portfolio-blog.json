@@ -1,0 +1,48 @@
+{
+  "kind": "post",
+  "slug": "i-just-launched-my-first-personal-portfolio-blog",
+  "source": {
+    "title": "I just launched my first personal Portfolio Blog!",
+    "category": "Blog",
+    "excerpt": "Congrats me on my very first Journal Post!",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "First Journal post to keep everyone up to date! Hooray!",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "🥳🥳🥳"
+      },
+      {
+        "type": "paragraph",
+        "text": "🥳🥳🥳"
+      }
+    ]
+  },
+  "translation": {
+    "title": "Я только что запустил свой первый личный блог-портфолио!",
+    "category": "Блог",
+    "excerpt": "Поздравьте меня с самой первой записью в дневнике!",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Первая запись в дневнике, чтобы держать всех в курсе! Ура!",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "🥳🥳🥳"
+      },
+      {
+        "type": "paragraph",
+        "text": "🥳🥳🥳"
+      }
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "kind": "post",
+  "slug": "added-support-for-mermaid-and-plantuml-and-fixed-some-bugs-in-the-admin-panel",
+  "source": {
+    "title": "Added support for Mermaid and PlantUML, and fixed some bugs in the admin panel",
+    "category": "Blog",
+    "excerpt": "I decided to add support for diagrams, added support for bullet points, and also fixed several critical bugs.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Short overview of things were done",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "While writing a post, I needed to insert diagrams to illustrate a certain concept (here). As I was writing, I realized I didn't have diagram rendering support for any type of post, which gave me the idea to add a renderer. Of course, it didn't end with just Mermaid; I also decided to add PlantUML, which, it turns out, doesn't have a public API. I had to set up a local service on the server and run renders from it."
+      },
+      {
+        "type": "paragraph",
+        "text": "Also, I realized that screenshot testing wasn't working quite correctly because, while it tests some public pages via mocks, it doesn't test all public reusable components. I had to add support for that as well."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then I continued writing and realized there was no support for bullet points, but fortunately, Blocknote supports them out of the box, so I didn't have to build a bunch of them."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Добавил поддержку Mermaid и PlantUML и исправил несколько ошибок в панели администрирования",
+    "category": "Блог",
+    "excerpt": "Я решил добавить поддержку диаграмм, добавил поддержку маркированных списков, а также исправил несколько критических ошибок.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Краткий обзор выполненных изменений",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Во время написания поста мне понадобилось вставить диаграммы, чтобы проиллюстрировать определённую концепцию (здесь). В процессе я понял, что у меня нет поддержки отображения диаграмм ни для одного типа публикаций, и это натолкнуло меня на мысль добавить средство их отображения. Разумеется, одним Mermaid дело не ограничилось: я также решил добавить PlantUML, у которого, как оказалось, нет публичного API. Пришлось развернуть локальный сервис на сервере и выполнять отрисовку через него."
+      },
+      {
+        "type": "paragraph",
+        "text": "Также я понял, что тестирование по скриншотам работало не совсем корректно: хотя оно проверяет некоторые общедоступные страницы с помощью моков, оно не охватывает все общедоступные переиспользуемые компоненты. Пришлось добавить и такую поддержку."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем я продолжил писать и обнаружил, что нет поддержки маркированных списков. К счастью, Blocknote поддерживает их из коробки, поэтому мне не пришлось писать для них большой объём кода."
+      }
+    ]
+  }
+}

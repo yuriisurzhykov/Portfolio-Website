@@ -1,0 +1,3620 @@
+{
+  "kind": "work",
+  "slug": "building-flowbus-an-event-backbone-for-a-large-android-system",
+  "source": {
+    "title": "Building FlowBus - An event backbone for a large Android system",
+    "summary": "An overview of the whole story behind one of the most complex systems I've built.",
+    "startedLabel": "Sep 2023",
+    "shippedLabel": "April 2024",
+    "role": "Principal Engineer",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "FlowBus: When an Event Bus Stops Being Just an Event Bus",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "There is a peculiar moment in the life of a software system when a solution that once felt almost embarrassingly simple begins to reveal how many assumptions had been hiding inside it."
+      },
+      {
+        "type": "paragraph",
+        "text": "An event bus is a good example."
+      },
+      {
+        "type": "paragraph",
+        "text": "At first, the problem seems trivial. One component knows something that another component needs to know, so the first component publishes an event and the second subscribes to it. Kotlin gives us `Flow`, `SharedFlow`, and `Channel`; the language gives us sealed hierarchies and coroutines; and, for a while, the whole problem appears to fit comfortably into a few generic functions."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then the system grows."
+      },
+      {
+        "type": "paragraph",
+        "text": "One event represents a command and should disappear as soon as it has been delivered. Another represents state, which means that a component starting thirty seconds later must still be able to obtain its latest value. A third represents not one state but a collection of independently addressable states. Some values belong to an isolated logical scope and must never cross its boundary. Some must survive a process restart. Some events are harmless enough to be visible everywhere, whereas others represent internal state that only a restricted group of components should be allowed to observe or modify."
+      },
+      {
+        "type": "paragraph",
+        "text": "At that point, the event bus is no longer a pipe."
+      },
+      {
+        "type": "paragraph",
+        "text": "It has become a border."
+      },
+      {
+        "type": "paragraph",
+        "text": "And borders are where architecture begins."
+      },
+      {
+        "type": "paragraph",
+        "text": "The system behind FlowBus was heavily event-driven, which meant that the event layer eventually found itself underneath a considerable part of the application. What initially looked like a communication problem gradually became a question of state, identity, persistence, isolation, ownership, validation, and recovery."
+      },
+      {
+        "type": "paragraph",
+        "text": "The original question had been:"
+      },
+      {
+        "type": "quote",
+        "text": "How do we deliver an event from one component to another?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "The question that eventually mattered was much larger:"
+      },
+      {
+        "type": "quote",
+        "text": "How do we make event communication predictable when the system becomes too large for its rules to live in developers' memory?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "That distinction shaped FlowBus."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus became a central communication mechanism, although calling it merely an \"event bus\" eventually stopped describing the problem particularly well. It understands whether an event is transient or represents retained state, whether there may be one instance or many, whether the state belongs to a particular logical scope, whether it must survive a restart, whether a missing value may be synthesized, and whether the component requesting an operation has permission to perform it."
+      },
+      {
+        "type": "paragraph",
+        "text": "None of those capabilities were introduced because they made the architecture look sophisticated."
+      },
+      {
+        "type": "paragraph",
+        "text": "They appeared because, one by one, the assumptions of the simpler system stopped being true."
+      },
+      {
+        "type": "paragraph",
+        "text": "Good architecture often grows exactly this way."
+      },
+      {
+        "type": "paragraph",
+        "text": "We usually encounter architecture backwards. We see the finished diagram, with its carefully named interfaces and arrows, and it is tempting to imagine that somebody understood the complete problem from the beginning and simply designed the right boxes."
+      },
+      {
+        "type": "paragraph",
+        "text": "Real systems are less polite."
+      },
+      {
+        "type": "paragraph",
+        "text": "They grow more like cities."
+      },
+      {
+        "type": "paragraph",
+        "text": "A road exists because somebody once needed to reach a building. A second road appears when the first becomes crowded. Intersections eventually require traffic rules; districts acquire boundaries; certain roads stop accepting certain kinds of traffic. Much later, somebody looks at the whole thing and calls it infrastructure."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus developed in much the same way."
+      },
+      {
+        "type": "heading",
+        "text": "It Started With Events",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The smallest useful event bus is almost offensively simple:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "publish(event)\n\nsubscribe<Event> {\n    // react\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "And there is nothing wrong with that."
+      },
+      {
+        "type": "paragraph",
+        "text": "Abstractions should begin small. Premature architecture has the unfortunate ability to solve imaginary problems with remarkable elegance."
+      },
+      {
+        "type": "paragraph",
+        "text": "The first difficulty appears when two objects that travel through the same mechanism have entirely different semantics."
+      },
+      {
+        "type": "paragraph",
+        "text": "Consider an event representing a request:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Serializable\ndata object RefreshRequested : SystemEvents"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Its meaning is temporal."
+      },
+      {
+        "type": "paragraph",
+        "text": "Something requested a refresh, interested components may react, and after that moment has passed the event should disappear with it. A component that starts several minutes later should certainly not discover the \"latest refresh request\" and execute it again."
+      },
+      {
+        "type": "paragraph",
+        "text": "Now consider another event:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Serializable\ndata class ConnectionState(\n    val connected: Boolean,\n    val endpoint: String?\n) : NetworkEvents"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Syntactically, both are simply objects."
+      },
+      {
+        "type": "paragraph",
+        "text": "Semantically, they have almost nothing in common."
+      },
+      {
+        "type": "paragraph",
+        "text": "A component may appear long after `ConnectionState` was originally published and still need to know its latest value. Waiting for another transition merely to discover the current state would make the lifecycle of one component depend unnecessarily on the timing of another."
+      },
+      {
+        "type": "paragraph",
+        "text": "`RefreshRequested` describes something that happened."
+      },
+      {
+        "type": "paragraph",
+        "text": "`ConnectionState` describes something that is true."
+      },
+      {
+        "type": "paragraph",
+        "text": "Treating them identically makes the API look simpler, but it does not remove the distinction. It merely forces every consumer to rediscover that distinction on its own."
+      },
+      {
+        "type": "paragraph",
+        "text": "That led to one of the fundamental ideas behind FlowBus:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**the semantics of an event should be encoded in the event model rather than remembered by every component that uses it.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "The event hierarchy therefore distinguishes between transient events and several forms of retained state. Sticky events retain one latest value; sticky collections retain several independently keyed instances; scoped variants associate state with an additional logical boundary; and selected sticky events may also be persisted automatically."
+      },
+      {
+        "type": "paragraph",
+        "text": "Each category exists because it answers a different question."
+      },
+      {
+        "type": "paragraph",
+        "text": "An ordinary event asks:"
+      },
+      {
+        "type": "quote",
+        "text": "Who needs to know about this now?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "A sticky event asks:"
+      },
+      {
+        "type": "quote",
+        "text": "What is the latest known value?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "A sticky collection asks:"
+      },
+      {
+        "type": "quote",
+        "text": "What is the latest known value for this identity?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "A scoped event asks:"
+      },
+      {
+        "type": "quote",
+        "text": "Within which logical context is this information valid?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "A persistable event asks:"
+      },
+      {
+        "type": "quote",
+        "text": "Should this value still exist after the current process no longer does?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Once those questions became explicit, a large part of the architecture stopped being accidental."
+      },
+      {
+        "type": "paragraph",
+        "text": "The conceptual evolution of the system can be seen as a sequence of pressures rather than a sequence of features:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    A[\"Transient Event Delivery\"]\n    B[\"Retained Runtime State\"]\n    C[\"Keyed State\"]\n    D[\"Scoped State\"]\n    E[\"Persistent Recovery\"]\n    F[\"Generated Infrastructure\"]\n    G[\"Authentication & Permissions\"]\n    H[\"Centralized Validation\"]\n\n    A --> B --> C --> D --> E --> F --> G --> H"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The arrows are important because every step exists as a consequence of the previous one. Persistence did not appear because persistence is fashionable; it appeared because retained state stopped being sufficient once process lifetime became relevant. Security did not appear because event buses ought to have permission systems; it appeared because a central communication mechanism eventually became an architectural boundary."
+      },
+      {
+        "type": "heading",
+        "text": "State Hiding Inside an Event Stream",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "There is a subtle trap in event-driven design."
+      },
+      {
+        "type": "paragraph",
+        "text": "Once everything is expressed as events, it becomes tempting to think that everything is therefore a stream."
+      },
+      {
+        "type": "paragraph",
+        "text": "It is not."
+      },
+      {
+        "type": "paragraph",
+        "text": "A stream can describe the sequence through which something changed, but most components eventually need to ask a less historical and far more practical question: what is the state now?"
+      },
+      {
+        "type": "paragraph",
+        "text": "One possible architecture would reconstruct that answer from the complete event history. Event sourcing deliberately does this, and in systems where the history itself is the source of truth, that can be exactly the right design."
+      },
+      {
+        "type": "paragraph",
+        "text": "That was not the problem FlowBus needed to solve."
+      },
+      {
+        "type": "paragraph",
+        "text": "Here, the historical sequence and the latest materialized state had different purposes."
+      },
+      {
+        "type": "paragraph",
+        "text": "The stream represented change."
+      },
+      {
+        "type": "paragraph",
+        "text": "The sticky value represented the present."
+      },
+      {
+        "type": "paragraph",
+        "text": "Whenever a sticky event is published, FlowBus conceptually performs both operations: the event is distributed to active subscribers, while its latest instance is retained for components that need to query it later."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "FlowBus.publish(\n    ConnectionState(\n        connected = true,\n        endpoint = \"primary\"\n    )\n)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The same publication therefore has two consequences."
+      },
+      {
+        "type": "paragraph",
+        "text": "Current subscribers learn that something changed."
+      },
+      {
+        "type": "paragraph",
+        "text": "Future readers can learn what the value is."
+      },
+      {
+        "type": "paragraph",
+        "text": "These ideas are closely related, but they are not identical, and the internal architecture deliberately preserves that distinction."
+      },
+      {
+        "type": "paragraph",
+        "text": "The runtime communication layer manages both event distribution through Kotlin Flows and runtime sticky storage, while FlowBus remains above that mechanism and coordinates the broader behavior surrounding each event."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Publisher[\"Publisher\"] --> FlowBus[\"FlowBus\"]\n    FlowBus --> Communication[\"Flow Communication\"]\n\n    Communication --> Stream[\"Shared Event Stream\"]\n    Communication --> RuntimeState[\"Runtime Retained State\"]\n\n    Stream --> SubscriberA[\"Subscriber A\"]\n    Stream --> SubscriberB[\"Subscriber B\"]\n    Stream --> SubscriberN[\"Subscriber N\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "This distinction between stream and state turned out to be fundamental. A `SharedFlow` can distribute a value beautifully, but distribution does not answer the question of what a late consumer should observe. Conversely, a state store can tell us what is currently true, but it does not naturally express that something has just changed."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus had to provide both without confusing one for the other."
+      },
+      {
+        "type": "paragraph",
+        "text": "At this point, the problem appears largely solved."
+      },
+      {
+        "type": "paragraph",
+        "text": "Until the process disappears."
+      },
+      {
+        "type": "heading",
+        "text": "Memory Is Not Persistence",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Runtime state is useful precisely because it is cheap."
+      },
+      {
+        "type": "paragraph",
+        "text": "It is also temporary precisely because it is memory."
+      },
+      {
+        "type": "paragraph",
+        "text": "Once the process restarts, a beautifully designed in-memory map becomes an empty map."
+      },
+      {
+        "type": "paragraph",
+        "text": "This creates a question that every stateful architecture must eventually answer: which pieces of current state are merely convenient to cache, and which ones actually belong to the durable state of the system?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Not every sticky event needs persistence."
+      },
+      {
+        "type": "paragraph",
+        "text": "Some values are meaningful only during the current execution and can be reconstructed cheaply. Others represent state whose disappearance would materially change the behavior of the system."
+      },
+      {
+        "type": "paragraph",
+        "text": "Those events need to survive."
+      },
+      {
+        "type": "paragraph",
+        "text": "The naïve solution is straightforward: whenever such an event is created, the feature that owns it also implements persistence."
+      },
+      {
+        "type": "paragraph",
+        "text": "An entity is written."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then a DAO."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then a mapper."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then restoration logic."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then another feature does the same thing."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then another."
+      },
+      {
+        "type": "paragraph",
+        "text": "Nothing is fundamentally wrong with this design until the number of events grows sufficiently large. At that point, persistence stops being domain logic and becomes repeated ceremony."
+      },
+      {
+        "type": "paragraph",
+        "text": "And repeated ceremony tends to decay."
+      },
+      {
+        "type": "paragraph",
+        "text": "One implementation forgets to restore a field."
+      },
+      {
+        "type": "paragraph",
+        "text": "Another uses a slightly different default."
+      },
+      {
+        "type": "paragraph",
+        "text": "A third updates runtime state but fails to update persistent state."
+      },
+      {
+        "type": "paragraph",
+        "text": "The fourth reads persistence through an entirely different path."
+      },
+      {
+        "type": "paragraph",
+        "text": "The difficulty is not the number of lines. The difficulty is that a single architectural rule has acquired several implementations."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus instead treats persistence as a capability of the event itself."
+      },
+      {
+        "type": "paragraph",
+        "text": "A persistable event remains an ordinary strongly typed object from the caller's perspective, while the infrastructure recognizes its semantics and delegates its storage to a persistence registry. When the same value is requested later and no runtime copy exists, FlowBus may consult that registry before concluding that the state is absent."
+      },
+      {
+        "type": "paragraph",
+        "text": "The resulting read operation follows a deterministic recovery path:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start([\"Read retained state\"]) --> Runtime{\"Runtime value exists?\"}\n\n    Runtime -->|Yes| ReturnRuntime[\"Return runtime value\"]\n    Runtime -->|No| Persistable{\"Event is persistable?\"}\n\n    Persistable -->|Yes| Stored{\"Persisted value exists?\"}\n    Persistable -->|No| DefaultAllowed{\"Default creation allowed?\"}\n\n    Stored -->|Yes| Restore[\"Restore persisted value\"]\n    Stored -->|No| DefaultAllowed\n\n    Restore --> ReturnStored[\"Return restored value\"]\n\n    DefaultAllowed -->|Yes| Generate[\"Generate default instance\"]\n    DefaultAllowed -->|No| Fail[\"Fail explicitly\"]\n\n    Generate --> ReturnDefault[\"Return default value\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The order matters."
+      },
+      {
+        "type": "paragraph",
+        "text": "The freshest runtime representation wins."
+      },
+      {
+        "type": "paragraph",
+        "text": "If runtime state is unavailable, durable state may restore continuity."
+      },
+      {
+        "type": "paragraph",
+        "text": "If nothing has ever been stored, some events allow the system to construct a well-defined initial value."
+      },
+      {
+        "type": "paragraph",
+        "text": "Other events deliberately do not."
+      },
+      {
+        "type": "paragraph",
+        "text": "That last distinction deserves more attention than it usually receives."
+      },
+      {
+        "type": "heading",
+        "text": "Absence Is a State Too",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Default values are wonderfully convenient."
+      },
+      {
+        "type": "paragraph",
+        "text": "They are also surprisingly good at lying."
+      },
+      {
+        "type": "paragraph",
+        "text": "Imagine requesting a Boolean value that has never been produced and receiving `false`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Does `false` mean that the system has explicitly determined that the condition is false?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Or does it mean that nobody has provided the answer yet, so the infrastructure invented one?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Those are radically different statements."
+      },
+      {
+        "type": "paragraph",
+        "text": "For that reason, FlowBus does not assume that every sticky event may be created from thin air. Default creation is an explicit capability. An event may opt into it, and its properties may define the defaults that should be used when no runtime or persisted instance exists."
+      },
+      {
+        "type": "paragraph",
+        "text": "Other events intentionally refuse such behavior."
+      },
+      {
+        "type": "paragraph",
+        "text": "When one of those events has never existed, reading it fails instead of manufacturing state."
+      },
+      {
+        "type": "paragraph",
+        "text": "That design reflects a principle that turned out to be useful well beyond FlowBus:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**unknown and default are not synonyms.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "A system becomes easier to reason about when it refuses to pretend otherwise."
+      },
+      {
+        "type": "paragraph",
+        "text": "The important detail here is not the annotation itself. The annotation is merely syntax. The architectural point is that the decision is owned by the event definition rather than by whichever component happens to read the event first."
+      },
+      {
+        "type": "paragraph",
+        "text": "One reader cannot decide that absence means `false` while another decides that it means `true`, and a third throws an exception. The rule exists once."
+      },
+      {
+        "type": "paragraph",
+        "text": "That is what infrastructure is supposed to do."
+      },
+      {
+        "type": "heading",
+        "text": "Let the Compiler Do the Boring Work",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Persistence solved one problem and immediately created another."
+      },
+      {
+        "type": "paragraph",
+        "text": "Suppose an event is declared as persistable."
+      },
+      {
+        "type": "paragraph",
+        "text": "The runtime now needs some way to represent it in a database, map it in both directions, locate the correct persistence implementation, and, when permitted, construct a default instance."
+      },
+      {
+        "type": "paragraph",
+        "text": "One approach would have been reflection."
+      },
+      {
+        "type": "paragraph",
+        "text": "Another would have been registration by hand."
+      },
+      {
+        "type": "paragraph",
+        "text": "Both would work."
+      },
+      {
+        "type": "paragraph",
+        "text": "Neither was particularly attractive."
+      },
+      {
+        "type": "paragraph",
+        "text": "The event declaration already contained most of the information needed by the infrastructure. Kotlin's type system described its payload; annotations described its semantics; serialization metadata described its serialized representation; default annotations described how an initial value might be created."
+      },
+      {
+        "type": "paragraph",
+        "text": "The compiler could see all of it."
+      },
+      {
+        "type": "paragraph",
+        "text": "So the compiler became part of the solution."
+      },
+      {
+        "type": "paragraph",
+        "text": "Kotlin Symbol Processing inspects event declarations during compilation and generates the repetitive infrastructure required by the runtime: persistence-related classes, mapping logic, registry implementations, and sticky factories. FlowBus itself depends on the resulting abstractions rather than on the machinery that generated them."
+      },
+      {
+        "type": "paragraph",
+        "text": "The compile-time and runtime worlds therefore meet through interfaces:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TB\n    subgraph CompileTime[\"Compile Time\"]\n        Events[\"Annotated Event Definitions\"]\n        KSP[\"KSP Processors\"]\n\n        Events --> KSP\n        KSP --> GeneratedRegistry[\"Generated Persistence Registry\"]\n        KSP --> GeneratedFactory[\"Generated Sticky Factory\"]\n        KSP --> GeneratedStorage[\"Generated Entities / DAOs / Mappers\"]\n    end\n\n    subgraph Runtime[\"Runtime\"]\n        Component[\"Application Component\"]\n        FlowBus[\"FlowBus\"]\n        Registry[\"StorageRegistry\"]\n        Factory[\"StickyFactory\"]\n        Communication[\"Flow Communication\"]\n        Database[(\"Persistent Storage\")]\n\n        Component --> FlowBus\n        FlowBus --> Communication\n        FlowBus --> Registry\n        FlowBus --> Factory\n\n        Registry --> Database\n    end\n\n    GeneratedRegistry -. \"implements\" .-> Registry\n    GeneratedFactory -. \"implements\" .-> Factory\n    GeneratedStorage -. \"used by\" .-> Registry"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "That distinction is architectural, not cosmetic."
+      },
+      {
+        "type": "paragraph",
+        "text": "At runtime, FlowBus knows that it needs to persist an event and asks Storage`Registry`."
+      },
+      {
+        "type": "paragraph",
+        "text": "It does not know which DAO must be called, how a particular event maps to a particular database representation, or which generated class performs the conversion."
+      },
+      {
+        "type": "paragraph",
+        "text": "Likewise, when a default instance is required, FlowBus asks Sticky`Factory`."
+      },
+      {
+        "type": "paragraph",
+        "text": "The runtime does not perform constructor discovery or reflection."
+      },
+      {
+        "type": "paragraph",
+        "text": "The compiler already did the complicated work."
+      },
+      {
+        "type": "paragraph",
+        "text": "This moved complexity rather than eliminating it."
+      },
+      {
+        "type": "paragraph",
+        "text": "That is often what good architecture does."
+      },
+      {
+        "type": "paragraph",
+        "text": "The important question is not whether complexity exists; in a sufficiently capable system, it always will."
+      },
+      {
+        "type": "paragraph",
+        "text": "The useful question is where that complexity is allowed to live."
+      },
+      {
+        "type": "paragraph",
+        "text": "Here, deterministic and repetitive complexity moved into compilation, where errors could become build failures instead of runtime surprises."
+      },
+      {
+        "type": "paragraph",
+        "text": "The runtime became more boring as a result."
+      },
+      {
+        "type": "paragraph",
+        "text": "Boring runtime code is usually a compliment."
+      },
+      {
+        "type": "heading",
+        "text": "When One Identity Is Not Enough",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Retaining a single latest value solves only one category of state."
+      },
+      {
+        "type": "paragraph",
+        "text": "Sometimes a system does not have one current instance of a concept."
+      },
+      {
+        "type": "paragraph",
+        "text": "It has many."
+      },
+      {
+        "type": "paragraph",
+        "text": "A collection of independent entities may all share the same event type while representing different identities. Treating the complete set as one enormous sticky object would technically work, but it would couple unrelated updates and force consumers to manipulate more state than necessary."
+      },
+      {
+        "type": "paragraph",
+        "text": "Sticky collections solve that problem by allowing multiple retained instances of the same event type, each identified by a key. The original event model also permits validation rules to be associated with those keys."
+      },
+      {
+        "type": "paragraph",
+        "text": "Conceptually, event identity begins with a type and may acquire additional dimensions:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Identity[\"Event Identity\"]\n\n    Identity --> Type[\"Event Type\"]\n    Identity --> Key[\"Optional Item Key\"]\n    Identity --> Scope[\"Optional Logical Scope\"]\n\n    Type --> RuntimeIdentity[\"Runtime Identity\"]\n    Key --> RuntimeIdentity\n    Scope --> RuntimeIdentity"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The key is not merely an argument passed into some map."
+      },
+      {
+        "type": "paragraph",
+        "text": "It is part of what distinguishes one retained state from another."
+      },
+      {
+        "type": "paragraph",
+        "text": "Once identity is treated as an architectural concept rather than an implementation detail, validation becomes a natural consequence. If a key has a constrained domain, the event system itself can enforce that constraint rather than asking every caller to remember it."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then another dimension appears."
+      },
+      {
+        "type": "paragraph",
+        "text": "Many sufficiently large systems contain some notion of isolated context. Depending on the application, that context might represent a tenant, a session, a workspace, a device, a domain, an account, or some entirely different logical boundary."
+      },
+      {
+        "type": "paragraph",
+        "text": "The name does not matter."
+      },
+      {
+        "type": "paragraph",
+        "text": "The requirement does."
+      },
+      {
+        "type": "paragraph",
+        "text": "A value belonging to one context must not accidentally be observed or manipulated as though it belonged to another."
+      },
+      {
+        "type": "paragraph",
+        "text": "The simplest implementation is also the most tempting:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "if (event.scope == myScope) {\n    handle(event)\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "It is wonderfully easy to write."
+      },
+      {
+        "type": "paragraph",
+        "text": "Unfortunately, it is equally easy not to write."
+      },
+      {
+        "type": "paragraph",
+        "text": "Whenever an invariant depends on every consumer remembering the same `if`, the invariant is not really part of the architecture yet."
+      },
+      {
+        "type": "paragraph",
+        "text": "The original implementation models this notion through partition-specific event types, including retained and collection variants. Publicly, however, the broader idea is more useful: some events carry an additional scope dimension, and that dimension belongs to the communication contract itself."
+      },
+      {
+        "type": "paragraph",
+        "text": "The type model can be thought of approximately like this:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "classDiagram\n    class Event {\n        <<interface>>\n    }\n\n    class Sticky {\n        <<retained state>>\n    }\n\n    class StickyCollection {\n        <<keyed retained state>>\n        +key\n    }\n\n    class ScopedEvent {\n        <<scoped>>\n        +scope\n    }\n\n    class ScopedSticky {\n        <<scoped retained state>>\n        +scope\n    }\n\n    class ScopedStickyCollection {\n        <<scoped keyed retained state>>\n        +scope\n        +key\n    }\n\n    class Persistable {\n        <<capability>>\n    }\n\n    Event <|-- Sticky\n    Event <|-- StickyCollection\n    Event <|-- ScopedEvent\n    Sticky <|-- ScopedSticky\n    StickyCollection <|-- ScopedStickyCollection\n\n    Persistable <|.. Sticky\n    Persistable <|.. StickyCollection\n    Persistable <|.. ScopedSticky\n    Persistable <|.. ScopedStickyCollection"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "This diagram is intentionally conceptual rather than a literal copy of every Kotlin declaration, because what matters publicly is the set of semantics the type hierarchy enforces: transience, retention, multiplicity, scope, and durability."
+      },
+      {
+        "type": "paragraph",
+        "text": "The recurring principle remains the same."
+      },
+      {
+        "type": "paragraph",
+        "text": "If a rule is important enough that every consumer must obey it, it probably should not remain a consumer responsibility."
+      },
+      {
+        "type": "heading",
+        "text": "The Bus Eventually Became a Security Boundary",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Once a communication system becomes central enough, another assumption becomes difficult to defend:"
+      },
+      {
+        "type": "quote",
+        "text": "Any component that can access the bus may do anything with any event.",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "In a small application that may be acceptable."
+      },
+      {
+        "type": "paragraph",
+        "text": "In a system composed of many independent components, it becomes an architectural liability."
+      },
+      {
+        "type": "paragraph",
+        "text": "Reading an event and modifying one are not equivalent capabilities."
+      },
+      {
+        "type": "paragraph",
+        "text": "Publishing a command and observing its result are not equivalent capabilities."
+      },
+      {
+        "type": "paragraph",
+        "text": "Deleting retained state is certainly not equivalent to reading it."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus consequently evolved into a secured communication layer in which participants are represented as actors and event access is governed by explicit permissions. The underlying model distinguishes operations such as publishing, reading, subscribing, and deleting."
+      },
+      {
+        "type": "paragraph",
+        "text": "An event may be public:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Public\ndata class ServiceStatus(\n    val available: Boolean\n) : Event"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "or it may define restricted access:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Protected(\n    publish = [StateOwner::class],\n    read = [StateOwner::class, StateObserver::class]\n)\ndata class InternalState(\n    val value: String\n) : Event.Sticky()"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The exact actors are application-specific."
+      },
+      {
+        "type": "paragraph",
+        "text": "The important design choice is not."
+      },
+      {
+        "type": "paragraph",
+        "text": "The permissions live with the event definition, while enforcement happens at the communication boundary."
+      },
+      {
+        "type": "paragraph",
+        "text": "The interaction looks roughly like this:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "sequenceDiagram\n    participant C as Component\n    participant F as FlowBusWithSecure\n    participant A as Authentication\n    participant P as Permission System\n    participant R as Runtime Communication\n\n    C->>F: publish(event)\n    F->>A: verify identity\n    A-->>F: authenticated actor\n    F->>P: check PUBLISH permission\n\n    alt Permission granted\n        P-->>F: allowed\n        F->>R: emit(event)\n        R-->>F: accepted\n        F-->>C: publication completed\n    else Permission denied\n        P-->>F: denied\n        F-->>C: FlowBusSecurityException\n    end"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "This provides a form of locality that becomes increasingly valuable as a codebase grows."
+      },
+      {
+        "type": "paragraph",
+        "text": "To understand an event's ownership model, a developer should not have to search for every publisher and every subscriber and infer security from usage."
+      },
+      {
+        "type": "paragraph",
+        "text": "The declaration should answer the question."
+      },
+      {
+        "type": "paragraph",
+        "text": "This turns the bus into something larger than a dispatcher."
+      },
+      {
+        "type": "paragraph",
+        "text": "A dispatcher asks:"
+      },
+      {
+        "type": "quote",
+        "text": "Where should this message go?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "A secured communication boundary must ask another question first:"
+      },
+      {
+        "type": "quote",
+        "text": "Is this message allowed to go there at all?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "That is a substantially different responsibility."
+      },
+      {
+        "type": "heading",
+        "text": "Validation Belongs at the Boundary",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Security is not the only property that benefits from central enforcement."
+      },
+      {
+        "type": "paragraph",
+        "text": "Events may carry validation rules, while keyed events may impose constraints on their identifiers. The original FlowBus publication path validates the event before passing it into runtime communication and performs key validation where applicable."
+      },
+      {
+        "type": "paragraph",
+        "text": "The important question is not whether validation exists, but when it happens."
+      },
+      {
+        "type": "paragraph",
+        "text": "Consider the alternative."
+      },
+      {
+        "type": "paragraph",
+        "text": "An invalid event is published."
+      },
+      {
+        "type": "paragraph",
+        "text": "Three subscribers receive it."
+      },
+      {
+        "type": "paragraph",
+        "text": "One rejects it."
+      },
+      {
+        "type": "paragraph",
+        "text": "Another silently adjusts one property into an acceptable range."
+      },
+      {
+        "type": "paragraph",
+        "text": "The third stores it."
+      },
+      {
+        "type": "paragraph",
+        "text": "Now the system contains several interpretations of the same invalid state."
+      },
+      {
+        "type": "paragraph",
+        "text": "The original error occurred at publication time, but the visible failure may happen several layers later."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus instead validates the event before it enters normal communication."
+      },
+      {
+        "type": "paragraph",
+        "text": "The same principle applies to identity constraints."
+      },
+      {
+        "type": "paragraph",
+        "text": "The publication pipeline therefore behaves like an activity with several gates:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start([\"Publish event\"]) --> Identity[\"Resolve authenticated actor\"]\n    Identity --> Permission{\"Operation permitted?\"}\n\n    Permission -->|No| SecurityFailure[\"Reject operation\"]\n    Permission -->|Yes| ValidatePayload[\"Validate event payload\"]\n\n    ValidatePayload --> PayloadValid{\"Payload valid?\"}\n    PayloadValid -->|No| ValidationFailure[\"Reject event\"]\n    PayloadValid -->|Yes| ValidateIdentity[\"Validate key / scope identity\"]\n\n    ValidateIdentity --> IdentityValid{\"Identity valid?\"}\n    IdentityValid -->|No| IdentityFailure[\"Reject event\"]\n    IdentityValid -->|Yes| Emit[\"Deliver to runtime communication\"]\n\n    Emit --> Notify[\"Notify active subscribers\"]\n    Emit --> Retained{\"Retained-state event?\"}\n\n    Retained -->|Yes| StoreRuntime[\"Update runtime retained state\"]\n    Retained -->|No| Persistable{\"Persistable event?\"}\n\n    StoreRuntime --> Persistable\n\n    Persistable -->|Yes| StorePersistent[\"Update persistent representation\"]\n    Persistable -->|No| Done([\"Publication complete\"])\n\n    StorePersistent --> Done\n    Notify --> Done"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The order is deliberate."
+      },
+      {
+        "type": "paragraph",
+        "text": "An unauthorized value should never briefly enter runtime state before being rejected."
+      },
+      {
+        "type": "paragraph",
+        "text": "An invalid value should never be observed by subscribers."
+      },
+      {
+        "type": "paragraph",
+        "text": "A value rejected by the in-memory model should not somehow become acceptable merely because it can be serialized."
+      },
+      {
+        "type": "paragraph",
+        "text": "The rule is straightforward:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**invalid state should fail as close as possible to the boundary through which it enters the system.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "That reduces the number of impossible states every component downstream must be prepared to handle."
+      },
+      {
+        "type": "heading",
+        "text": "A Small API Can Hide a Large Contract",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "After all these capabilities are added, the public API still looks deceptively simple."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "FlowBus.publish(event)\n\nFlowBus.subscribe(EventType::class, scope) { event ->\n    // react\n}\n\nval state = FlowBus.getSticky(StateEvent::class)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Collections and scoped state add more specific operations, and deletion follows the same conceptual model."
+      },
+      {
+        "type": "paragraph",
+        "text": "There is a temptation in API design to replace specialized operations with one universal function:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "get(\n    type,\n    key = null,\n    scope = null\n)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The surface becomes smaller."
+      },
+      {
+        "type": "paragraph",
+        "text": "Unfortunately, the number of meaningless combinations becomes larger."
+      },
+      {
+        "type": "paragraph",
+        "text": "What does a key mean for a non-collection event?"
+      },
+      {
+        "type": "paragraph",
+        "text": "What should happen when a scoped event is requested without a scope?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Should a caller be allowed to provide a scope for an event whose identity does not include one?"
+      },
+      {
+        "type": "paragraph",
+        "text": "A smaller API is not necessarily a simpler API."
+      },
+      {
+        "type": "paragraph",
+        "text": "Sometimes several precise operations produce a more understandable system than one excessively flexible operation."
+      },
+      {
+        "type": "paragraph",
+        "text": "This is one reason the event hierarchy uses different retained-state abstractions and why the API exposes operations that correspond to those semantics instead of flattening every possibility into a bag of nullable parameters."
+      },
+      {
+        "type": "paragraph",
+        "text": "The goal is not merely to make valid operations possible."
+      },
+      {
+        "type": "paragraph",
+        "text": "It is to reduce the number of invalid operations the caller can conveniently express."
+      },
+      {
+        "type": "heading",
+        "text": "Reading State Is Also a Policy",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The same principle applies to reads."
+      },
+      {
+        "type": "paragraph",
+        "text": "A call to retrieve retained state looks innocent, but by the time FlowBus matured, the call represented a sequence of policy decisions."
+      },
+      {
+        "type": "paragraph",
+        "text": "First, the caller must be authorized to read the event."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then runtime state is preferred because it represents the most recent in-process value."
+      },
+      {
+        "type": "paragraph",
+        "text": "If the runtime copy does not exist and the event is persistable, durable storage is consulted."
+      },
+      {
+        "type": "paragraph",
+        "text": "If durable state is absent, default construction may be attempted, but only when the event explicitly permits it."
+      },
+      {
+        "type": "paragraph",
+        "text": "Otherwise, the absence remains visible as an error."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start([\"Read retained state\"]) --> Permission{\"Read permitted?\"}\n\n    Permission -->|No| SecurityFailure[\"Reject operation\"]\n    Permission -->|Yes| Runtime{\"Runtime value exists?\"}\n\n    Runtime -->|Yes| ReturnRuntime[\"Return runtime value\"]\n    Runtime -->|No| Persistable{\"Event is persistable?\"}\n\n    Persistable -->|Yes| Persistent{\"Persisted value exists?\"}\n    Persistable -->|No| DefaultAllowed{\"Default creation allowed?\"}\n\n    Persistent -->|Yes| Restore[\"Restore persisted value\"]\n    Persistent -->|No| DefaultAllowed\n\n    Restore --> ReturnPersistent[\"Return restored value\"]\n\n    DefaultAllowed -->|Yes| Generate[\"Generate default instance\"]\n    DefaultAllowed -->|No| Missing[\"Fail explicitly\"]\n\n    Generate --> ReturnDefault[\"Return default instance\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The API call hides this sequence because the caller should not need to reimplement it."
+      },
+      {
+        "type": "paragraph",
+        "text": "That is exactly the kind of complexity an architectural boundary should absorb."
+      },
+      {
+        "type": "heading",
+        "text": "Deletion Is a State Transition",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Deletion introduced another small but revealing architectural decision."
+      },
+      {
+        "type": "paragraph",
+        "text": "When retained state disappears, should that operation remain invisible to the rest of an event-driven system?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Suppose a keyed entry is removed."
+      },
+      {
+        "type": "paragraph",
+        "text": "Or an entire retained collection is cleared."
+      },
+      {
+        "type": "paragraph",
+        "text": "The runtime store changes. Persistent storage may change as well."
+      },
+      {
+        "type": "paragraph",
+        "text": "Yet, unless something is emitted, subscribers that care about the state transition may know nothing about it."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus therefore treats deletion itself as observable behavior. When retained state is removed, a corresponding real-time event describes the deletion."
+      },
+      {
+        "type": "paragraph",
+        "text": "The interaction can be understood as a state transition rather than a storage command:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "sequenceDiagram\n    participant C as Caller\n    participant F as FlowBus\n    participant R as Runtime State\n    participant P as Persistence\n    participant S as Subscribers\n\n    C->>F: delete(event identity)\n    F->>R: remove runtime value\n\n    opt Persisted event\n        F->>P: remove persisted value\n    end\n\n    F->>S: publish deletion event\n    F-->>C: deletion completed"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The larger principle is more interesting than the particular event type:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**in an event-driven architecture, meaningful changes to shared state should not happen silently.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "Creation is a state transition."
+      },
+      {
+        "type": "paragraph",
+        "text": "Update is a state transition."
+      },
+      {
+        "type": "paragraph",
+        "text": "Deletion is also a state transition."
+      },
+      {
+        "type": "paragraph",
+        "text": "The last one is simply easier to forget because what remains afterward is nothing."
+      },
+      {
+        "type": "heading",
+        "text": "Serialization Became Part of Observability",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Once asynchronous communication becomes a primary mechanism of coordination, logs stop being merely diagnostic output."
+      },
+      {
+        "type": "paragraph",
+        "text": "They become one of the few ways to reconstruct how the system arrived at a particular state."
+      },
+      {
+        "type": "paragraph",
+        "text": "The event definitions therefore participate in serialization. Events use explicit serial names, and payload fields may also define concise serialized names, allowing event logs to remain stable and readable rather than exposing long implementation-specific Kotlin names."
+      },
+      {
+        "type": "paragraph",
+        "text": "This may appear secondary to communication and persistence, but in asynchronous systems observability is part of correctness."
+      },
+      {
+        "type": "paragraph",
+        "text": "When component A reacts to an event from component B, produces another event consumed by component C, and the final visible failure occurs several seconds later, a stack trace frequently describes only the end of the story."
+      },
+      {
+        "type": "paragraph",
+        "text": "An event trail describes the story itself."
+      },
+      {
+        "type": "paragraph",
+        "text": "The quality of that trail depends directly on the event model."
+      },
+      {
+        "type": "paragraph",
+        "text": "Good event names make behavior legible."
+      },
+      {
+        "type": "paragraph",
+        "text": "Clear payloads make transitions explainable."
+      },
+      {
+        "type": "paragraph",
+        "text": "Stable serialization makes historical logs useful even after implementation details evolve."
+      },
+      {
+        "type": "paragraph",
+        "text": "In that sense, the event model becomes not only a communication model but also a vocabulary for describing the runtime behavior of the system."
+      },
+      {
+        "type": "heading",
+        "text": "The Architecture Is Not `SharedFlow`",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "It would be easy to summarize FlowBus by saying that it is built using Kotlin Flows."
+      },
+      {
+        "type": "paragraph",
+        "text": "That statement is true and not particularly useful."
+      },
+      {
+        "type": "paragraph",
+        "text": "`SharedFlow` is a mechanism."
+      },
+      {
+        "type": "paragraph",
+        "text": "The architecture lies in the rules surrounding it."
+      },
+      {
+        "type": "paragraph",
+        "text": "A publication involves identity, authorization, validation, runtime delivery, optional retention, and optional persistence."
+      },
+      {
+        "type": "paragraph",
+        "text": "A read involves authorization, runtime lookup, persistent recovery, and controlled default construction."
+      },
+      {
+        "type": "paragraph",
+        "text": "A deletion may affect runtime and durable state and then itself become observable."
+      },
+      {
+        "type": "paragraph",
+        "text": "The coroutine primitives underneath these operations are implementation choices."
+      },
+      {
+        "type": "paragraph",
+        "text": "This distinction matters because sophisticated primitives are sometimes mistaken for sophisticated design."
+      },
+      {
+        "type": "paragraph",
+        "text": "Using `SharedFlow` does not decide ownership."
+      },
+      {
+        "type": "paragraph",
+        "text": "A `Channel` does not define state semantics."
+      },
+      {
+        "type": "paragraph",
+        "text": "A coroutine does not tell us which values should survive a restart."
+      },
+      {
+        "type": "paragraph",
+        "text": "Those decisions still need somewhere to live."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus is the place where those decisions meet."
+      },
+      {
+        "type": "heading",
+        "text": "What FlowBus Deliberately Does Not Know",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Infrastructure becomes dangerous when success makes it hungry."
+      },
+      {
+        "type": "paragraph",
+        "text": "Once every component uses a central mechanism, almost every new behavior can be rationalized as something that mechanism could conveniently handle."
+      },
+      {
+        "type": "paragraph",
+        "text": "Workflow orchestration could go into the bus."
+      },
+      {
+        "type": "paragraph",
+        "text": "Retry policies could go into the bus."
+      },
+      {
+        "type": "paragraph",
+        "text": "Domain transitions could go into the bus."
+      },
+      {
+        "type": "paragraph",
+        "text": "UI behavior could go into the bus."
+      },
+      {
+        "type": "paragraph",
+        "text": "Eventually the communication layer would understand the entire application, at which point the application would effectively have one enormous hidden dependency."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus deliberately avoids that direction."
+      },
+      {
+        "type": "paragraph",
+        "text": "It understands the mechanics and policy of communication:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "whether state is transient or retained;",
+              "blocks": []
+            },
+            {
+              "text": "how retained instances are identified;",
+              "blocks": []
+            },
+            {
+              "text": "whether state belongs to a logical scope;",
+              "blocks": []
+            },
+            {
+              "text": "whether the value is durable;",
+              "blocks": []
+            },
+            {
+              "text": "whether it may have a synthetic default;",
+              "blocks": []
+            },
+            {
+              "text": "whether it is valid;",
+              "blocks": []
+            },
+            {
+              "text": "whether the caller is authorized.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "It does not understand the domain meaning of the event."
+      },
+      {
+        "type": "paragraph",
+        "text": "It does not decide what should happen because a particular state changed."
+      },
+      {
+        "type": "paragraph",
+        "text": "It does not own workflows merely because their messages happen to travel through it."
+      },
+      {
+        "type": "paragraph",
+        "text": "That boundary is critical."
+      },
+      {
+        "type": "paragraph",
+        "text": "The bus controls **how information may move**."
+      },
+      {
+        "type": "paragraph",
+        "text": "The rest of the system decides **what that information means**."
+      },
+      {
+        "type": "paragraph",
+        "text": "This is also what prevents FlowBus from becoming a god object. Centralizing policy is useful; centralizing business behavior is not."
+      },
+      {
+        "type": "paragraph",
+        "text": "Those ideas can sound similar in an architecture diagram, but they lead to very different systems."
+      },
+      {
+        "type": "heading",
+        "text": "The Architecture That Emerged",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Once the implementation details are stripped away, FlowBus can be viewed as several boundaries layered around runtime communication."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    subgraph Callers[\"Application Components\"]\n        C1[\"Component A\"]\n        C2[\"Component B\"]\n        C3[\"Component C\"]\n    end\n\n    C1 --> FB[\"Secured FlowBus\"]\n    C2 --> FB\n    C3 --> FB\n\n    FB --> Security[\"Authentication & Permissions\"]\n    FB --> Validation[\"Event Validation\"]\n\n    Validation --> Communication[\"Runtime Communication\"]\n\n    Communication --> Stream[\"Event Stream\"]\n    Communication --> RuntimeState[\"Runtime Retained State\"]\n\n    FB --> Persistence[\"Persistence Registry\"]\n    Persistence --> DB[(\"Persistent Storage\")]\n\n    FB --> Factory[\"Default Event Factory\"]\n\n    subgraph Build[\"Compile Time\"]\n        EventDefinitions[\"Annotated Event Definitions\"]\n        KSP[\"KSP Processors\"]\n\n        EventDefinitions --> KSP\n        KSP --> GeneratedRegistry[\"Generated Registry\"]\n        KSP --> GeneratedFactory[\"Generated Factory\"]\n        KSP --> GeneratedStorage[\"Generated Storage Code\"]\n    end\n\n    GeneratedRegistry -. \"implements\" .-> Persistence\n    GeneratedFactory -. \"implements\" .-> Factory\n    GeneratedStorage -. \"supports\" .-> Persistence"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "There are substantially more pieces here than in the original:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "publish(event)\nsubscribe<Event>()"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Yet the caller still sees an intentionally constrained API."
+      },
+      {
+        "type": "paragraph",
+        "text": "That is the trade."
+      },
+      {
+        "type": "paragraph",
+        "text": "Complexity did not disappear."
+      },
+      {
+        "type": "paragraph",
+        "text": "It moved behind boundaries where it could be implemented, tested, generated, and enforced once instead of rediscovered throughout the application."
+      },
+      {
+        "type": "paragraph",
+        "text": "This is perhaps the most important difference between a utility and infrastructure."
+      },
+      {
+        "type": "paragraph",
+        "text": "A utility saves typing."
+      },
+      {
+        "type": "paragraph",
+        "text": "Infrastructure preserves behavior."
+      },
+      {
+        "type": "heading",
+        "text": "The Difficult Part Was Never Any Individual Feature",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Sticky values are not a new idea."
+      },
+      {
+        "type": "paragraph",
+        "text": "Keyed state is not a new idea."
+      },
+      {
+        "type": "paragraph",
+        "text": "Persistence is not a new idea."
+      },
+      {
+        "type": "paragraph",
+        "text": "Code generation is not a new idea."
+      },
+      {
+        "type": "paragraph",
+        "text": "Permissions are not a new idea."
+      },
+      {
+        "type": "paragraph",
+        "text": "Neither are validation rules, logical scopes, structured event logs, nor Kotlin Flows."
+      },
+      {
+        "type": "paragraph",
+        "text": "The difficult part begins when all of those concerns must coexist without contradicting one another."
+      },
+      {
+        "type": "paragraph",
+        "text": "A keyed event has both state semantics and identity."
+      },
+      {
+        "type": "paragraph",
+        "text": "A durable keyed event has state semantics, identity, and lifecycle beyond the process."
+      },
+      {
+        "type": "paragraph",
+        "text": "A scoped durable keyed event adds another dimension of isolation."
+      },
+      {
+        "type": "paragraph",
+        "text": "A protected scoped durable keyed event must preserve every previous guarantee while adding ownership and authorization."
+      },
+      {
+        "type": "paragraph",
+        "text": "Default creation must respect the same identity model."
+      },
+      {
+        "type": "paragraph",
+        "text": "Deletion must remove the correct runtime and durable representations."
+      },
+      {
+        "type": "paragraph",
+        "text": "Serialization must preserve enough information for diagnostics."
+      },
+      {
+        "type": "paragraph",
+        "text": "And after all of that, the public API should still make ordinary operations unsurprising."
+      },
+      {
+        "type": "paragraph",
+        "text": "Architecture tends to become difficult at intersections."
+      },
+      {
+        "type": "paragraph",
+        "text": "Individual mechanisms are often simple."
+      },
+      {
+        "type": "paragraph",
+        "text": "The hard work is preventing the solution to one problem from quietly breaking the assumptions of another."
+      },
+      {
+        "type": "paragraph",
+        "text": "That is also why the final architecture cannot be judged merely by counting its interfaces or looking at the size of its implementation."
+      },
+      {
+        "type": "paragraph",
+        "text": "The value is in the constraints that continue to hold when the features are combined."
+      },
+      {
+        "type": "heading",
+        "text": "The Cost of Making Rules Explicit",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "There is, of course, a price."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus introduces more concepts than a generic event dispatcher."
+      },
+      {
+        "type": "paragraph",
+        "text": "There are event categories."
+      },
+      {
+        "type": "paragraph",
+        "text": "There are annotations."
+      },
+      {
+        "type": "paragraph",
+        "text": "There are generated implementations."
+      },
+      {
+        "type": "paragraph",
+        "text": "There is a permission model."
+      },
+      {
+        "type": "paragraph",
+        "text": "There are different APIs for different retained-state semantics."
+      },
+      {
+        "type": "paragraph",
+        "text": "There are explicit failure modes where a simpler implementation might simply return `null`."
+      },
+      {
+        "type": "paragraph",
+        "text": "For a small application, much of this would be unnecessary."
+      },
+      {
+        "type": "paragraph",
+        "text": "That point matters."
+      },
+      {
+        "type": "paragraph",
+        "text": "Architecture is not automatically better because it is more sophisticated. A solution that is correct for a system with hundreds of interacting event types may be absurd for an application with six screens and three flows."
+      },
+      {
+        "type": "paragraph",
+        "text": "The justification lies in repetition and risk."
+      },
+      {
+        "type": "paragraph",
+        "text": "When a rule is applied in one place, a convention may be enough."
+      },
+      {
+        "type": "paragraph",
+        "text": "When a rule is applied in a hundred places, convention becomes an unreliable distribution mechanism."
+      },
+      {
+        "type": "paragraph",
+        "text": "At that scale, explicitness starts paying for itself."
+      },
+      {
+        "type": "paragraph",
+        "text": "A type that prevents misuse is cheaper than a wiki page explaining how not to misuse something."
+      },
+      {
+        "type": "paragraph",
+        "text": "A compile-time failure is cheaper than a field failure."
+      },
+      {
+        "type": "paragraph",
+        "text": "A generated mapper is cheaper than fifty almost-identical handwritten mappers."
+      },
+      {
+        "type": "paragraph",
+        "text": "A central permission check is cheaper than discovering that one forgotten code path bypassed the ownership model."
+      },
+      {
+        "type": "paragraph",
+        "text": "The additional architecture earns its existence only when those costs become real."
+      },
+      {
+        "type": "heading",
+        "text": "What I Took Away From Building It",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The most important lesson from FlowBus was not about event buses."
+      },
+      {
+        "type": "paragraph",
+        "text": "It was about where rules belong."
+      },
+      {
+        "type": "paragraph",
+        "text": "A rule may begin as a comment."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then it becomes a convention."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then the convention is copied into several components."
+      },
+      {
+        "type": "paragraph",
+        "text": "Eventually somebody forgets it."
+      },
+      {
+        "type": "paragraph",
+        "text": "If violating that rule can make the system inconsistent, insecure, or difficult to recover, then the problem is no longer that the developer forgot the convention."
+      },
+      {
+        "type": "paragraph",
+        "text": "The problem is that the architecture allowed the convention to remain optional."
+      },
+      {
+        "type": "paragraph",
+        "text": "That principle repeatedly shaped FlowBus."
+      },
+      {
+        "type": "paragraph",
+        "text": "State semantics moved into event types."
+      },
+      {
+        "type": "paragraph",
+        "text": "Identity moved into event types."
+      },
+      {
+        "type": "paragraph",
+        "text": "Scope became part of the communication contract."
+      },
+      {
+        "type": "paragraph",
+        "text": "Persistence became declarative."
+      },
+      {
+        "type": "paragraph",
+        "text": "Default creation became explicit."
+      },
+      {
+        "type": "paragraph",
+        "text": "Security became centralized."
+      },
+      {
+        "type": "paragraph",
+        "text": "Validation moved to the boundary."
+      },
+      {
+        "type": "paragraph",
+        "text": "Repetitive infrastructure moved to compile time."
+      },
+      {
+        "type": "paragraph",
+        "text": "Each change removed one more rule from human memory and placed it somewhere the system could enforce."
+      },
+      {
+        "type": "paragraph",
+        "text": "That, in the end, is what I consider the real purpose of architecture."
+      },
+      {
+        "type": "paragraph",
+        "text": "Architecture is not primarily about drawing boxes."
+      },
+      {
+        "type": "paragraph",
+        "text": "It is not about maximizing the number of abstractions."
+      },
+      {
+        "type": "paragraph",
+        "text": "And it is certainly not about turning simple code into a framework before the problem demands one."
+      },
+      {
+        "type": "paragraph",
+        "text": "Architecture exists to preserve important decisions as the number of people, components, features, and years increases."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus began as a way to move events."
+      },
+      {
+        "type": "paragraph",
+        "text": "It became valuable when moving events stopped being the difficult part."
+      },
+      {
+        "type": "paragraph",
+        "text": "The difficult part was protecting all the rules around them."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Создание FlowBus: событийная основа крупной Android-системы",
+    "summary": "Обзор всей истории создания одной из самых сложных систем, которые я разрабатывал.",
+    "startedLabel": "Сентябрь 2023",
+    "shippedLabel": "Апрель 2024",
+    "role": "Главный инженер",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "FlowBus: когда шина событий перестаёт быть просто шиной событий",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "В жизни программной системы наступает особый момент, когда решение, некогда казавшееся почти до неприличия простым, начинает обнаруживать, сколько допущений скрывалось внутри него."
+      },
+      {
+        "type": "paragraph",
+        "text": "Шина событий служит хорошим примером."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поначалу задача кажется тривиальной. Один компонент знает то, что нужно знать другому, поэтому первый компонент публикует событие, а второй подписывается на него. Kotlin предоставляет `Flow`, `SharedFlow` и `Channel`; язык предоставляет закрытые иерархии и корутины; некоторое время кажется, что вся задача свободно помещается в несколько обобщённых функций."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем система растёт."
+      },
+      {
+        "type": "paragraph",
+        "text": "Одно событие представляет команду и должно исчезнуть сразу после доставки. Другое представляет состояние, а значит, компонент, запущенный на тридцать секунд позже, всё ещё должен иметь возможность получить его последнее значение. Третье представляет не одно состояние, а набор состояний, к каждому из которых можно обращаться независимо. Некоторые значения принадлежат изолированной логической области и никогда не должны пересекать её границу. Некоторые должны переживать перезапуск процесса. Одни события достаточно безобидны, чтобы быть видимыми повсюду, а другие представляют внутреннее состояние, наблюдать или изменять которое должна иметь право лишь ограниченная группа компонентов."
+      },
+      {
+        "type": "paragraph",
+        "text": "В этот момент шина событий перестаёт быть каналом передачи."
+      },
+      {
+        "type": "paragraph",
+        "text": "Она становится границей."
+      },
+      {
+        "type": "paragraph",
+        "text": "А с границ начинается архитектура."
+      },
+      {
+        "type": "paragraph",
+        "text": "Система, для которой создавался FlowBus, активно использовала событийный подход, поэтому со временем событийный слой оказался в основании значительной части приложения. То, что поначалу выглядело задачей обмена сообщениями, постепенно превратилось в вопрос состояния, идентичности, долговременного хранения, изоляции, владения, валидации и восстановления."
+      },
+      {
+        "type": "paragraph",
+        "text": "Исходный вопрос звучал так:"
+      },
+      {
+        "type": "quote",
+        "text": "Как доставить событие от одного компонента другому?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Вопрос, который в итоге оказался важным, был гораздо шире:"
+      },
+      {
+        "type": "quote",
+        "text": "Как сделать обмен событиями предсказуемым, когда система становится слишком большой, чтобы её правила могли храниться в памяти разработчиков?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Это различие определило устройство FlowBus."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus стал центральным механизмом обмена сообщениями, хотя со временем определение «шина событий» перестало достаточно точно описывать задачу. Он учитывает, является ли событие кратковременным или представляет удерживаемое состояние, может ли существовать один экземпляр или несколько, принадлежит ли состояние определённой логической области, должно ли оно переживать перезапуск, допустимо ли синтезировать отсутствующее значение и имеет ли компонент, запрашивающий операцию, право её выполнить."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ни одна из этих возможностей не появилась ради того, чтобы архитектура выглядела сложнее."
+      },
+      {
+        "type": "paragraph",
+        "text": "Они возникли потому, что допущения более простой системы одно за другим перестали выполняться."
+      },
+      {
+        "type": "paragraph",
+        "text": "Хорошая архитектура часто развивается именно так."
+      },
+      {
+        "type": "paragraph",
+        "text": "Обычно мы знакомимся с архитектурой в обратном порядке. Мы видим готовую схему с тщательно названными интерфейсами и стрелками, и возникает соблазн представить, будто кто-то с самого начала понимал задачу целиком и просто спроектировал нужные блоки."
+      },
+      {
+        "type": "paragraph",
+        "text": "Реальные системы менее учтивы."
+      },
+      {
+        "type": "paragraph",
+        "text": "Они растут скорее как города."
+      },
+      {
+        "type": "paragraph",
+        "text": "Дорога существует потому, что кому-то однажды понадобилось добраться до здания. Вторая дорога появляется, когда первая становится перегруженной. Со временем перекрёсткам требуются правила движения; у районов возникают границы; некоторые дороги перестают пропускать определённые виды транспорта. Значительно позже кто-то смотрит на всё это и называет инфраструктурой."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus развивался примерно так же."
+      },
+      {
+        "type": "heading",
+        "text": "Всё началось с событий",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Минимальная полезная шина событий проста почти до неприличия:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "publish(event)\n\nsubscribe<Event> {\n    // react\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "И в этом нет ничего плохого."
+      },
+      {
+        "type": "paragraph",
+        "text": "Абстракции должны начинаться с малого. Преждевременная архитектура обладает неприятной способностью решать воображаемые проблемы с поразительной элегантностью."
+      },
+      {
+        "type": "paragraph",
+        "text": "Первая трудность возникает, когда два объекта, проходящие через один механизм, имеют совершенно разную семантику."
+      },
+      {
+        "type": "paragraph",
+        "text": "Рассмотрим событие, представляющее запрос:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Serializable\ndata object RefreshRequested : SystemEvents"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Его смысл привязан ко времени."
+      },
+      {
+        "type": "paragraph",
+        "text": "Что-то запросило обновление, заинтересованные компоненты могут отреагировать, а когда этот момент прошёл, событие должно исчезнуть вместе с ним. Компонент, который запускается на несколько минут позже, определённо не должен обнаруживать «последний запрос на обновление» и выполнять его повторно."
+      },
+      {
+        "type": "paragraph",
+        "text": "Теперь рассмотрим другое событие:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Serializable\ndata class ConnectionState(\n    val connected: Boolean,\n    val endpoint: String?\n) : NetworkEvents"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Синтаксически оба представляют собой просто объекты."
+      },
+      {
+        "type": "paragraph",
+        "text": "Семантически у них почти нет ничего общего."
+      },
+      {
+        "type": "paragraph",
+        "text": "Компонент может появиться намного позже первоначальной публикации `ConnectionState` и всё ещё нуждаться в его последнем значении. Ожидание очередного перехода лишь ради выяснения текущего состояния создало бы ненужную зависимость жизненного цикла одного компонента от времени работы другого."
+      },
+      {
+        "type": "paragraph",
+        "text": "`RefreshRequested` описывает то, что произошло."
+      },
+      {
+        "type": "paragraph",
+        "text": "`ConnectionState` описывает то, что верно в данный момент."
+      },
+      {
+        "type": "paragraph",
+        "text": "Одинаковая обработка делает API внешне проще, но не устраняет различия. Она лишь заставляет каждого потребителя самостоятельно обнаруживать его заново."
+      },
+      {
+        "type": "paragraph",
+        "text": "Из этого возникла одна из основополагающих идей FlowBus:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**семантика события должна быть закодирована в модели событий, а не храниться в памяти каждого компонента, который его использует.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому иерархия событий различает кратковременные события и несколько форм удерживаемого состояния. Sticky-события удерживают одно последнее значение; sticky-коллекции удерживают несколько экземпляров с независимыми ключами; варианты с областью действия связывают состояние с дополнительной логической границей; отдельные sticky-события также могут автоматически сохраняться в долговременном хранилище."
+      },
+      {
+        "type": "paragraph",
+        "text": "Каждая категория существует потому, что отвечает на свой вопрос."
+      },
+      {
+        "type": "paragraph",
+        "text": "Обычное событие задаёт вопрос:"
+      },
+      {
+        "type": "quote",
+        "text": "Кому нужно узнать об этом сейчас?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Sticky-событие задаёт вопрос:"
+      },
+      {
+        "type": "quote",
+        "text": "Каково последнее известное значение?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Sticky-коллекция задаёт вопрос:"
+      },
+      {
+        "type": "quote",
+        "text": "Каково последнее известное значение для этой идентичности?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Событие с областью действия задаёт вопрос:"
+      },
+      {
+        "type": "quote",
+        "text": "В каком логическом контексте эта информация действительна?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Событие, поддерживающее долговременное хранение, задаёт вопрос:"
+      },
+      {
+        "type": "quote",
+        "text": "Должно ли это значение продолжать существовать после завершения текущего процесса?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда эти вопросы стали явными, значительная часть архитектуры перестала быть случайной."
+      },
+      {
+        "type": "paragraph",
+        "text": "Концептуальную эволюцию системы можно рассматривать как последовательность возникающих требований, а не как последовательность возможностей:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    A[\"Transient Event Delivery\"]\n    B[\"Retained Runtime State\"]\n    C[\"Keyed State\"]\n    D[\"Scoped State\"]\n    E[\"Persistent Recovery\"]\n    F[\"Generated Infrastructure\"]\n    G[\"Authentication & Permissions\"]\n    H[\"Centralized Validation\"]\n\n    A --> B --> C --> D --> E --> F --> G --> H"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Стрелки важны, потому что каждый шаг является следствием предыдущего. Долговременное хранение появилось не потому, что оно модно; оно появилось потому, что удерживаемого состояния стало недостаточно, когда начала иметь значение продолжительность жизни процесса. Безопасность появилась не потому, что шинам событий положено иметь систему разрешений; она появилась потому, что центральный механизм обмена сообщениями со временем стал архитектурной границей."
+      },
+      {
+        "type": "heading",
+        "text": "Состояние, скрытое внутри потока событий",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "В событийном проектировании есть тонкая ловушка."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда всё выражено через события, возникает соблазн считать, что всё тем самым является потоком."
+      },
+      {
+        "type": "paragraph",
+        "text": "Это не так."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поток может описывать последовательность изменений, но большинству компонентов в конечном счёте требуется ответ на менее исторический и гораздо более практический вопрос: каково состояние сейчас?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Один из возможных архитектурных подходов состоит в восстановлении ответа по полной истории событий. Event sourcing намеренно использует этот подход, и в системах, где сама история является источником истины, такое устройство может быть вполне правильным."
+      },
+      {
+        "type": "paragraph",
+        "text": "Но FlowBus решал другую задачу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Здесь историческая последовательность и последнее материализованное состояние выполняли разные функции."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поток представлял изменения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Sticky-значение представляло настоящее."
+      },
+      {
+        "type": "paragraph",
+        "text": "При каждой публикации sticky-события FlowBus концептуально выполняет обе операции: событие распространяется среди активных подписчиков, а его последний экземпляр удерживается для компонентов, которым потребуется запросить его позже."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "FlowBus.publish(\n    ConnectionState(\n        connected = true,\n        endpoint = \"primary\"\n    )\n)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Таким образом, одна публикация имеет два следствия."
+      },
+      {
+        "type": "paragraph",
+        "text": "Текущие подписчики узнают, что что-то изменилось."
+      },
+      {
+        "type": "paragraph",
+        "text": "Будущие читатели могут узнать, каково значение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Эти идеи тесно связаны, но не тождественны, и внутренняя архитектура намеренно сохраняет это различие."
+      },
+      {
+        "type": "paragraph",
+        "text": "Слой обмена сообщениями времени выполнения управляет как распространением событий через Kotlin Flows, так и хранением sticky-значений в памяти процесса, а FlowBus располагается над этим механизмом и координирует более широкое поведение, связанное с каждым событием."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Publisher[\"Publisher\"] --> FlowBus[\"FlowBus\"]\n    FlowBus --> Communication[\"Flow Communication\"]\n\n    Communication --> Stream[\"Shared Event Stream\"]\n    Communication --> RuntimeState[\"Runtime Retained State\"]\n\n    Stream --> SubscriberA[\"Subscriber A\"]\n    Stream --> SubscriberB[\"Subscriber B\"]\n    Stream --> SubscriberN[\"Subscriber N\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Различие между потоком и состоянием оказалось фундаментальным. `SharedFlow` может прекрасно распространять значение, но распространение не отвечает на вопрос, что должен увидеть потребитель, подключившийся позже. И наоборот, хранилище состояния может сообщить, что верно в данный момент, но само по себе не выражает, что что-то только что изменилось."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus должен был обеспечивать и то и другое, не смешивая их."
+      },
+      {
+        "type": "paragraph",
+        "text": "На этом этапе задача кажется в основном решённой."
+      },
+      {
+        "type": "paragraph",
+        "text": "Пока процесс не исчезает."
+      },
+      {
+        "type": "heading",
+        "text": "Память не является долговременным хранилищем",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Состояние времени выполнения полезно именно потому, что работа с ним дешева."
+      },
+      {
+        "type": "paragraph",
+        "text": "И оно временно именно потому, что находится в памяти."
+      },
+      {
+        "type": "paragraph",
+        "text": "После перезапуска процесса прекрасно спроектированное отображение в памяти становится пустым отображением."
+      },
+      {
+        "type": "paragraph",
+        "text": "Отсюда возникает вопрос, на который рано или поздно должна ответить любая архитектура с состоянием: какие части текущего состояния просто удобно кэшировать, а какие действительно относятся к долговечному состоянию системы?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Не каждому sticky-событию требуется долговременное хранение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Некоторые значения имеют смысл только в текущем сеансе выполнения и могут быть восстановлены с небольшими затратами. Другие представляют состояние, исчезновение которого существенно изменило бы поведение системы."
+      },
+      {
+        "type": "paragraph",
+        "text": "Такие события должны сохраняться."
+      },
+      {
+        "type": "paragraph",
+        "text": "Наивное решение очевидно: при создании такого события функциональный модуль, которому оно принадлежит, также реализует его долговременное хранение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Пишется сущность."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем DAO."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем преобразователь."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем логика восстановления."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем другой функциональный модуль делает то же самое."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем ещё один."
+      },
+      {
+        "type": "paragraph",
+        "text": "В таком устройстве нет ничего принципиально неправильного, пока число событий не становится достаточно большим. Тогда долговременное хранение перестаёт быть предметной логикой и превращается в повторяющуюся рутину."
+      },
+      {
+        "type": "paragraph",
+        "text": "А повторяющаяся рутина склонна деградировать."
+      },
+      {
+        "type": "paragraph",
+        "text": "Одна реализация забывает восстановить поле."
+      },
+      {
+        "type": "paragraph",
+        "text": "Другая использует немного иное значение по умолчанию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Третья обновляет состояние в памяти процесса, но не обновляет состояние в долговременном хранилище."
+      },
+      {
+        "type": "paragraph",
+        "text": "Четвёртая читает долговременное хранилище совершенно другим путём."
+      },
+      {
+        "type": "paragraph",
+        "text": "Проблема не в количестве строк. Проблема в том, что у одного архитектурного правила появилось несколько реализаций."
+      },
+      {
+        "type": "paragraph",
+        "text": "Вместо этого FlowBus рассматривает долговременное хранение как возможность самого события."
+      },
+      {
+        "type": "paragraph",
+        "text": "С точки зрения вызывающего кода событие с поддержкой долговременного хранения остаётся обычным строго типизированным объектом, а инфраструктура распознаёт его семантику и передаёт хранение реестру долговременного хранения. Когда то же значение запрашивается позже и его копии в памяти процесса нет, FlowBus может обратиться к этому реестру, прежде чем заключить, что состояние отсутствует."
+      },
+      {
+        "type": "paragraph",
+        "text": "Полученная операция чтения следует детерминированному пути восстановления:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start([\"Read retained state\"]) --> Runtime{\"Runtime value exists?\"}\n\n    Runtime -->|Yes| ReturnRuntime[\"Return runtime value\"]\n    Runtime -->|No| Persistable{\"Event is persistable?\"}\n\n    Persistable -->|Yes| Stored{\"Persisted value exists?\"}\n    Persistable -->|No| DefaultAllowed{\"Default creation allowed?\"}\n\n    Stored -->|Yes| Restore[\"Restore persisted value\"]\n    Stored -->|No| DefaultAllowed\n\n    Restore --> ReturnStored[\"Return restored value\"]\n\n    DefaultAllowed -->|Yes| Generate[\"Generate default instance\"]\n    DefaultAllowed -->|No| Fail[\"Fail explicitly\"]\n\n    Generate --> ReturnDefault[\"Return default value\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Порядок имеет значение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Приоритет получает самое актуальное представление в памяти процесса."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если состояние времени выполнения недоступно, долговечное состояние может восстановить непрерывность работы."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если ничего никогда не сохранялось, некоторые события позволяют системе создать строго определённое начальное значение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Другие события намеренно этого не допускают."
+      },
+      {
+        "type": "paragraph",
+        "text": "Последнее различие заслуживает большего внимания, чем ему обычно уделяют."
+      },
+      {
+        "type": "heading",
+        "text": "Отсутствие тоже является состоянием",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Значения по умолчанию чрезвычайно удобны."
+      },
+      {
+        "type": "paragraph",
+        "text": "И они удивительно хорошо умеют лгать."
+      },
+      {
+        "type": "paragraph",
+        "text": "Представим запрос логического значения, которое никогда не было сформировано, в ответ на который приходит `false`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Означает ли `false`, что система явно установила ложность условия?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Или это означает, что никто ещё не предоставил ответ, поэтому инфраструктура его придумала?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Это принципиально разные утверждения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому FlowBus не предполагает, что любое sticky-событие можно создать из ничего. Создание значения по умолчанию является явно заявленной возможностью. Событие может её включить, а его свойства могут определять значения по умолчанию, которые следует использовать при отсутствии экземпляра как в памяти процесса, так и в долговременном хранилище."
+      },
+      {
+        "type": "paragraph",
+        "text": "Другие события намеренно запрещают такое поведение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если одно из этих событий никогда не существовало, попытка чтения завершается ошибкой, а не создаёт вымышленное состояние."
+      },
+      {
+        "type": "paragraph",
+        "text": "Такое устройство отражает принцип, оказавшийся полезным далеко за пределами FlowBus:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**неизвестное значение и значение по умолчанию не являются синонимами.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "О системе легче рассуждать, когда она отказывается делать вид, что это не так."
+      },
+      {
+        "type": "paragraph",
+        "text": "Важна здесь не сама аннотация. Аннотация является лишь синтаксисом. Архитектурный смысл состоит в том, что решение принадлежит определению события, а не тому компоненту, которому случайно довелось прочитать событие первым."
+      },
+      {
+        "type": "paragraph",
+        "text": "Один читатель не может решить, что отсутствие означает `false`, в то время как другой решает, что оно означает `true`, а третий выбрасывает исключение. Правило существует в единственном экземпляре."
+      },
+      {
+        "type": "paragraph",
+        "text": "Именно это и должна обеспечивать инфраструктура."
+      },
+      {
+        "type": "heading",
+        "text": "Пусть компилятор выполняет скучную работу",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Долговременное хранение решило одну проблему и сразу создало другую."
+      },
+      {
+        "type": "paragraph",
+        "text": "Предположим, событие объявлено поддерживающим долговременное хранение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Теперь во время выполнения нужен способ представить его в базе данных, преобразовывать в обоих направлениях, находить нужную реализацию долговременного хранения и, когда это разрешено, создавать экземпляр по умолчанию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Один подход мог бы использовать рефлексию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Другой мог бы опираться на ручную регистрацию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Оба работали бы."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ни один не был особенно привлекательным."
+      },
+      {
+        "type": "paragraph",
+        "text": "Объявление события уже содержало большую часть информации, необходимой инфраструктуре. Система типов Kotlin описывала его полезную нагрузку; аннотации описывали семантику; метаданные сериализации описывали сериализованное представление; аннотации значений по умолчанию описывали, как может быть создано начальное значение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Компилятор видел всё это."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому компилятор стал частью решения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Kotlin Symbol Processing анализирует объявления событий во время компиляции и генерирует повторяющуюся инфраструктуру, необходимую во время выполнения: классы для долговременного хранения, логику преобразования, реализации реестров и фабрики sticky-событий. Сам FlowBus зависит от полученных абстракций, а не от механизма, который их сгенерировал."
+      },
+      {
+        "type": "paragraph",
+        "text": "Таким образом, миры времени компиляции и времени выполнения встречаются через интерфейсы:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TB\n    subgraph CompileTime[\"Compile Time\"]\n        Events[\"Annotated Event Definitions\"]\n        KSP[\"KSP Processors\"]\n\n        Events --> KSP\n        KSP --> GeneratedRegistry[\"Generated Persistence Registry\"]\n        KSP --> GeneratedFactory[\"Generated Sticky Factory\"]\n        KSP --> GeneratedStorage[\"Generated Entities / DAOs / Mappers\"]\n    end\n\n    subgraph Runtime[\"Runtime\"]\n        Component[\"Application Component\"]\n        FlowBus[\"FlowBus\"]\n        Registry[\"StorageRegistry\"]\n        Factory[\"StickyFactory\"]\n        Communication[\"Flow Communication\"]\n        Database[(\"Persistent Storage\")]\n\n        Component --> FlowBus\n        FlowBus --> Communication\n        FlowBus --> Registry\n        FlowBus --> Factory\n\n        Registry --> Database\n    end\n\n    GeneratedRegistry -. \"implements\" .-> Registry\n    GeneratedFactory -. \"implements\" .-> Factory\n    GeneratedStorage -. \"used by\" .-> Registry"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Это различие является архитектурным, а не косметическим."
+      },
+      {
+        "type": "paragraph",
+        "text": "Во время выполнения FlowBus знает, что событие нужно сохранить, и обращается к Storage`Registry`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Он не знает, какой DAO необходимо вызвать, как конкретное событие преобразуется в конкретное представление базы данных и какой сгенерированный класс выполняет преобразование."
+      },
+      {
+        "type": "paragraph",
+        "text": "Аналогично, когда требуется экземпляр по умолчанию, FlowBus обращается к Sticky`Factory`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Во время выполнения не производится ни поиск конструкторов, ни рефлексия."
+      },
+      {
+        "type": "paragraph",
+        "text": "Компилятор уже выполнил сложную работу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сложность переместилась, а не исчезла."
+      },
+      {
+        "type": "paragraph",
+        "text": "Часто именно так и действует хорошая архитектура."
+      },
+      {
+        "type": "paragraph",
+        "text": "Важно не то, существует ли сложность; в достаточно функциональной системе она будет всегда."
+      },
+      {
+        "type": "paragraph",
+        "text": "Полезный вопрос состоит в том, где этой сложности позволено находиться."
+      },
+      {
+        "type": "paragraph",
+        "text": "Здесь детерминированная и повторяющаяся сложность переместилась в компиляцию, где ошибки могли приводить к сбою сборки вместо неожиданностей во время выполнения."
+      },
+      {
+        "type": "paragraph",
+        "text": "В результате код времени выполнения стал скучнее."
+      },
+      {
+        "type": "paragraph",
+        "text": "Скучный код времени выполнения обычно заслуживает положительной оценки."
+      },
+      {
+        "type": "heading",
+        "text": "Когда одной идентичности недостаточно",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Удержание одного последнего значения решает задачу лишь для одной категории состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Иногда в системе существует не один текущий экземпляр некоторого понятия."
+      },
+      {
+        "type": "paragraph",
+        "text": "Их существует много."
+      },
+      {
+        "type": "paragraph",
+        "text": "Набор независимых сущностей может использовать один тип события, представляя при этом разные идентичности. Технически можно было бы рассматривать весь набор как один огромный sticky-объект, но это связало бы несвязанные обновления и заставило потребителей работать с большим объёмом состояния, чем необходимо."
+      },
+      {
+        "type": "paragraph",
+        "text": "Sticky-коллекции решают эту проблему, позволяя удерживать несколько экземпляров одного типа события, каждый из которых определяется ключом. Исходная модель событий также позволяет связывать с этими ключами правила валидации."
+      },
+      {
+        "type": "paragraph",
+        "text": "Концептуально идентичность события начинается с типа и может приобретать дополнительные измерения:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Identity[\"Event Identity\"]\n\n    Identity --> Type[\"Event Type\"]\n    Identity --> Key[\"Optional Item Key\"]\n    Identity --> Scope[\"Optional Logical Scope\"]\n\n    Type --> RuntimeIdentity[\"Runtime Identity\"]\n    Key --> RuntimeIdentity\n    Scope --> RuntimeIdentity"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Ключ является не просто аргументом, переданным в некоторое отображение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Он входит в состав того, что отличает одно удерживаемое состояние от другого."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда идентичность рассматривается как архитектурное понятие, а не как деталь реализации, валидация становится естественным следствием. Если область допустимых значений ключа ограничена, сама система событий может обеспечивать это ограничение, не требуя от каждого вызывающего компонента помнить о нём."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем появляется ещё одно измерение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Во многих достаточно крупных системах существует понятие изолированного контекста. В зависимости от приложения такой контекст может представлять арендатора, сеанс, рабочее пространство, устройство, предметную область, учётную запись или совершенно иную логическую границу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Название не имеет значения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Значение имеет требование."
+      },
+      {
+        "type": "paragraph",
+        "text": "Значение, принадлежащее одному контексту, не должно случайно наблюдаться или изменяться так, словно оно принадлежит другому."
+      },
+      {
+        "type": "paragraph",
+        "text": "Самая простая реализация одновременно является и самой соблазнительной:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "if (event.scope == myScope) {\n    handle(event)\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Написать это чрезвычайно легко."
+      },
+      {
+        "type": "paragraph",
+        "text": "К сожалению, столь же легко это не написать."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда инвариант зависит от того, помнит ли каждый потребитель об одном и том же `if`, этот инвариант ещё нельзя считать частью архитектуры."
+      },
+      {
+        "type": "paragraph",
+        "text": "В исходной реализации это понятие моделируется через типы событий, привязанные к разделу, включая варианты с удержанием и коллекции. Однако для публичного описания полезнее более общая идея: некоторые события несут дополнительное измерение области действия, и это измерение принадлежит самому контракту обмена сообщениями."
+      },
+      {
+        "type": "paragraph",
+        "text": "Модель типов можно приблизительно представить так:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "classDiagram\n    class Event {\n        <<interface>>\n    }\n\n    class Sticky {\n        <<retained state>>\n    }\n\n    class StickyCollection {\n        <<keyed retained state>>\n        +key\n    }\n\n    class ScopedEvent {\n        <<scoped>>\n        +scope\n    }\n\n    class ScopedSticky {\n        <<scoped retained state>>\n        +scope\n    }\n\n    class ScopedStickyCollection {\n        <<scoped keyed retained state>>\n        +scope\n        +key\n    }\n\n    class Persistable {\n        <<capability>>\n    }\n\n    Event <|-- Sticky\n    Event <|-- StickyCollection\n    Event <|-- ScopedEvent\n    Sticky <|-- ScopedSticky\n    StickyCollection <|-- ScopedStickyCollection\n\n    Persistable <|.. Sticky\n    Persistable <|.. StickyCollection\n    Persistable <|.. ScopedSticky\n    Persistable <|.. ScopedStickyCollection"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Эта схема намеренно концептуальна и не копирует буквально каждое объявление Kotlin, поскольку для публичного описания важен набор семантических свойств, соблюдение которых обеспечивает иерархия типов: кратковременность, удержание, множественность, область действия и долговечность."
+      },
+      {
+        "type": "paragraph",
+        "text": "Повторяющийся принцип остаётся тем же."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если правило настолько важно, что каждый потребитель обязан его соблюдать, вероятно, оно не должно оставаться обязанностью потребителя."
+      },
+      {
+        "type": "heading",
+        "text": "Со временем шина стала границей безопасности",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда система обмена сообщениями становится достаточно центральной, ещё одно допущение становится трудно обосновать:"
+      },
+      {
+        "type": "quote",
+        "text": "Любой компонент, имеющий доступ к шине, может выполнять любые действия с любым событием.",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "В небольшом приложении это может быть допустимо."
+      },
+      {
+        "type": "paragraph",
+        "text": "В системе, состоящей из множества независимых компонентов, это становится архитектурным источником риска."
+      },
+      {
+        "type": "paragraph",
+        "text": "Чтение события и его изменение не являются равнозначными возможностями."
+      },
+      {
+        "type": "paragraph",
+        "text": "Публикация команды и наблюдение её результата не являются равнозначными возможностями."
+      },
+      {
+        "type": "paragraph",
+        "text": "Удаление удерживаемого состояния тем более не равнозначно его чтению."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому FlowBus развился в защищённый слой обмена сообщениями, в котором участники представлены акторами, а доступ к событиям регулируется явными разрешениями. Лежащая в основе модель различает такие операции, как публикация, чтение, подписка и удаление."
+      },
+      {
+        "type": "paragraph",
+        "text": "Событие может быть общедоступным:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Public\ndata class ServiceStatus(\n    val available: Boolean\n) : Event"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "или определять ограниченный доступ:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "@Protected(\n    publish = [StateOwner::class],\n    read = [StateOwner::class, StateObserver::class]\n)\ndata class InternalState(\n    val value: String\n) : Event.Sticky()"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Конкретные акторы зависят от приложения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ключевое проектное решение от него не зависит."
+      },
+      {
+        "type": "paragraph",
+        "text": "Разрешения располагаются вместе с определением события, а их соблюдение обеспечивается на границе обмена сообщениями."
+      },
+      {
+        "type": "paragraph",
+        "text": "Взаимодействие выглядит примерно так:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "sequenceDiagram\n    participant C as Component\n    participant F as FlowBusWithSecure\n    participant A as Authentication\n    participant P as Permission System\n    participant R as Runtime Communication\n\n    C->>F: publish(event)\n    F->>A: verify identity\n    A-->>F: authenticated actor\n    F->>P: check PUBLISH permission\n\n    alt Permission granted\n        P-->>F: allowed\n        F->>R: emit(event)\n        R-->>F: accepted\n        F-->>C: publication completed\n    else Permission denied\n        P-->>F: denied\n        F-->>C: FlowBusSecurityException\n    end"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Это обеспечивает определённую локальность, ценность которой растёт по мере увеличения кодовой базы."
+      },
+      {
+        "type": "paragraph",
+        "text": "Чтобы понять модель владения событием, разработчик не должен искать всех издателей и всех подписчиков и выводить правила безопасности из того, как событие используется."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ответ должно давать объявление."
+      },
+      {
+        "type": "paragraph",
+        "text": "Это превращает шину во что-то большее, чем диспетчер."
+      },
+      {
+        "type": "paragraph",
+        "text": "Диспетчер спрашивает:"
+      },
+      {
+        "type": "quote",
+        "text": "Куда должно направиться это сообщение?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Защищённая граница обмена сообщениями должна сначала задать другой вопрос:"
+      },
+      {
+        "type": "quote",
+        "text": "Разрешено ли этому сообщению вообще туда направляться?",
+        "data": null
+      },
+      {
+        "type": "paragraph",
+        "text": "Это существенно иная ответственность."
+      },
+      {
+        "type": "heading",
+        "text": "Валидация должна находиться на границе",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Безопасность является не единственным свойством, которому полезно централизованное обеспечение."
+      },
+      {
+        "type": "paragraph",
+        "text": "События могут содержать правила валидации, а события с ключами могут налагать ограничения на свои идентификаторы. В исходном пути публикации FlowBus событие проверяется до передачи в механизм обмена сообщениями времени выполнения, а в применимых случаях выполняется валидация ключа."
+      },
+      {
+        "type": "paragraph",
+        "text": "Важно не то, существует ли валидация, а то, когда она происходит."
+      },
+      {
+        "type": "paragraph",
+        "text": "Рассмотрим альтернативу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Публикуется некорректное событие."
+      },
+      {
+        "type": "paragraph",
+        "text": "Его получают три подписчика."
+      },
+      {
+        "type": "paragraph",
+        "text": "Один отклоняет его."
+      },
+      {
+        "type": "paragraph",
+        "text": "Другой без уведомления корректирует одно свойство, приводя его к допустимому диапазону."
+      },
+      {
+        "type": "paragraph",
+        "text": "Третий сохраняет его."
+      },
+      {
+        "type": "paragraph",
+        "text": "Теперь система содержит несколько интерпретаций одного некорректного состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Исходная ошибка произошла во время публикации, но видимый сбой может возникнуть на несколько слоёв позже."
+      },
+      {
+        "type": "paragraph",
+        "text": "Вместо этого FlowBus проверяет событие до его включения в обычный обмен сообщениями."
+      },
+      {
+        "type": "paragraph",
+        "text": "Тот же принцип применяется к ограничениям идентичности."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому конвейер публикации ведёт себя как процесс с несколькими контрольными точками:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start([\"Publish event\"]) --> Identity[\"Resolve authenticated actor\"]\n    Identity --> Permission{\"Operation permitted?\"}\n\n    Permission -->|No| SecurityFailure[\"Reject operation\"]\n    Permission -->|Yes| ValidatePayload[\"Validate event payload\"]\n\n    ValidatePayload --> PayloadValid{\"Payload valid?\"}\n    PayloadValid -->|No| ValidationFailure[\"Reject event\"]\n    PayloadValid -->|Yes| ValidateIdentity[\"Validate key / scope identity\"]\n\n    ValidateIdentity --> IdentityValid{\"Identity valid?\"}\n    IdentityValid -->|No| IdentityFailure[\"Reject event\"]\n    IdentityValid -->|Yes| Emit[\"Deliver to runtime communication\"]\n\n    Emit --> Notify[\"Notify active subscribers\"]\n    Emit --> Retained{\"Retained-state event?\"}\n\n    Retained -->|Yes| StoreRuntime[\"Update runtime retained state\"]\n    Retained -->|No| Persistable{\"Persistable event?\"}\n\n    StoreRuntime --> Persistable\n\n    Persistable -->|Yes| StorePersistent[\"Update persistent representation\"]\n    Persistable -->|No| Done([\"Publication complete\"])\n\n    StorePersistent --> Done\n    Notify --> Done"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Порядок выбран намеренно."
+      },
+      {
+        "type": "paragraph",
+        "text": "Значение, на публикацию которого нет разрешения, никогда не должно даже на короткое время попадать в состояние времени выполнения до своего отклонения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Подписчики никогда не должны наблюдать некорректное значение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Значение, отклонённое моделью в памяти, не должно каким-либо образом становиться допустимым лишь потому, что его можно сериализовать."
+      },
+      {
+        "type": "paragraph",
+        "text": "Правило просто:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**некорректное состояние должно приводить к отказу как можно ближе к границе, через которую оно входит в систему.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "Это сокращает число невозможных состояний, к обработке которых должен быть готов каждый последующий компонент."
+      },
+      {
+        "type": "heading",
+        "text": "Маленький API может скрывать большой контракт",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "После добавления всех этих возможностей публичный API по-прежнему выглядит обманчиво простым."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "FlowBus.publish(event)\n\nFlowBus.subscribe(EventType::class, scope) { event ->\n    // react\n}\n\nval state = FlowBus.getSticky(StateEvent::class)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Коллекции и состояние с областью действия добавляют более специализированные операции, а удаление следует той же концептуальной модели."
+      },
+      {
+        "type": "paragraph",
+        "text": "При проектировании API возникает соблазн заменить специализированные операции одной универсальной функцией:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "get(\n    type,\n    key = null,\n    scope = null\n)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Поверхность API становится меньше."
+      },
+      {
+        "type": "paragraph",
+        "text": "К сожалению, число бессмысленных сочетаний становится больше."
+      },
+      {
+        "type": "paragraph",
+        "text": "Что означает ключ для события, не являющегося элементом коллекции?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Что должно происходить, когда событие с областью действия запрашивается без указания области?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Следует ли разрешать вызывающему коду указывать область действия для события, идентичность которого её не включает?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Меньший API не обязательно является более простым API."
+      },
+      {
+        "type": "paragraph",
+        "text": "Иногда несколько точных операций делают систему понятнее, чем одна чрезмерно гибкая операция."
+      },
+      {
+        "type": "paragraph",
+        "text": "Это одна из причин, по которым иерархия событий использует разные абстракции удерживаемого состояния, а API предоставляет операции, соответствующие этой семантике, вместо сведения всех возможностей к набору параметров, допускающих отсутствие значения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Цель состоит не только в том, чтобы сделать корректные операции возможными."
+      },
+      {
+        "type": "paragraph",
+        "text": "Она состоит в сокращении числа некорректных операций, которые вызывающий код может легко выразить."
+      },
+      {
+        "type": "heading",
+        "text": "Чтение состояния тоже является политикой",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Тот же принцип применяется к чтению."
+      },
+      {
+        "type": "paragraph",
+        "text": "Вызов для получения удерживаемого состояния выглядит безобидно, но к моменту зрелости FlowBus он представлял последовательность решений, определяемых политикой."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сначала вызывающий компонент должен иметь разрешение на чтение события."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем предпочтение отдаётся состоянию времени выполнения, поскольку оно представляет самое актуальное значение внутри процесса."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если копии в памяти процесса нет и событие поддерживает долговременное хранение, выполняется обращение к долговременному хранилищу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если долговечное состояние отсутствует, может быть предпринята попытка создания значения по умолчанию, но только когда событие явно это разрешает."
+      },
+      {
+        "type": "paragraph",
+        "text": "Иначе отсутствие остаётся видимым в виде ошибки."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start([\"Read retained state\"]) --> Permission{\"Read permitted?\"}\n\n    Permission -->|No| SecurityFailure[\"Reject operation\"]\n    Permission -->|Yes| Runtime{\"Runtime value exists?\"}\n\n    Runtime -->|Yes| ReturnRuntime[\"Return runtime value\"]\n    Runtime -->|No| Persistable{\"Event is persistable?\"}\n\n    Persistable -->|Yes| Persistent{\"Persisted value exists?\"}\n    Persistable -->|No| DefaultAllowed{\"Default creation allowed?\"}\n\n    Persistent -->|Yes| Restore[\"Restore persisted value\"]\n    Persistent -->|No| DefaultAllowed\n\n    Restore --> ReturnPersistent[\"Return restored value\"]\n\n    DefaultAllowed -->|Yes| Generate[\"Generate default instance\"]\n    DefaultAllowed -->|No| Missing[\"Fail explicitly\"]\n\n    Generate --> ReturnDefault[\"Return default instance\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Вызов API скрывает эту последовательность, поскольку вызывающий код не должен реализовывать её повторно."
+      },
+      {
+        "type": "paragraph",
+        "text": "Именно такую сложность и должна поглощать архитектурная граница."
+      },
+      {
+        "type": "heading",
+        "text": "Удаление является переходом состояния",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Удаление привело к ещё одному небольшому, но показательному архитектурному решению."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда удерживаемое состояние исчезает, должна ли эта операция оставаться невидимой для остальной событийной системы?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Предположим, удаляется запись с ключом."
+      },
+      {
+        "type": "paragraph",
+        "text": "Или очищается целая удерживаемая коллекция."
+      },
+      {
+        "type": "paragraph",
+        "text": "Хранилище времени выполнения изменяется. Долговременное хранилище тоже может измениться."
+      },
+      {
+        "type": "paragraph",
+        "text": "Однако если ничего не будет отправлено, подписчики, которым важен этот переход состояния, могут ничего о нём не узнать."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому FlowBus рассматривает само удаление как наблюдаемое поведение. При удалении удерживаемого состояния соответствующее событие реального времени описывает это удаление."
+      },
+      {
+        "type": "paragraph",
+        "text": "Взаимодействие можно понимать как переход состояния, а не как команду хранилищу:"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "sequenceDiagram\n    participant C as Caller\n    participant F as FlowBus\n    participant R as Runtime State\n    participant P as Persistence\n    participant S as Subscribers\n\n    C->>F: delete(event identity)\n    F->>R: remove runtime value\n\n    opt Persisted event\n        F->>P: remove persisted value\n    end\n\n    F->>S: publish deletion event\n    F-->>C: deletion completed"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Общий принцип интереснее конкретного типа события:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**в событийной архитектуре значимые изменения общего состояния не должны происходить без уведомления.**"
+      },
+      {
+        "type": "paragraph",
+        "text": "Создание является переходом состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Обновление является переходом состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Удаление тоже является переходом состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Последнее просто легче забыть, потому что после него не остаётся ничего."
+      },
+      {
+        "type": "heading",
+        "text": "Сериализация стала частью наблюдаемости",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда асинхронный обмен сообщениями становится основным механизмом координации, журналы перестают быть лишь диагностическим выводом."
+      },
+      {
+        "type": "paragraph",
+        "text": "Они становятся одним из немногих способов восстановить, как система пришла к определённому состоянию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому определения событий участвуют в сериализации. События используют явно заданные имена для сериализации, а поля полезной нагрузки также могут определять краткие сериализованные имена, позволяя журналам событий оставаться стабильными и читаемыми вместо раскрытия длинных имён Kotlin, привязанных к реализации."
+      },
+      {
+        "type": "paragraph",
+        "text": "Это может показаться второстепенным по сравнению с обменом сообщениями и долговременным хранением, но в асинхронных системах наблюдаемость является частью корректности."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда компонент A реагирует на событие компонента B, создаёт другое событие, которое потребляет компонент C, а итоговый видимый сбой происходит несколькими секундами позже, трассировка стека часто описывает лишь конец истории."
+      },
+      {
+        "type": "paragraph",
+        "text": "Цепочка событий описывает саму историю."
+      },
+      {
+        "type": "paragraph",
+        "text": "Качество этой цепочки напрямую зависит от модели событий."
+      },
+      {
+        "type": "paragraph",
+        "text": "Хорошие имена событий делают поведение понятным."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ясная полезная нагрузка делает переходы объяснимыми."
+      },
+      {
+        "type": "paragraph",
+        "text": "Стабильная сериализация сохраняет полезность исторических журналов даже после изменения деталей реализации."
+      },
+      {
+        "type": "paragraph",
+        "text": "В этом смысле модель событий становится не только моделью обмена сообщениями, но и словарём для описания поведения системы во время выполнения."
+      },
+      {
+        "type": "heading",
+        "text": "Архитектура не сводится к `SharedFlow`",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Было бы легко описать FlowBus словами о том, что он построен на Kotlin Flows."
+      },
+      {
+        "type": "paragraph",
+        "text": "Это утверждение верно и не особенно полезно."
+      },
+      {
+        "type": "paragraph",
+        "text": "`SharedFlow` является механизмом."
+      },
+      {
+        "type": "paragraph",
+        "text": "Архитектура заключена в правилах вокруг него."
+      },
+      {
+        "type": "paragraph",
+        "text": "Публикация включает идентичность, авторизацию, валидацию, доставку во время выполнения, необязательное удержание и необязательное долговременное хранение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Чтение включает авторизацию, поиск в памяти процесса, восстановление из долговременного хранилища и контролируемое создание значения по умолчанию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Удаление может затрагивать состояние времени выполнения и долговечное состояние, а затем само становиться наблюдаемым."
+      },
+      {
+        "type": "paragraph",
+        "text": "Примитивы корутин, лежащие в основе этих операций, являются вариантами реализации."
+      },
+      {
+        "type": "paragraph",
+        "text": "Это различие важно, потому что сложные примитивы иногда ошибочно принимают за сложное проектирование."
+      },
+      {
+        "type": "paragraph",
+        "text": "Использование `SharedFlow` не определяет владение."
+      },
+      {
+        "type": "paragraph",
+        "text": "`Channel` не задаёт семантику состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Корутина не сообщает, какие значения должны переживать перезапуск."
+      },
+      {
+        "type": "paragraph",
+        "text": "Эти решения всё равно должны где-то находиться."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus является местом, в котором эти решения сходятся."
+      },
+      {
+        "type": "heading",
+        "text": "Чего FlowBus намеренно не знает",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Инфраструктура становится опасной, когда успех усиливает её аппетит."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда каждый компонент использует центральный механизм, почти любое новое поведение можно обосновать как то, с чем этот механизм мог бы удобно справиться."
+      },
+      {
+        "type": "paragraph",
+        "text": "Оркестрацию рабочих процессов можно было бы поместить в шину."
+      },
+      {
+        "type": "paragraph",
+        "text": "Политики повторных попыток можно было бы поместить в шину."
+      },
+      {
+        "type": "paragraph",
+        "text": "Переходы предметной области можно было бы поместить в шину."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поведение пользовательского интерфейса можно было бы поместить в шину."
+      },
+      {
+        "type": "paragraph",
+        "text": "В конце концов слой обмена сообщениями стал бы понимать всё приложение, и тогда у приложения фактически появилась бы одна огромная скрытая зависимость."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus намеренно избегает такого направления."
+      },
+      {
+        "type": "paragraph",
+        "text": "Он понимает механизмы и политику обмена сообщениями:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "является ли состояние кратковременным или удерживаемым;",
+              "blocks": []
+            },
+            {
+              "text": "как идентифицируются удерживаемые экземпляры;",
+              "blocks": []
+            },
+            {
+              "text": "принадлежит ли состояние логической области действия;",
+              "blocks": []
+            },
+            {
+              "text": "является ли значение долговечным;",
+              "blocks": []
+            },
+            {
+              "text": "допускает ли оно синтетическое значение по умолчанию;",
+              "blocks": []
+            },
+            {
+              "text": "является ли оно корректным;",
+              "blocks": []
+            },
+            {
+              "text": "имеет ли вызывающий компонент соответствующее разрешение.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Он не понимает предметный смысл события."
+      },
+      {
+        "type": "paragraph",
+        "text": "Он не решает, что должно произойти из-за изменения конкретного состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Он не владеет рабочими процессами лишь потому, что их сообщения проходят через него."
+      },
+      {
+        "type": "paragraph",
+        "text": "Эта граница принципиально важна."
+      },
+      {
+        "type": "paragraph",
+        "text": "Шина контролирует, **как может перемещаться информация**."
+      },
+      {
+        "type": "paragraph",
+        "text": "Остальная система решает, **что эта информация означает**."
+      },
+      {
+        "type": "paragraph",
+        "text": "Именно это также не позволяет FlowBus превратиться в божественный объект. Централизация политики полезна; централизация бизнес-поведения не полезна."
+      },
+      {
+        "type": "paragraph",
+        "text": "На архитектурной схеме эти идеи могут выглядеть похожими, но они приводят к совершенно разным системам."
+      },
+      {
+        "type": "heading",
+        "text": "Сформировавшаяся архитектура",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Если убрать детали реализации, FlowBus можно рассматривать как несколько границ, расположенных слоями вокруг обмена сообщениями времени выполнения."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    subgraph Callers[\"Application Components\"]\n        C1[\"Component A\"]\n        C2[\"Component B\"]\n        C3[\"Component C\"]\n    end\n\n    C1 --> FB[\"Secured FlowBus\"]\n    C2 --> FB\n    C3 --> FB\n\n    FB --> Security[\"Authentication & Permissions\"]\n    FB --> Validation[\"Event Validation\"]\n\n    Validation --> Communication[\"Runtime Communication\"]\n\n    Communication --> Stream[\"Event Stream\"]\n    Communication --> RuntimeState[\"Runtime Retained State\"]\n\n    FB --> Persistence[\"Persistence Registry\"]\n    Persistence --> DB[(\"Persistent Storage\")]\n\n    FB --> Factory[\"Default Event Factory\"]\n\n    subgraph Build[\"Compile Time\"]\n        EventDefinitions[\"Annotated Event Definitions\"]\n        KSP[\"KSP Processors\"]\n\n        EventDefinitions --> KSP\n        KSP --> GeneratedRegistry[\"Generated Registry\"]\n        KSP --> GeneratedFactory[\"Generated Factory\"]\n        KSP --> GeneratedStorage[\"Generated Storage Code\"]\n    end\n\n    GeneratedRegistry -. \"implements\" .-> Persistence\n    GeneratedFactory -. \"implements\" .-> Factory\n    GeneratedStorage -. \"supports\" .-> Persistence"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Здесь существенно больше частей, чем в исходном варианте:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "kotlin",
+          "code": "publish(event)\nsubscribe<Event>()"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Однако вызывающий код по-прежнему видит намеренно ограниченный API."
+      },
+      {
+        "type": "paragraph",
+        "text": "В этом и состоит компромисс."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сложность не исчезла."
+      },
+      {
+        "type": "paragraph",
+        "text": "Она переместилась за границы, где её можно было один раз реализовать, протестировать, сгенерировать и подчинить обязательным правилам вместо повторного обнаружения по всему приложению."
+      },
+      {
+        "type": "paragraph",
+        "text": "Возможно, это важнейшее различие между вспомогательной утилитой и инфраструктурой."
+      },
+      {
+        "type": "paragraph",
+        "text": "Утилита экономит набор текста."
+      },
+      {
+        "type": "paragraph",
+        "text": "Инфраструктура сохраняет поведение."
+      },
+      {
+        "type": "heading",
+        "text": "Сложность никогда не заключалась в отдельной возможности",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Sticky-значения не являются новой идеей."
+      },
+      {
+        "type": "paragraph",
+        "text": "Состояние с ключами не является новой идеей."
+      },
+      {
+        "type": "paragraph",
+        "text": "Долговременное хранение не является новой идеей."
+      },
+      {
+        "type": "paragraph",
+        "text": "Генерация кода не является новой идеей."
+      },
+      {
+        "type": "paragraph",
+        "text": "Разрешения не являются новой идеей."
+      },
+      {
+        "type": "paragraph",
+        "text": "Как и правила валидации, логические области действия, структурированные журналы событий или Kotlin Flows."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сложность начинается, когда все эти аспекты должны сосуществовать, не противореча друг другу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Событие с ключом обладает и семантикой состояния, и идентичностью."
+      },
+      {
+        "type": "paragraph",
+        "text": "Долговечное событие с ключом обладает семантикой состояния, идентичностью и жизненным циклом, выходящим за пределы процесса."
+      },
+      {
+        "type": "paragraph",
+        "text": "Долговечное событие с ключом и областью действия добавляет ещё одно измерение изоляции."
+      },
+      {
+        "type": "paragraph",
+        "text": "Защищённое долговечное событие с ключом и областью действия должно сохранять все предыдущие гарантии, добавляя владение и авторизацию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Создание значения по умолчанию должно соблюдать ту же модель идентичности."
+      },
+      {
+        "type": "paragraph",
+        "text": "Удаление должно удалять правильные представления в памяти процесса и в долговременном хранилище."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сериализация должна сохранять достаточно информации для диагностики."
+      },
+      {
+        "type": "paragraph",
+        "text": "И после всего этого публичный API по-прежнему должен делать обычные операции предсказуемыми."
+      },
+      {
+        "type": "paragraph",
+        "text": "Архитектура обычно становится сложной на пересечениях."
+      },
+      {
+        "type": "paragraph",
+        "text": "Отдельные механизмы часто просты."
+      },
+      {
+        "type": "paragraph",
+        "text": "Трудная работа состоит в том, чтобы не позволить решению одной проблемы незаметно нарушить допущения, на которых держится решение другой."
+      },
+      {
+        "type": "paragraph",
+        "text": "Именно поэтому итоговую архитектуру нельзя оценивать лишь по числу её интерфейсов или размеру реализации."
+      },
+      {
+        "type": "paragraph",
+        "text": "Её ценность заключается в ограничениях, которые продолжают выполняться при совместном использовании возможностей."
+      },
+      {
+        "type": "heading",
+        "text": "Цена явного выражения правил",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Разумеется, у этого есть цена."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus вводит больше понятий, чем обобщённый диспетчер событий."
+      },
+      {
+        "type": "paragraph",
+        "text": "Есть категории событий."
+      },
+      {
+        "type": "paragraph",
+        "text": "Есть аннотации."
+      },
+      {
+        "type": "paragraph",
+        "text": "Есть сгенерированные реализации."
+      },
+      {
+        "type": "paragraph",
+        "text": "Есть модель разрешений."
+      },
+      {
+        "type": "paragraph",
+        "text": "Есть разные API для разной семантики удерживаемого состояния."
+      },
+      {
+        "type": "paragraph",
+        "text": "Есть явные режимы отказа там, где более простая реализация могла бы просто вернуть `null`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Для небольшого приложения многое из этого было бы излишним."
+      },
+      {
+        "type": "paragraph",
+        "text": "Этот момент важен."
+      },
+      {
+        "type": "paragraph",
+        "text": "Архитектура не становится автоматически лучше из-за большей сложности. Решение, подходящее системе с сотнями взаимодействующих типов событий, может быть абсурдным для приложения с шестью экранами и тремя потоками работы."
+      },
+      {
+        "type": "paragraph",
+        "text": "Обоснование заключается в повторении и риске."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда правило применяется в одном месте, соглашения может быть достаточно."
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда правило применяется в сотне мест, соглашение становится ненадёжным механизмом распространения."
+      },
+      {
+        "type": "paragraph",
+        "text": "При таком масштабе явность начинает окупаться."
+      },
+      {
+        "type": "paragraph",
+        "text": "Тип, предотвращающий неправильное использование, обходится дешевле страницы в вики, объясняющей, как не допустить неправильного использования."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ошибка времени компиляции обходится дешевле сбоя при эксплуатации."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сгенерированный преобразователь обходится дешевле пятидесяти почти одинаковых преобразователей, написанных вручную."
+      },
+      {
+        "type": "paragraph",
+        "text": "Центральная проверка разрешений обходится дешевле обнаружения того, что один забытый путь выполнения обошёл модель владения."
+      },
+      {
+        "type": "paragraph",
+        "text": "Дополнительная архитектура оправдывает своё существование лишь тогда, когда эти затраты становятся реальными."
+      },
+      {
+        "type": "heading",
+        "text": "Что я вынес из её создания",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Важнейший урок FlowBus касался не шин событий."
+      },
+      {
+        "type": "paragraph",
+        "text": "Он касался того, где должны находиться правила."
+      },
+      {
+        "type": "paragraph",
+        "text": "Правило может начаться с комментария."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем оно становится соглашением."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем соглашение копируется в несколько компонентов."
+      },
+      {
+        "type": "paragraph",
+        "text": "В итоге кто-то забывает о нём."
+      },
+      {
+        "type": "paragraph",
+        "text": "Если нарушение этого правила способно сделать систему несогласованной, небезопасной или трудной для восстановления, проблема уже не в том, что разработчик забыл соглашение."
+      },
+      {
+        "type": "paragraph",
+        "text": "Проблема в том, что архитектура позволила соглашению оставаться необязательным."
+      },
+      {
+        "type": "paragraph",
+        "text": "Этот принцип неоднократно определял устройство FlowBus."
+      },
+      {
+        "type": "paragraph",
+        "text": "Семантика состояния переместилась в типы событий."
+      },
+      {
+        "type": "paragraph",
+        "text": "Идентичность переместилась в типы событий."
+      },
+      {
+        "type": "paragraph",
+        "text": "Область действия стала частью контракта обмена сообщениями."
+      },
+      {
+        "type": "paragraph",
+        "text": "Долговременное хранение стало декларативным."
+      },
+      {
+        "type": "paragraph",
+        "text": "Создание значения по умолчанию стало явным."
+      },
+      {
+        "type": "paragraph",
+        "text": "Безопасность стала централизованной."
+      },
+      {
+        "type": "paragraph",
+        "text": "Валидация переместилась на границу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Повторяющаяся инфраструктура переместилась во время компиляции."
+      },
+      {
+        "type": "paragraph",
+        "text": "Каждое изменение убирало ещё одно правило из человеческой памяти и помещало его туда, где система могла обеспечить его соблюдение."
+      },
+      {
+        "type": "paragraph",
+        "text": "В конечном счёте именно это я считаю настоящим назначением архитектуры."
+      },
+      {
+        "type": "paragraph",
+        "text": "Основное назначение архитектуры не состоит в рисовании блоков."
+      },
+      {
+        "type": "paragraph",
+        "text": "Оно не состоит в максимизации числа абстракций."
+      },
+      {
+        "type": "paragraph",
+        "text": "И уж точно не в превращении простого кода во фреймворк прежде, чем задача этого потребует."
+      },
+      {
+        "type": "paragraph",
+        "text": "Архитектура существует, чтобы сохранять важные решения по мере роста числа людей, компонентов, возможностей и прошедших лет."
+      },
+      {
+        "type": "paragraph",
+        "text": "FlowBus начинался как способ передавать события."
+      },
+      {
+        "type": "paragraph",
+        "text": "Он стал ценным, когда передача событий перестала быть сложной частью задачи."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сложной частью была защита всех правил вокруг них."
+      }
+    ]
+  }
+}

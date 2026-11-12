@@ -1,0 +1,892 @@
+{
+  "kind": "post",
+  "slug": "procedural-cover-generation-designing-without-designer",
+  "source": {
+    "title": "Procedural Cover Generation: Designing Without a Designer",
+    "category": "Blog",
+    "excerpt": "How I built a procedural cover generation algorithm for this blog and its project catalog - no designer, no stock photos, no AI - and the mathematics that makes it possible.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Procedural Cover Generation: Designing Without a Designer",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "There is a particular kind of silence that follows the question \"who's going to make the cover art?\" when the answer is, plainly, nobody. A personal blog with exactly one administrator has no art department to delegate to, no stock-photo budget to draw against, and — if it is honest with itself — no time to spend hunting for a gradient that looks vaguely on-brand every time a new post goes live. And yet a wall of identical grey rectangles where a cover image should be is its own kind of failure, a small tax on credibility paid on every single page. This piece is the story of how I refused to pay either tax: not by hiring anyone, and not by uploading anything, but by designing a **procedural cover generation** algorithm that draws the cover itself, the moment a post or a project is created, and never draws the same one twice by accident."
+      },
+      {
+        "type": "paragraph",
+        "text": "What follows is not a marketing pitch for that procedural cover generation system. It is closer to a lab notebook: the mathematics that actually does the work, the code that implements it, the mistakes that came before the version that shipped, and — because good ideas are meant to travel — a demonstration that the entire core of it fits comfortably in fifteen lines of code in more or less any programming language you care to name."
+      },
+      {
+        "type": "heading",
+        "text": "The Constraint That Shaped Everything",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Before a single line of this system existed, I wrote down three properties it had to have, and I want to state them plainly because everything downstream is a consequence of taking them seriously rather than as aspirations to be softened later."
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": true,
+          "items": [
+            {
+              "text": "**Deterministic.** The same post, rendered twice, on two different machines, after two different deployments, must produce the byte-identical image. A cover that depends on wall-clock time or an uncached random seed is not a feature; it is a bug waiting for someone to notice it.",
+              "blocks": []
+            },
+            {
+              "text": "**Branded, not random.** Ten covers on a journal listing page have to read as a family — the same visual dialect spoken in ten different accents — rather than as ten unrelated experiments in what a gradient can do.",
+              "blocks": []
+            },
+            {
+              "text": "**Free at read time.** A visitor scrolling through a list of posts should cost the server nothing beyond serving bytes that were already computed once, at publish time, by someone who is not them.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Every decision described below — a particular sequence chosen over a hash function, a particular pseudo-random number generator chosen over `Math.random`, rasterizing to WebP instead of shipping raw SVG to the browser — is a direct answer to one of those three constraints. None of it is decoration. Robert Martin's advice about \"screaming architecture\" — that a system's structure should shout its purpose at anyone who opens it — applies just as well to an algorithm as it does to a folder layout, and I want this article to demonstrate that idea in miniature: read the code, and you should be able to reconstruct the constraints that produced it."
+      },
+      {
+        "type": "heading",
+        "text": "First Attempt, First Mistake: Hashing a Category to a Color",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "My first instinct, and I suspect most engineers' first instinct, was to hash the category name into a hue. `hash(\"Kotlin\") % 360` is four characters longer than actually calling it \"an algorithm,\" and it is deterministic, and it does look reasonably like a solution until you ask a slightly sharper question: **does it guarantee that two different categories get two different, visually distinguishable colors?**"
+      },
+      {
+        "type": "paragraph",
+        "text": "It does not, and it *cannot*, for a reason worth sitting with rather than rushing past: distinguishability is a property of a *set* of hues, not of any single string. A pure hash function looks at one input at a time and has no way of knowing which hues are already spoken for by categories created earlier. You can get unlucky — two categories landing 4° apart on a 360° wheel is a real, not hypothetical, outcome of hashing short strings — and there is no way to detect that unluckiness from inside the hash function itself, because the hash function has no memory of anything outside its own input."
+      },
+      {
+        "type": "paragraph",
+        "text": "The fix, once stated this way, follows almost mechanically: **stop hashing, and start assigning.** Keep a running counter of \"how many identities have ever been created,\" and let that counter — not the category's own name — decide the hue. This turns an uncoordinated, memoryless computation into a coordinated one, and coordination is exactly what a fairness guarantee requires."
+      },
+      {
+        "type": "heading",
+        "text": "The Mathematics of Fair Division: The van der Corput Sequence",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Once the rule became \"assign the *N*-th hue ever requested,\" the next question was arithmetic: what function of *N* actually spreads points around a circle as evenly as possible, for *every* prefix of the sequence — not just once *N* categories are all known in advance, but at every intermediate point, because a real blog adds categories one at a time, unpredictably, over years?"
+      },
+      {
+        "type": "paragraph",
+        "text": "The answer is a hundred-year-old piece of number theory called the **[van der Corput sequence](https://en.wikipedia.org/wiki/Van_der_Corput_sequence)**, and the intuition behind it is disarmingly simple once you see it: *cut the circle in half, then cut each remaining half in half again, forever.* The first point lands at the very start. The second point bisects the entire circle. The third and fourth points bisect the two halves that resulted. The fifth through eighth bisect the four quarters. Every new point always lands exactly in the middle of the *largest remaining gap*, which is precisely the greedy strategy you would design by hand if someone asked you to place dots on a circle one at a time such that they never clump."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    O0[\"ordinal 0 -> 0 degrees\\n(the anchor)\"] --> O1[\"ordinal 1 -> 180 degrees\\nbisects the whole circle\"]\n    O1 --> O2[\"ordinal 2 -> 90 degrees\\nbisects 0 - 180\"]\n    O1 --> O3[\"ordinal 3 -> 270 degrees\\nbisects 180 - 360\"]\n    O2 --> O4[\"ordinal 4 -> 45 degrees\"]\n    O2 --> O6[\"ordinal 6 -> 135 degrees\"]\n    O3 --> O5[\"ordinal 5 -> 225 degrees\"]\n    O3 --> O7[\"ordinal 7 -> 315 degrees\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The closed-form way to compute the *N*-th point without simulating this bisection by hand is to write *N* in binary, **reverse its bits**, and read the reversed bits as a binary fraction. Multiply that fraction by 360°, and you have the hue. It sounds almost too neat to be true, so let us not take it on faith — let us trace it by hand for ordinal 5, the same way I traced it on paper the first time I implemented it, before trusting a single automated test to tell me it was right."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Start[\"bits = 5 = 0b101\\nresult = 0, denominator = 1\"] --> Step1[\"extract bit 1\\ndenominator = 2\\nresult = 0.500\"]\n    Step1 --> Step2[\"extract bit 0\\ndenominator = 4\\nresult = 0.500\"]\n    Step2 --> Step3[\"extract bit 1\\ndenominator = 8\\nresult = 0.625\"]\n    Step3 --> Done[\"hue = 0.625 x 360 = 225 degrees\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Here is the actual implementation, unmodified, exactly as it has run in production since the day this algorithm shipped:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-hue.ts\nfunction vanDerCorput(ordinal: number): number {\n    let bits = ordinal >>> 0;\n    let result = 0;\n    let denominator = 1;\n    while (bits > 0) {\n        denominator *= 2;\n        result += (bits & 1) / denominator;\n        bits >>>= 1;\n    }\n    return result;\n}\n\nexport function hueForOrdinal(ordinal: number): number {\n    return vanDerCorput(ordinal) * 360;\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Fourteen lines, no dependency, no floating-point trickery beyond what any language's standard arithmetic already provides. Feed it 0 through 8 and you get exactly the sequence the diagram above predicts: `0°, 180°, 90°, 270°, 45°, 225°, 135°, 315°, 22.5°, ...` — a fact I did not just assert but pinned with a test that will fail the instant anyone, myself included, \"simplifies\" this function into something that merely looks equivalent:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "it(\"matches the worked van der Corput sequence from the design doc\", () => {\n    expect(hueForOrdinal(0)).toBeCloseTo(0);\n    expect(hueForOrdinal(1)).toBeCloseTo(180);\n    expect(hueForOrdinal(2)).toBeCloseTo(90);\n    expect(hueForOrdinal(3)).toBeCloseTo(270);\n    expect(hueForOrdinal(4)).toBeCloseTo(45);\n    expect(hueForOrdinal(5)).toBeCloseTo(225);\n    expect(hueForOrdinal(6)).toBeCloseTo(135);\n    expect(hueForOrdinal(7)).toBeCloseTo(315);\n    expect(hueForOrdinal(8)).toBeCloseTo(22.5);\n});"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "**The result, stated precisely, and not merely hoped for:** for any *n* identities assigned this way, the minimum angular gap between any two of their hues never falls below half of the theoretical best-case ceiling of `360° / n` — and it hits that ceiling *exactly* whenever *n* happens to be a power of two. I did not take this on faith either; a second test sweeps every *n* from 2 to 64, computes every pairwise gap, and asserts the bound holds for all of them. That is the difference between \"I believe this is well-distributed\" and \"I can show you the number.\""
+      },
+      {
+        "type": "paragraph",
+        "text": "It is worth naming, and rejecting, the alternative I considered and discarded: the **[golden angle](https://en.wikipedia.org/wiki/Golden_angle)**, 137.508°, beloved of phyllotaxis simulations and famous for producing beautiful, never-repeating spirals when you plot thousands of points with it. It is the *asymptotically* optimal choice for an infinite sequence. But a personal blog does not have an infinite number of categories — it has a handful, growing slowly, over years — and the golden angle's worst-case minimum gap for a *small, finite* prefix works out to roughly 38% of the `360/n` ceiling, meaningfully worse than the van der Corput sequence's guaranteed 50%. A famous algorithm chosen for its reputation rather than for the metric that actually mattered *here* would have been a mistake dressed up as sophistication — the kind of decision Clean Code warns against under a different name: solving the problem you wish you had instead of the one in front of you."
+      },
+      {
+        "type": "heading",
+        "text": "From One Number to a Living Image: Deterministic Randomness Without `Math.random`",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A hue answers \"what color family,\" but a cover is not one color — it is a small constellation of blurred, related-hue spots, and their exact positions, sizes, and drift need to look organic without ever being genuinely nondeterministic. Those spots are mixed in **[OKLCH](https://bottosson.github.io/posts/oklab/)**, a perceptually uniform color space, specifically so that two hues 20° apart actually *look* 20° apart to a human eye — the RGB cube's own distances lie about this constantly, which is a subject for another article entirely. `Math.random()` was disqualified on sight: it cannot be seeded, which means it cannot satisfy the very first constraint this whole system exists to serve."
+      },
+      {
+        "type": "paragraph",
+        "text": "The replacement is two small, well-known, public-domain algorithms, chained together: **cyrb128**, which hashes an arbitrary string into four 32-bit integers, feeding **sfc32**, a compact pseudo-random number generator that treats those four integers as its internal state and produces an endless, repeatable stream of numbers in `[0, 1)`."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Seed[\"post-slug:styleVersion:variant\"] --> Cyrb[\"cyrb128(seed)\\nmixes characters into\\nfour 32-bit integers\"]\n    Cyrb --> A[\"a\"]\n    Cyrb --> B[\"b\"]\n    Cyrb --> C[\"c\"]\n    Cyrb --> D[\"d\"]\n    A --> Sfc[\"sfc32(a, b, c, d)\\nstateful 32-bit generator\"]\n    B --> Sfc\n    C --> Sfc\n    D --> Sfc\n    Sfc --> Stream[\"next() -> next() -> next() -> ...\\ndeterministic stream in [0, 1)\"]"
+        }
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-seed.ts\nfunction cyrb128(value: string): [number, number, number, number] {\n    let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;\n    for (let i = 0; i < value.length; i++) {\n        const k = value.charCodeAt(i);\n        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);\n        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);\n        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);\n        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);\n    }\n    h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);\n    h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);\n    h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);\n    h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);\n    h1 ^= h2 ^ h3 ^ h4;\n    h2 ^= h1; h3 ^= h1; h4 ^= h1;\n    return [h1 >>> 0, h2 >>> 0, h3 >>> 0, h4 >>> 0];\n}\n\nfunction sfc32(a: number, b: number, c: number, d: number) {\n    return function next(): number {\n        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;\n        let t = (a + b) | 0;\n        a = b ^ (b >>> 9);\n        b = (c + (c << 3)) | 0;\n        c = (c << 21) | (c >>> 11);\n        d = (d + 1) | 0;\n        t = (t + d) | 0;\n        c = (c + t) | 0;\n        return (t >>> 0) / 4294967296;\n    };\n}\n\nexport function prngFromSeed(seed: string) {\n    const [a, b, c, d] = cyrb128(seed);\n    return sfc32(a, b, c, d);\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Neither algorithm is cryptographic, and deliberately so: nothing here needs to resist an adversary deliberately crafting slugs to break the layout. The only requirement is that the same string always produces the same stream of numbers, on any machine, forever — a property I verified not by reading the code and nodding, but by generating a cover, restarting the entire process, generating it again from the identical input, and diffing the resulting content hash. It matched. That single, boring, unglamorous check is worth more than any amount of confidence in the algorithm's elegance."
+      },
+      {
+        "type": "heading",
+        "text": "Turning Text Into Geometry: The Six-Layer Composition",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A hue and a random stream are ingredients, not a finished dish. What actually gets rendered is a six-layer SVG composition, and the detail I am proudest of is that most of those layers are not shaped by the PRNG at all — they are shaped **directly by the post's own title and excerpt**, so that two posts sharing a category still produce visibly different, content-specific covers."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Stats[\"statsFor(title, excerpt)\\nword count, avg word length, vowel ratio\"] --> Layer2[\"Layer: flow curves\\ncount and amplitude from word stats\"]\n    Chars[\"character codes of title + excerpt\"] --> Layer3[\"Layer: wave ridges\\nno PRNG at all - pure text-to-shape\"]\n    Prng[\"seeded PRNG stream\"] --> Layer1[\"Layer: OKLCH mesh spots\\nhue +/- 16-17 degrees, overlay blend\"]\n    Prng --> Layer2\n    FirstWord[\"first word of the title\"] --> Layer4[\"Layer: letterform clip\\nfilled with the same mesh as Layer 1\"]\n    Title[\"full title, measured with fontkit\"] --> Layer5[\"Layer: readable title\"]\n    Meta[\"category, or Project, plus ref plus date\"] --> Layer6[\"Layer: technical stamp\"]\n    Layer1 --> Svg[\"renderCoverSvg\\none complete SVG document\"]\n    Layer2 --> Svg\n    Layer3 --> Svg\n    Layer4 --> Svg\n    Layer5 --> Svg\n    Layer6 --> Svg"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The wave-ridge layer is the one I find most quietly satisfying, precisely because it contains **no randomness whatsoever** — it samples the character codes of the title and excerpt directly and turns them into a smooth ridge line, which means the *exact same text* always produces the *exact same wave*, independent of slug or variant:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-wave.ts (trimmed)\nfunction charCodesOf(text: string): number[] {\n    const codes = [...text.toLowerCase()].map((c) => c.codePointAt(0) ?? 0);\n    return codes.length > 0 ? codes : [0];\n}\n\nexport function buildWaveRidges(sourceText: string, width: number, height: number): WaveRidge[] {\n    const codes = charCodesOf(sourceText);\n    // ...sample SAMPLES_PER_RIDGE points, interpolating between adjacent\n    // character codes so a one-word title and a full sentence both produce\n    // an equally smooth curve, never a jagged one for short input.\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The flow-curve layer, by contrast, *does* use the PRNG for its shape, but its **count and amplitude** are dictated by real text statistics — a post with twenty-five words across title and excerpt gets roughly five curves, and a post built from longer words gets curves with more visual amplitude:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-flow.ts (trimmed)\nexport function buildFlowCurves(prng: Prng, stats: CoverTextStats, width: number, height: number): FlowCurve[] {\n    const count = Math.max(1, Math.round(stats.wordCount / WORDS_PER_CURVE));\n    const amplitude = height * AMPLITUDE_HEIGHT_FRACTION * (0.4 + stats.avgWordLen / AMPLITUDE_WORD_LEN_DIVISOR);\n    // ...builds `count` curves, each a set of control points nudged by\n    // both the PRNG and a sine wave whose frequency depends on vowelRatio.\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "And the assembler that ties all six layers together is deliberately dumb in the best sense of the word — it makes no decisions of its own, it only calls, in a fixed order, the functions that already made theirs:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-composition.ts (trimmed)\nexport function buildCoverComposition(input: CoverCompositionInput, prng: Prng, fonts: CoverFonts): CoverComposition {\n    const stats = statsFor(input.title, input.excerpt);\n    const palette = buildCoverPalette(input.categoryHue, prng, SPOT_COUNT);\n\n    const spots = palette.spots.map((color) => ({\n        cx: randomInRange(prng, 0.05, 0.95) * COVER_WIDTH,\n        cy: randomInRange(prng, 0.05, 0.95) * COVER_HEIGHT,\n        r: SPOT_RADIUS_FRACTION * COVER_WIDTH,\n        color,\n    }));\n\n    const flowCurves = buildFlowCurves(prng, stats, COVER_WIDTH, COVER_HEIGHT);\n    const waveRidges = buildWaveRidges(`${input.title} ${input.excerpt}`, COVER_WIDTH, COVER_HEIGHT);\n    const letterformClip = buildLetterformClip(firstWordOf(input.title), COVER_WIDTH, COVER_HEIGHT, \"letterform-clip\");\n    const titleTextLayout = buildTitleTextLayout(/* fontkit measurer, title, canvas size */);\n\n    return { base: palette.base, spots, flowCurves, waveRidges, letterformClip, titleTextLayout,\n        stampText: buildStampText(input.category, input.ref, input.date) };\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Notice the order of operations: every single call that consumes the PRNG happens in a fixed, unchanging sequence. This is not incidental — it is *the* reason the whole cover reproduces byte-for-byte. Swap two of those calls, or add a new random draw in the middle of the function, and every cover generated before that change silently becomes unreproducible, because the PRNG's internal state at every later call now diverges from what it used to be. I mention this not as trivia but as the sharpest lesson the whole project taught me: **determinism is a property of an entire call graph, not of any one function in isolation**, and it is exactly the kind of invariant that is invisible in a diff and catastrophic in practice if broken silently."
+      },
+      {
+        "type": "heading",
+        "text": "The Missing Link: How a Journal Post Learns to Match Its Work Item",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "This blog is not only a journal — it also catalogs [Work items](/work), the case studies and projects behind the writing. When a post is *about* a specific project, I wanted its cover to visually announce that relationship rather than leave the reader to infer it from a hyperlink buried in the text. The mechanism is the same hue-assignment machinery described above, generalized one level: instead of two independent counters — one for post categories, one for Work projects — there is exactly **one shared ordinal sequence**, so a category and a project can never, even by coincidence, be assigned the same hue."
+      },
+      {
+        "type": "paragraph",
+        "text": "*(This is the paragraph to link to a concrete example once this post is published — pick the actual Work item this post is paired with, e.g.* `/work/<its-slug>`*, so a reader can see the shared hue in the wild rather than take the claim on faith.)*"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "erDiagram\n    POST }o--|| MEDIA_ASSET : \"coverAssetId\"\n    WORK }o--|| MEDIA_ASSET : \"coverAssetId\"\n    POST }o--o| WORK : \"relatedWorkSlug (optional)\"\n    IDENTITY_HUE ||--o{ POST : \"kind = category\"\n    IDENTITY_HUE ||--o{ WORK : \"kind = work\""
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "`IdentityHue` is the single row-per-identity table backing this: `kind` is either `\"category\"` or `\"work\"`, `key` is the normalized category name or the Work's own slug, and `ordinal` — the number that feeds directly into `hueForOrdinal` — carries a single database-level uniqueness constraint **shared across both kinds**, which is what turns \"please don't collide\" from a hope into a guarantee enforced by the schema itself:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// covers.ts\nexport async function resolveIdentityHue(kind: string, key: string): Promise<number> {\n    const existing = await prisma.identityHue.findUnique({ where: { kind_key: { kind, key } } });\n    if (existing) return existing.hue;\n\n    const highest = await prisma.identityHue.aggregate({ _max: { ordinal: true } });\n    const ordinal = (highest._max.ordinal ?? -1) + 1;\n    const hue = hueForOrdinal(ordinal);\n\n    const created = await prisma.identityHue.create({ data: { kind, key, hue, ordinal } });\n    return created.hue;\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "And the decision a post's own cover generator actually makes, every time, is this: if the post links to a Work item that still exists, *inherit* that project's hue rather than compute a fresh one from the post's category."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start[\"resolvePostHue(post)\"] --> Check{\"relatedWorkSlug set\\nand that Work still exists?\"}\n    Check -->|\"yes\"| Inherit[\"resolveWorkHue(work.slug)\\nsame hue as the linked project's own cover\"]\n    Check -->|\"no\"| Category[\"resolveCategoryHue(post.categoryEn)\"]\n    Inherit --> Result[\"hue used to render this post's cover\"]\n    Category --> Result"
+        }
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "export async function resolvePostHue(post: { categoryEn: string; relatedWorkSlug?: string | null }): Promise<number> {\n    if (post.relatedWorkSlug) {\n        const work = await prisma.work.findUnique({ where: { slug: post.relatedWorkSlug }, select: { slug: true } });\n        if (work) {\n            return resolveWorkHue(work.slug);\n        }\n    }\n    return resolveCategoryHue(post.categoryEn);\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The graceful fallback in that last branch — a stale or invalid `relatedWorkSlug` degrading quietly to an ordinary category hue instead of throwing — is not an afterthought bolted on for robustness's sake; it is what makes the function safe to call from a publish path that must never fail a post's publication over a data-entry mistake in an unrelated field. A function that can fail in a way its caller cannot recover from is a function that has leaked a decision it had no business making."
+      },
+      {
+        "type": "heading",
+        "text": "From Vectors to Pixels: Why the Browser Never Draws This Twice",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The composition described above produces an SVG string. It is *not* served to the browser as SVG. It is rasterized, once, on the server, into two WebP variants (1200 and 640 pixels wide) plus an inline low-quality placeholder, and only those finished pixels ever leave the server."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// image-processing.ts (trimmed)\nexport async function rasterizeCover(bytes: Buffer, mimeType: string): Promise<ProcessedCover> {\n    const source = sharp(bytes, { density: 220 }); // crisp at 1200px, empirically tuned\n    const full = await source.clone().resize(1200, 630, { fit: \"cover\" }).webp({ quality: 82 }).toBuffer();\n    const narrow = await source.clone().resize(640).webp({ quality: 82 }).toBuffer();\n    const placeholder = await source.clone().resize(24).webp({ quality: 40 }).toBuffer();\n\n    return {\n        contentHash: sha256Hex(full),   // what the database dedups on\n        mimeType: \"image/webp\",\n        width: 1200, height: 630,\n        placeholder: `data:image/webp;base64,${placeholder.toString(\"base64\")}`,\n        full, narrow,\n    };\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Two reasons justify paying for a server-side rasterization step rather than shipping the SVG raw, and neither of them has anything to do with file size:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "**One canonical image.** A server-side raster is the *one* picture the author actually saw. A client-rendered SVG is as many pictures as there are combinations of browser, OS font-hinting, and `mix-blend-mode` support among your readers.",
+              "blocks": []
+            },
+            {
+              "text": "**Zero rendering cost for the reader.** Ten cards on a journal listing page are ten gradient computations *per scroll, per device* if a browser has to do the work; they are ten already-decoded WebP images, at essentially no cost, if a server did it once.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The `contentHash` line deserves a second look, because it is doing more than bookkeeping: it dedups covers **on the rendered bytes**, not on the inputs that produced them. Two different posts that happen to render pixel-for-pixel identical images — an edge case, not the common one, but a real one for a small blog with a small set of hue families — automatically share one `MediaAsset` row rather than storing the same picture twice. Deduplication is not a caching optimization bolted on afterward; it falls straight out of choosing content-hashing as the identity of a \"cover\" in the first place."
+      },
+      {
+        "type": "paragraph",
+        "text": "One boundary I want to be explicit about, because it is the kind of detail that looks obvious only in hindsight: **this cover is deliberately never reused as the** `og:image` a chat application unfurls when a link is shared. A messenger preview needs a readable headline, not a decorative gradient — so the Open Graph image is its own small text-card renderer, sharing only the accent hue with the cover sitting next to it on the page. Two problems that look similar on the surface (\"make a nice-looking image for this post\") are not always the same problem, and conflating them here would have produced a worse answer to both."
+      },
+      {
+        "type": "heading",
+        "text": "The Architecture Behind the Algorithm: A Port Sized for a Future It Doesn't Use Yet",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Everything above describes *today's* generator. But the interface it implements was not written for today's generator — it was written for the generator I have not built yet."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Orchestration[\"covers.ts / work-covers.ts\\n(orchestration, knows the database)\"] --> Port[\"ImageGenerator\\n(the port - async, fallible)\"]\n    Factory[\"getImageGenerator()\\nenv-var factory\"] --> Port\n    Port --> Procedural[\"ProceduralImageGenerator\\n(today's only real adapter)\"]\n    Port --> Failing[\"FailingImageGenerator\\n(exercises the failure path in tests)\"]\n    Port -.-> Future[\"a future AI-backed adapter\\n(network calls, timeouts, retries)\"]"
+        }
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "export interface ImageGenerator {\n    generate(brief: CoverBrief, signal?: AbortSignal): Promise<GeneratedImage>;\n}\n\nexport class ProceduralImageGenerator implements ImageGenerator {\n    async generate(brief: CoverBrief): Promise<GeneratedImage> {\n        // ...builds the SVG described above and returns it as bytes.\n        // Never actually awaits a network call, never actually throws.\n    }\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Read that interface again: it is `async`, and its `Promise` can reject. Today's only real implementation never awaits anything meaningful and never throws — it would be entirely honest, in isolation, to make `generate` a plain synchronous function. I did not, and the reason is a direct, deliberate application of the **Liskov Substitution Principle**, read in the direction that actually matters for API design: a contract should be shaped by its most demanding future implementer, not its easiest current one. An adapter that calls out to an image-generation API over the network *must* be async and *must* be able to fail — so writing the interface that way from day one means that adding such an adapter later is a new implementation of an existing contract, not a breaking change to every caller of the old one. The weak implementation trivially satisfies the strong contract; the reverse would not be true, and reversing it later would have meant touching every call site this interface has, at the exact moment I would rather be focused on the new adapter itself."
+      },
+      {
+        "type": "paragraph",
+        "text": "`FailingImageGenerator`, which does nothing but reject, exists purely so the error-handling path through the orchestration layer has something real to exercise in a test *today*, without waiting for that future adapter to exist first — a small, deliberate investment in being able to prove a corner of the system works before the system that will actually need it has been built."
+      },
+      {
+        "type": "heading",
+        "text": "Porting the Idea: The Same Algorithm, Fifteen Lines, Any Language",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Nothing described above is specific to TypeScript, or to Node, or to this codebase. The van der Corput sequence is arithmetic on integers; the PRNG is arithmetic on 32-bit integers. Here is the entire hue-assignment algorithm in Python:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "python",
+          "code": "MASK32 = 0xFFFFFFFF\n\ndef van_der_corput(ordinal: int) -> float:\n    bits = ordinal\n    result = 0.0\n    denominator = 1\n    while bits > 0:\n        denominator *= 2\n        result += (bits & 1) / denominator\n        bits >>= 1\n    return result\n\ndef hue_for_ordinal(ordinal: int) -> float:\n    return van_der_corput(ordinal) * 360.0"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "And the deterministic PRNG. The one wrinkle worth calling out explicitly, because it is exactly the kind of gap that silently produces \"it mostly works, except the numbers are subtly wrong\" bugs: **Python integers have arbitrary precision, and JavaScript's do not.** JavaScript's `|0`, `>>> 0`, and `Math.imul` are all doing one job — forcing an intermediate result back into 32-bit unsigned arithmetic with wraparound — and Python has no such implicit behavior. Every place the original does that silently, the port has to do it explicitly, with `& MASK32`:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "python",
+          "code": "def cyrb128(value: str) -> tuple[int, int, int, int]:\n    h1, h2, h3, h4 = 1779033703, 3144134277, 1013904242, 2773480762\n    for ch in value:\n        k = ord(ch)\n        h1 = (h2 ^ ((h1 ^ k) * 597399067)) & MASK32\n        h2 = (h3 ^ ((h2 ^ k) * 2869860233)) & MASK32\n        h3 = (h4 ^ ((h3 ^ k) * 951274213)) & MASK32\n        h4 = (h1 ^ ((h4 ^ k) * 2716044179)) & MASK32\n    h1 = ((h3 ^ (h1 >> 18)) * 597399067) & MASK32\n    h2 = ((h4 ^ (h2 >> 22)) * 2869860233) & MASK32\n    h3 = ((h1 ^ (h3 >> 17)) * 951274213) & MASK32\n    h4 = ((h2 ^ (h4 >> 19)) * 2716044179) & MASK32\n    h1 ^= h2 ^ h3 ^ h4\n    h2 ^= h1; h3 ^= h1; h4 ^= h1\n    return h1 & MASK32, h2 & MASK32, h3 & MASK32, h4 & MASK32\n\ndef sfc32(seed_a: int, seed_b: int, seed_c: int, seed_d: int):\n    state = [seed_a & MASK32, seed_b & MASK32, seed_c & MASK32, seed_d & MASK32]\n\n    def next_value() -> float:\n        a, b, c, d = state\n        t = (a + b) & MASK32\n        a = (b ^ (b >> 9)) & MASK32\n        b = (c + ((c << 3) & MASK32)) & MASK32\n        c = (((c << 21) & MASK32) | (c >> 11)) & MASK32\n        d = (d + 1) & MASK32\n        t = (t + d) & MASK32\n        c = (c + t) & MASK32\n        state[0], state[1], state[2], state[3] = a, b, c, d\n        return t / 4294967296\n\n    return next_value\n\ndef prng_from_seed(seed: str):\n    a, b, c, d = cyrb128(seed)\n    return sfc32(a, b, c, d)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Go tells the opposite story, and it is worth seeing right after Python for the contrast alone: Go's `uint32` is a genuinely fixed-width type, so overflow wraps *automatically*, and the masking Python had to spell out by hand simply disappears. The port becomes close to a transliteration:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "go",
+          "code": "func vanDerCorput(ordinal uint32) float64 {\n    bits := ordinal\n    result := 0.0\n    denominator := 1.0\n    for bits > 0 {\n        denominator *= 2\n        result += float64(bits&1) / denominator\n        bits >>= 1\n    }\n    return result\n}\n\nfunc hueForOrdinal(ordinal uint32) float64 {\n    return vanDerCorput(ordinal) * 360.0\n}\n\nfunc cyrb128(value string) (uint32, uint32, uint32, uint32) {\n    h1, h2, h3, h4 := uint32(1779033703), uint32(3144134277), uint32(1013904242), uint32(2773480762)\n    for _, r := range value {\n        k := uint32(r)\n        h1 = h2 ^ ((h1 ^ k) * 597399067)\n        h2 = h3 ^ ((h2 ^ k) * 2869860233)\n        h3 = h4 ^ ((h3 ^ k) * 951274213)\n        h4 = h1 ^ ((h4 ^ k) * 2716044179)\n    }\n    h1 = (h3 ^ (h1 >> 18)) * 597399067\n    h2 = (h4 ^ (h2 >> 22)) * 2869860233\n    h3 = (h1 ^ (h3 >> 17)) * 951274213\n    h4 = (h2 ^ (h4 >> 19)) * 2716044179\n    h1 ^= h2 ^ h3 ^ h4\n    h2 ^= h1\n    h3 ^= h1\n    h4 ^= h1\n    return h1, h2, h3, h4\n}\n\ntype Prng func() float64\n\nfunc sfc32(a, b, c, d uint32) Prng {\n    return func() float64 {\n        t := a + b\n        a = b ^ (b >> 9)\n        b = c + (c << 3)\n        c = (c << 21) | (c >> 11)\n        d = d + 1\n        t = t + d\n        c = c + t\n        return float64(t) / 4294967296\n    }\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The lesson generalizes past these two languages: any language with a genuine fixed-width unsigned integer type (`uint32_t` in C, `u32` in Rust, an `Int` masked appropriately in Swift, an `int` treated as unsigned via `>>>` in Java) ports this with almost no friction. Any language with arbitrary-precision integers by default (Python being the obvious example, but also Ruby or a naive port to a big-integer library in any ecosystem) needs exactly one disciplined habit: mask after every operation that JavaScript's `|0`/`>>> 0`/`Math.imul` was masking implicitly. Miss one, and you will not get an error — you will get a *different but plausible-looking* stream of numbers, silently, which is the most dangerous kind of bug this whole system exists to prevent."
+      },
+      {
+        "type": "heading",
+        "text": "What I Would Tell Anyone Building This Themselves",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "If there is a single idea worth carrying away from this whole exercise, it is that **procedural generation is not a euphemism for randomness — it is the opposite of randomness, dressed up to look spontaneous.** Every visible decision in a generated cover — which hue, how many curves, how tall the waveform, which word gets clipped into a letterform — traces back to either a piece of real content (the title, the excerpt, the category) or a deterministic function of a stable identity (the slug). Nothing is left to chance in the sense that matters: the chance of an unreproducible result is exactly zero, by construction, and that is the entire point."
+      },
+      {
+        "type": "paragraph",
+        "text": "The three constraints from the very first section — deterministic, branded, free at read time — are not a checklist I filled in after the fact to justify what I had already built. They were the specification, in the truest sense Robert Martin uses the word: not a wish list, but a set of forces that, taken together, leave surprisingly little room for the design to be anything other than what it became. A hash function fails the second constraint. `Math.random` fails the first. Client-side SVG rendering fails the third. What survives the elimination is, in essence, the system described above — which is a more useful thing to have learned than the system itself."
+      },
+      {
+        "type": "paragraph",
+        "text": "*The full implementation lives in* `backend/src/media/`* of* *[this site's own repository](https://github.com/yuriisurzhykov/Portfolio-Website)** —* `cover-hue.ts`*,* `cover-seed.ts`*,* `cover-composition.ts`*, and their neighbors — should you want to read further than an article can comfortably reproduce.*"
+      }
+    ]
+  },
+  "translation": {
+    "title": "Процедурная генерация обложек: дизайн без дизайнера",
+    "category": "Блог",
+    "excerpt": "Как я разработал алгоритм процедурной генерации обложек для этого блога и его каталога проектов без дизайнера, стоковых фотографий и ИИ, и какая математика делает это возможным.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Процедурная генерация обложек: дизайн без дизайнера",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Вопрос «кто будет делать обложки?» сопровождается особой тишиной, когда ответ очевиден: никто. У личного блога с единственным администратором нет художественного отдела, которому можно передать эту задачу, нет бюджета на стоковые фотографии и, если говорить честно, нет времени при каждой новой публикации искать градиент, хотя бы отдалённо соответствующий фирменному стилю. Однако стена одинаковых серых прямоугольников на месте обложек тоже означает неудачу: на каждой странице она понемногу подрывает доверие. Эта статья о том, как я отказался платить обе эти цены: никого не нанимал и ничего не загружал, а разработал алгоритм **процедурной генерации обложек**, который сам рисует обложку в момент создания публикации или проекта и никогда случайно не создаёт одну и ту же обложку дважды."
+      },
+      {
+        "type": "paragraph",
+        "text": "Далее следует не рекламная презентация этой системы процедурной генерации обложек. Это скорее лабораторный журнал: математика, которая действительно выполняет работу, реализующий её код, ошибки, предшествовавшие выпущенной версии, и, поскольку хорошие идеи должны распространяться, демонстрация того, что вся основа системы свободно помещается в пятнадцати строках кода практически на любом языке программирования."
+      },
+      {
+        "type": "heading",
+        "text": "Ограничение, определившее всё остальное",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Ещё до первой строки кода этой системы я записал три обязательных свойства. Изложу их прямо, поскольку всё дальнейшее стало следствием серьёзного отношения к ним, а не восприятия их как пожеланий, которые впоследствии можно смягчить."
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": true,
+          "items": [
+            {
+              "text": "**Детерминированность.** Одна и та же публикация, отрисованная дважды, на двух разных машинах, после двух разных развёртываний, должна давать побайтно одинаковое изображение. Обложка, зависящая от текущего времени или незакешированного случайного начального значения генератора, не полезная функция, а ошибка, которая ждёт, пока её заметят.",
+              "blocks": []
+            },
+            {
+              "text": "**Фирменный стиль вместо случайного набора.** Десять обложек на странице списка публикаций должны восприниматься как одно семейство: один визуальный диалект с десятью разными акцентами, а не десять несвязанных экспериментов с возможностями градиента.",
+              "blocks": []
+            },
+            {
+              "text": "**Отсутствие затрат при чтении.** Посетитель, прокручивающий список публикаций, не должен создавать для сервера никаких затрат сверх передачи байтов, уже вычисленных однажды, в момент публикации, кем-то другим.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Каждое описанное ниже решение, будь то выбор определённой последовательности вместо хеш-функции, определённого генератора псевдослучайных чисел вместо `Math.random` или растеризации в WebP вместо передачи исходного SVG браузеру, напрямую отвечает одному из этих трёх ограничений. Декоративных решений здесь нет. Совет Роберта Мартина о «кричащей архитектуре», согласно которому структура системы должна громко сообщать о своём назначении каждому, кто её открывает, применим к алгоритму не меньше, чем к структуре каталогов. В этой статье я хочу показать эту идею в миниатюре: прочитав код, можно восстановить ограничения, из которых он возник."
+      },
+      {
+        "type": "heading",
+        "text": "Первая попытка, первая ошибка: хеширование категории в цвет",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Первым побуждением, и, подозреваю, первым побуждением большинства инженеров, было преобразовать название категории в цветовой тон с помощью хеширования. Запись `hash(\"Kotlin\") % 360` всего на четыре символа длиннее самого слова «алгоритм», она детерминирована и вполне похожа на решение, пока не задашь чуть более точный вопрос: **гарантирует ли она, что две разные категории получат два разных, визуально различимых цвета?**"
+      },
+      {
+        "type": "paragraph",
+        "text": "Не гарантирует и *не может* гарантировать по причине, на которой стоит остановиться: различимость является свойством *набора* цветовых тонов, а не отдельно взятой строки. Чистая хеш-функция рассматривает по одному входному значению и не может знать, какие тона уже заняты ранее созданными категориями. Может не повезти: две категории с расстоянием 4° на круге в 360° являются реальным, а не гипотетическим результатом хеширования коротких строк. Обнаружить такое невезение внутри самой хеш-функции невозможно, поскольку она ничего не помнит за пределами собственных входных данных."
+      },
+      {
+        "type": "paragraph",
+        "text": "После такой постановки исправление следует почти механически: **перестать хешировать и начать назначать.** Нужно вести счётчик «сколько сущностей было создано за всё время» и определять тон этим счётчиком, а не названием категории. Так несогласованное вычисление без памяти превращается в согласованное, а для гарантии равномерного распределения нужна именно согласованность."
+      },
+      {
+        "type": "heading",
+        "text": "Математика равномерного деления: последовательность ван дер Корпута",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда правило приняло вид «назначить *N*-й запрошенный за всё время тон», следующий вопрос стал арифметическим: какая функция от *N* распределяет точки по окружности как можно равномернее для *каждого* начального отрезка последовательности? Не только когда все *N* категорий известны заранее, но и на каждом промежуточном шаге, поскольку в реальном блоге категории добавляются по одной, непредсказуемо и годами."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ответ даёт результат теории чисел столетней давности, известный как **[последовательность ван дер Корпута](https://en.wikipedia.org/wiki/Van_der_Corput_sequence)**. Стоит увидеть лежащую в её основе идею, и она оказывается предельно простой: *разделить окружность пополам, затем каждую оставшуюся половину снова пополам и продолжать бесконечно.* Первая точка располагается в самом начале. Вторая делит окружность пополам. Третья и четвёртая делят пополам две полученные половины. Точки с пятой по восьмую делят четыре четверти. Каждая новая точка всегда попадает точно в середину *наибольшего оставшегося промежутка*. Это именно та жадная стратегия, которую вы разработали бы вручную, если бы требовалось расставлять точки на окружности по одной так, чтобы они не скапливались вместе."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    O0[\"ordinal 0 -> 0 degrees\\n(the anchor)\"] --> O1[\"ordinal 1 -> 180 degrees\\nbisects the whole circle\"]\n    O1 --> O2[\"ordinal 2 -> 90 degrees\\nbisects 0 - 180\"]\n    O1 --> O3[\"ordinal 3 -> 270 degrees\\nbisects 180 - 360\"]\n    O2 --> O4[\"ordinal 4 -> 45 degrees\"]\n    O2 --> O6[\"ordinal 6 -> 135 degrees\"]\n    O3 --> O5[\"ordinal 5 -> 225 degrees\"]\n    O3 --> O7[\"ordinal 7 -> 315 degrees\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Чтобы вычислить *N*-ю точку напрямую, не моделируя такое деление вручную, нужно записать *N* в двоичном виде, **развернуть порядок его битов** и прочитать результат как двоичную дробь. Умножив её на 360°, получаем цветовой тон. Это звучит почти слишком изящно, чтобы быть правдой, поэтому не будем принимать результат на веру: разберём вычисление вручную для порядкового номера 5. Именно так я проверил его на бумаге при первой реализации, прежде чем доверить хотя бы одному автоматизированному тесту проверку правильности."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Start[\"bits = 5 = 0b101\\nresult = 0, denominator = 1\"] --> Step1[\"extract bit 1\\ndenominator = 2\\nresult = 0.500\"]\n    Step1 --> Step2[\"extract bit 0\\ndenominator = 4\\nresult = 0.500\"]\n    Step2 --> Step3[\"extract bit 1\\ndenominator = 8\\nresult = 0.625\"]\n    Step3 --> Done[\"hue = 0.625 x 360 = 225 degrees\"]"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Ниже приведена настоящая реализация без изменений, ровно в том виде, в котором она работает в production со дня выпуска алгоритма:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-hue.ts\nfunction vanDerCorput(ordinal: number): number {\n    let bits = ordinal >>> 0;\n    let result = 0;\n    let denominator = 1;\n    while (bits > 0) {\n        denominator *= 2;\n        result += (bits & 1) / denominator;\n        bits >>>= 1;\n    }\n    return result;\n}\n\nexport function hueForOrdinal(ordinal: number): number {\n    return vanDerCorput(ordinal) * 360;\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Четырнадцать строк, ни одной зависимости и никаких приёмов с плавающей точкой сверх стандартной арифметики любого языка. Подайте на вход числа от 0 до 8 и получите в точности последовательность, предсказанную диаграммой выше: `0°, 180°, 90°, 270°, 45°, 225°, 135°, 315°, 22.5°, ...`. Я не просто заявил этот факт, а закрепил его тестом, который упадёт в тот момент, когда кто-либо, включая меня, «упростит» функцию до чего-то лишь внешне эквивалентного:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "it(\"matches the worked van der Corput sequence from the design doc\", () => {\n    expect(hueForOrdinal(0)).toBeCloseTo(0);\n    expect(hueForOrdinal(1)).toBeCloseTo(180);\n    expect(hueForOrdinal(2)).toBeCloseTo(90);\n    expect(hueForOrdinal(3)).toBeCloseTo(270);\n    expect(hueForOrdinal(4)).toBeCloseTo(45);\n    expect(hueForOrdinal(5)).toBeCloseTo(225);\n    expect(hueForOrdinal(6)).toBeCloseTo(135);\n    expect(hueForOrdinal(7)).toBeCloseTo(315);\n    expect(hueForOrdinal(8)).toBeCloseTo(22.5);\n});"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "**Результат, сформулированный точно, а не оставленный на уровне надежды:** для любых *n* сущностей, которым таким способом назначены тона, минимальное угловое расстояние между любой парой тонов никогда не опускается ниже половины теоретически наилучшей верхней границы `360° / n` и достигает этой границы *в точности*, когда *n* является степенью двойки. Этого я тоже не принял на веру: второй тест перебирает все *n* от 2 до 64, вычисляет расстояния между всеми парами и проверяет соблюдение границы для каждого случая. В этом разница между «я считаю, что распределение равномерное» и «я могу показать конкретное число»."
+      },
+      {
+        "type": "paragraph",
+        "text": "Стоит назвать и отвергнуть альтернативу, которую я рассмотрел и отбросил: **[золотой угол](https://en.wikipedia.org/wiki/Golden_angle)**, 137.508°, популярный в моделировании филлотаксиса и известный тем, что при построении тысяч точек создаёт красивые, никогда не повторяющиеся спирали. Для бесконечной последовательности это *асимптотически* оптимальный выбор. Но у личного блога нет бесконечного количества категорий: их немного, и этот набор медленно растёт годами. При этом в худшем случае минимальное расстояние для *небольшого конечного* начального отрезка последовательности золотого угла составляет примерно 38% от верхней границы `360/n`, что заметно хуже гарантированных последовательностью ван дер Корпута 50%. Выбрать знаменитый алгоритм из-за его репутации, а не по действительно важной *здесь* метрике, означало бы совершить ошибку, замаскированную под изощрённость. В Clean Code от такого решения предостерегают под другим названием: решать задачу, которую хотелось бы иметь, вместо той, которая стоит перед тобой."
+      },
+      {
+        "type": "heading",
+        "text": "От одного числа к живому изображению: детерминированная случайность без `Math.random`",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Цветовой тон отвечает на вопрос «какое семейство цветов», но обложка состоит не из одного цвета. Это небольшое созвездие размытых пятен родственных тонов, точное положение, размеры и смещение которых должны выглядеть естественно, никогда не становясь по-настоящему недетерминированными. Пятна смешиваются в **[OKLCH](https://bottosson.github.io/posts/oklab/)**, перцептивно равномерном цветовом пространстве, именно для того, чтобы два тона с разницей 20° действительно *выглядели* для человеческого глаза разделёнными на 20°. Собственные расстояния RGB-куба постоянно вводят в этом отношении в заблуждение, но это тема отдельной статьи. `Math.random()` был исключён сразу: ему нельзя задать начальное значение генератора, следовательно, он не способен удовлетворить самому первому ограничению, ради которого существует вся система."
+      },
+      {
+        "type": "paragraph",
+        "text": "Его заменили два небольших, хорошо известных алгоритма из общественного достояния, соединённые последовательно: **cyrb128**, преобразующий произвольную строку в четыре 32-битных целых числа, передаёт результат в **sfc32**, компактный генератор псевдослучайных чисел. Последний использует эти четыре числа как внутреннее состояние и создаёт бесконечный воспроизводимый поток чисел из `[0, 1)`."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Seed[\"post-slug:styleVersion:variant\"] --> Cyrb[\"cyrb128(seed)\\nmixes characters into\\nfour 32-bit integers\"]\n    Cyrb --> A[\"a\"]\n    Cyrb --> B[\"b\"]\n    Cyrb --> C[\"c\"]\n    Cyrb --> D[\"d\"]\n    A --> Sfc[\"sfc32(a, b, c, d)\\nstateful 32-bit generator\"]\n    B --> Sfc\n    C --> Sfc\n    D --> Sfc\n    Sfc --> Stream[\"next() -> next() -> next() -> ...\\ndeterministic stream in [0, 1)\"]"
+        }
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-seed.ts\nfunction cyrb128(value: string): [number, number, number, number] {\n    let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;\n    for (let i = 0; i < value.length; i++) {\n        const k = value.charCodeAt(i);\n        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);\n        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);\n        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);\n        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);\n    }\n    h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);\n    h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);\n    h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);\n    h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);\n    h1 ^= h2 ^ h3 ^ h4;\n    h2 ^= h1; h3 ^= h1; h4 ^= h1;\n    return [h1 >>> 0, h2 >>> 0, h3 >>> 0, h4 >>> 0];\n}\n\nfunction sfc32(a: number, b: number, c: number, d: number) {\n    return function next(): number {\n        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;\n        let t = (a + b) | 0;\n        a = b ^ (b >>> 9);\n        b = (c + (c << 3)) | 0;\n        c = (c << 21) | (c >>> 11);\n        d = (d + 1) | 0;\n        t = (t + d) | 0;\n        c = (c + t) | 0;\n        return (t >>> 0) / 4294967296;\n    };\n}\n\nexport function prngFromSeed(seed: string) {\n    const [a, b, c, d] = cyrb128(seed);\n    return sfc32(a, b, c, d);\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Ни один из алгоритмов не является криптографическим, и это намеренный выбор: здесь ничему не требуется противостоять злоумышленнику, который специально подбирает slug, чтобы сломать композицию. Единственное требование состоит в том, чтобы одна и та же строка всегда порождала одинаковый поток чисел на любой машине, без ограничения по времени. Это свойство я проверил не чтением кода с одобрительным кивком: я сгенерировал обложку, полностью перезапустил процесс, снова сгенерировал её по тем же входным данным и сравнил полученные хеши содержимого. Они совпали. Эта единственная скучная, непримечательная проверка стоит больше любой уверенности в изяществе алгоритма."
+      },
+      {
+        "type": "heading",
+        "text": "Преобразование текста в геометрию: шестислойная композиция",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Цветовой тон и поток случайных чисел являются ингредиентами, а не готовым блюдом. В действительности отрисовывается шестислойная SVG-композиция. Больше всего я горжусь тем, что форму большинства её слоёв определяет вовсе не PRNG, а **непосредственно заголовок и анонс самой публикации**. Благодаря этому даже две публикации одной категории получают заметно разные обложки, связанные с их содержанием."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Stats[\"statsFor(title, excerpt)\\nword count, avg word length, vowel ratio\"] --> Layer2[\"Layer: flow curves\\ncount and amplitude from word stats\"]\n    Chars[\"character codes of title + excerpt\"] --> Layer3[\"Layer: wave ridges\\nno PRNG at all - pure text-to-shape\"]\n    Prng[\"seeded PRNG stream\"] --> Layer1[\"Layer: OKLCH mesh spots\\nhue +/- 16-17 degrees, overlay blend\"]\n    Prng --> Layer2\n    FirstWord[\"first word of the title\"] --> Layer4[\"Layer: letterform clip\\nfilled with the same mesh as Layer 1\"]\n    Title[\"full title, measured with fontkit\"] --> Layer5[\"Layer: readable title\"]\n    Meta[\"category, or Project, plus ref plus date\"] --> Layer6[\"Layer: technical stamp\"]\n    Layer1 --> Svg[\"renderCoverSvg\\none complete SVG document\"]\n    Layer2 --> Svg\n    Layer3 --> Svg\n    Layer4 --> Svg\n    Layer5 --> Svg\n    Layer6 --> Svg"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Слой волнообразных гребней доставляет мне особое спокойное удовлетворение именно потому, что в нём **вообще нет случайности**. Он напрямую выбирает коды символов заголовка и анонса и преобразует их в плавную линию гребня. Это означает, что *в точности один и тот же текст* всегда создаёт *в точности одну и ту же волну*, независимо от slug или варианта:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-wave.ts (trimmed)\nfunction charCodesOf(text: string): number[] {\n    const codes = [...text.toLowerCase()].map((c) => c.codePointAt(0) ?? 0);\n    return codes.length > 0 ? codes : [0];\n}\n\nexport function buildWaveRidges(sourceText: string, width: number, height: number): WaveRidge[] {\n    const codes = charCodesOf(sourceText);\n    // ...sample SAMPLES_PER_RIDGE points, interpolating between adjacent\n    // character codes so a one-word title and a full sentence both produce\n    // an equally smooth curve, never a jagged one for short input.\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Слой плавных кривых, напротив, *использует* PRNG для построения формы, но **число кривых и их амплитуда** определяются реальными статистическими характеристиками текста. Публикация с двадцатью пятью словами в заголовке и анонсе получает примерно пять кривых, а текст с более длинными словами получает кривые с большей визуальной амплитудой:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-flow.ts (trimmed)\nexport function buildFlowCurves(prng: Prng, stats: CoverTextStats, width: number, height: number): FlowCurve[] {\n    const count = Math.max(1, Math.round(stats.wordCount / WORDS_PER_CURVE));\n    const amplitude = height * AMPLITUDE_HEIGHT_FRACTION * (0.4 + stats.avgWordLen / AMPLITUDE_WORD_LEN_DIVISOR);\n    // ...builds `count` curves, each a set of control points nudged by\n    // both the PRNG and a sine wave whose frequency depends on vowelRatio.\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Сборщик, объединяющий все шесть слоёв, намеренно примитивен в лучшем смысле слова: он не принимает собственных решений, а лишь вызывает в фиксированном порядке функции, которые уже приняли свои:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// cover-composition.ts (trimmed)\nexport function buildCoverComposition(input: CoverCompositionInput, prng: Prng, fonts: CoverFonts): CoverComposition {\n    const stats = statsFor(input.title, input.excerpt);\n    const palette = buildCoverPalette(input.categoryHue, prng, SPOT_COUNT);\n\n    const spots = palette.spots.map((color) => ({\n        cx: randomInRange(prng, 0.05, 0.95) * COVER_WIDTH,\n        cy: randomInRange(prng, 0.05, 0.95) * COVER_HEIGHT,\n        r: SPOT_RADIUS_FRACTION * COVER_WIDTH,\n        color,\n    }));\n\n    const flowCurves = buildFlowCurves(prng, stats, COVER_WIDTH, COVER_HEIGHT);\n    const waveRidges = buildWaveRidges(`${input.title} ${input.excerpt}`, COVER_WIDTH, COVER_HEIGHT);\n    const letterformClip = buildLetterformClip(firstWordOf(input.title), COVER_WIDTH, COVER_HEIGHT, \"letterform-clip\");\n    const titleTextLayout = buildTitleTextLayout(/* fontkit measurer, title, canvas size */);\n\n    return { base: palette.base, spots, flowCurves, waveRidges, letterformClip, titleTextLayout,\n        stampText: buildStampText(input.category, input.ref, input.date) };\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Обратите внимание на порядок операций: все вызовы, использующие PRNG, происходят в фиксированной неизменной последовательности. Это не случайность, а *та самая* причина, по которой вся обложка воспроизводится байт в байт. Поменяйте местами два таких вызова или добавьте получение нового случайного значения в середине функции, и любая обложка, созданная до этого изменения, незаметно станет невоспроизводимой. Внутреннее состояние PRNG при каждом последующем вызове теперь будет отличаться от прежнего. Я упоминаю это не как любопытную деталь, а как самый важный урок всего проекта: **детерминизм является свойством всего графа вызовов, а не отдельной изолированной функции**. Именно такие инварианты незаметны при просмотре diff и приводят к катастрофическим практическим последствиям, если нарушаются молча."
+      },
+      {
+        "type": "heading",
+        "text": "Недостающее звено: как публикация журнала получает оформление связанного проекта",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Этот блог не ограничивается журналом: в нём также есть каталог [проектов раздела Work](/work), то есть разборов практических задач и проектов, лежащих в основе публикаций. Когда публикация посвящена *конкретному проекту*, я хотел, чтобы её обложка визуально сообщала об этой связи, а читателю не приходилось выводить её из гиперссылки, затерянной в тексте. Механизм использует то же назначение тонов, что описано выше, но обобщённое ещё на один уровень. Вместо двух независимых счётчиков, одного для категорий публикаций и другого для проектов Work, существует ровно **одна общая последовательность порядковых номеров**. Поэтому категории и проекту никогда, даже случайно, нельзя назначить одинаковый тон."
+      },
+      {
+        "type": "paragraph",
+        "text": "*(В этом абзаце после публикации статьи нужно добавить ссылку на конкретный пример: выбрать реальный проект Work, с которым связана эта публикация, например* `/work/<its-slug>`*, чтобы читатель мог увидеть общий тон на практике, а не принимать утверждение на веру.)*"
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "erDiagram\n    POST }o--|| MEDIA_ASSET : \"coverAssetId\"\n    WORK }o--|| MEDIA_ASSET : \"coverAssetId\"\n    POST }o--o| WORK : \"relatedWorkSlug (optional)\"\n    IDENTITY_HUE ||--o{ POST : \"kind = category\"\n    IDENTITY_HUE ||--o{ WORK : \"kind = work\""
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "За этот механизм отвечает единственная таблица `IdentityHue`, в которой каждой сущности соответствует одна строка. Поле `kind` содержит либо `\"category\"`, либо `\"work\"`, поле `key` содержит нормализованное название категории или slug самого проекта Work, а на `ordinal`, число, непосредственно передаваемое в `hueForOrdinal`, наложено одно ограничение уникальности на уровне базы данных, **общее для обоих типов**. Именно оно превращает надежду «лишь бы не было коллизий» в гарантию, обеспеченную самой схемой:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// covers.ts\nexport async function resolveIdentityHue(kind: string, key: string): Promise<number> {\n    const existing = await prisma.identityHue.findUnique({ where: { kind_key: { kind, key } } });\n    if (existing) return existing.hue;\n\n    const highest = await prisma.identityHue.aggregate({ _max: { ordinal: true } });\n    const ordinal = (highest._max.ordinal ?? -1) + 1;\n    const hue = hueForOrdinal(ordinal);\n\n    const created = await prisma.identityHue.create({ data: { kind, key, hue, ordinal } });\n    return created.hue;\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "А решение, которое каждый раз принимает генератор обложки публикации, выглядит так: если публикация ссылается на существующий проект Work, *унаследовать* его цветовой тон вместо вычисления нового по категории публикации."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Start[\"resolvePostHue(post)\"] --> Check{\"relatedWorkSlug set\\nand that Work still exists?\"}\n    Check -->|\"yes\"| Inherit[\"resolveWorkHue(work.slug)\\nsame hue as the linked project's own cover\"]\n    Check -->|\"no\"| Category[\"resolveCategoryHue(post.categoryEn)\"]\n    Inherit --> Result[\"hue used to render this post's cover\"]\n    Category --> Result"
+        }
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "export async function resolvePostHue(post: { categoryEn: string; relatedWorkSlug?: string | null }): Promise<number> {\n    if (post.relatedWorkSlug) {\n        const work = await prisma.work.findUnique({ where: { slug: post.relatedWorkSlug }, select: { slug: true } });\n        if (work) {\n            return resolveWorkHue(work.slug);\n        }\n    }\n    return resolveCategoryHue(post.categoryEn);\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Корректный запасной вариант в последней ветви, когда устаревший или неверный `relatedWorkSlug` приводит к обычному тону категории без выброса исключения, не является поздним дополнением ради надёжности. Благодаря ему функцию безопасно вызывать в процессе публикации, где ошибка ввода в постороннем поле ни при каких обстоятельствах не должна срывать размещение статьи. Функция, способная завершиться ошибкой, после которой вызывающий код не может восстановиться, вынесла наружу решение, принимать которое у неё не было оснований."
+      },
+      {
+        "type": "heading",
+        "text": "От векторов к пикселям: почему браузер никогда не рисует это повторно",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Описанная выше композиция формирует строку SVG. В браузер она *не* передаётся в виде SVG. На сервере она однократно растеризуется в два варианта WebP шириной 1200 и 640 пикселей и встроенное изображение низкого качества для предварительного отображения. За пределы сервера выходят только эти готовые пиксели."
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "// image-processing.ts (trimmed)\nexport async function rasterizeCover(bytes: Buffer, mimeType: string): Promise<ProcessedCover> {\n    const source = sharp(bytes, { density: 220 }); // crisp at 1200px, empirically tuned\n    const full = await source.clone().resize(1200, 630, { fit: \"cover\" }).webp({ quality: 82 }).toBuffer();\n    const narrow = await source.clone().resize(640).webp({ quality: 82 }).toBuffer();\n    const placeholder = await source.clone().resize(24).webp({ quality: 40 }).toBuffer();\n\n    return {\n        contentHash: sha256Hex(full),   // what the database dedups on\n        mimeType: \"image/webp\",\n        width: 1200, height: 630,\n        placeholder: `data:image/webp;base64,${placeholder.toString(\"base64\")}`,\n        full, narrow,\n    };\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Две причины оправдывают затраты на серверную растеризацию вместо передачи исходного SVG, и ни одна из них не связана с размером файла:"
+      },
+      {
+        "type": "list",
+        "data": {
+          "ordered": false,
+          "items": [
+            {
+              "text": "**Одно каноническое изображение.** Серверный растр представляет собой *ту единственную* картинку, которую действительно видел автор. SVG, отрисовываемый на клиенте, даёт столько картинок, сколько среди читателей существует сочетаний браузера, хинтинга шрифтов в ОС и поддержки `mix-blend-mode`.",
+              "blocks": []
+            },
+            {
+              "text": "**Нулевые затраты читателя на отрисовку.** Десять карточек на странице списка публикаций означают десять вычислений градиента *при каждой прокрутке, на каждом устройстве*, если работу выполняет браузер. Если сервер выполнил её один раз, это десять уже декодированных изображений WebP практически без затрат.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Строка `contentHash` заслуживает повторного рассмотрения, поскольку выполняет не только учётную функцию: она устраняет дубликаты обложек **по байтам результата отрисовки**, а не по исходным данным. Две разные публикации, которые случайно получили попиксельно одинаковые изображения, автоматически используют одну строку `MediaAsset` вместо хранения одной картинки дважды. Это пограничный, а не типичный случай, но для небольшого блога с ограниченным набором семейств тонов он реален. Устранение дубликатов не является оптимизацией кеширования, добавленной позднее: оно непосредственно следует из изначального выбора хеша содержимого в качестве идентичности «обложки»."
+      },
+      {
+        "type": "paragraph",
+        "text": "Одну границу я хочу обозначить явно, поскольку подобные детали кажутся очевидными только задним числом: **эта обложка намеренно никогда не используется повторно в качестве** `og:image`, которое приложение для переписки показывает при отправке ссылки. Предпросмотру в мессенджере нужен читаемый заголовок, а не декоративный градиент. Поэтому изображение Open Graph создаёт отдельный небольшой рендерер текстовых карточек, который разделяет с расположенной на странице обложкой только акцентный тон. Две внешне похожие задачи («сделать красивое изображение для этой публикации») не всегда являются одной задачей. Их смешение здесь ухудшило бы оба результата."
+      },
+      {
+        "type": "heading",
+        "text": "Архитектура алгоритма: порт с расчётом на ещё не используемое будущее",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Всё вышесказанное описывает *сегодняшний* генератор. Но реализуемый им интерфейс был написан не для сегодняшнего генератора, а для того, который я ещё не создал."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Orchestration[\"covers.ts / work-covers.ts\\n(orchestration, knows the database)\"] --> Port[\"ImageGenerator\\n(the port - async, fallible)\"]\n    Factory[\"getImageGenerator()\\nenv-var factory\"] --> Port\n    Port --> Procedural[\"ProceduralImageGenerator\\n(today's only real adapter)\"]\n    Port --> Failing[\"FailingImageGenerator\\n(exercises the failure path in tests)\"]\n    Port -.-> Future[\"a future AI-backed adapter\\n(network calls, timeouts, retries)\"]"
+        }
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "typescript",
+          "code": "export interface ImageGenerator {\n    generate(brief: CoverBrief, signal?: AbortSignal): Promise<GeneratedImage>;\n}\n\nexport class ProceduralImageGenerator implements ImageGenerator {\n    async generate(brief: CoverBrief): Promise<GeneratedImage> {\n        // ...builds the SVG described above and returns it as bytes.\n        // Never actually awaits a network call, never actually throws.\n    }\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Прочитайте интерфейс ещё раз: он объявлен как `async`, а его `Promise` может завершиться отклонением. Единственная существующая рабочая реализация не ожидает ничего существенного и не выбрасывает исключений. Если рассматривать её изолированно, сделать `generate` обычной синхронной функцией было бы вполне обоснованно. Я этого не сделал по причине прямого и осознанного применения **принципа подстановки Лисков** в той трактовке, которая действительно важна для проектирования API: контракт должен определяться наиболее требовательной будущей реализацией, а не самой простой существующей. Адаптер, обращающийся по сети к API генерации изображений, *обязан* быть асинхронным и *должен* допускать возможность ошибки. Поэтому такой интерфейс с первого дня означает, что позднее добавление подобного адаптера станет новой реализацией существующего контракта, а не несовместимым изменением для всего кода, вызывающего старый интерфейс. Простая реализация без труда удовлетворяет более требовательному контракту. Обратное неверно, а последующая смена направления потребовала бы изменить каждое место вызова этого интерфейса именно тогда, когда я предпочёл бы заниматься самим новым адаптером."
+      },
+      {
+        "type": "paragraph",
+        "text": "Класс `FailingImageGenerator`, который только отклоняет запросы, существует исключительно для того, чтобы ветку обработки ошибок в слое оркестрации можно было проверить на реальной реализации в тесте уже *сегодня*, не дожидаясь появления будущего адаптера. Это небольшое осознанное вложение в возможность доказать работоспособность отдельного участка системы ещё до того, как будет создана система, которой он действительно понадобится."
+      },
+      {
+        "type": "heading",
+        "text": "Перенос идеи: тот же алгоритм, пятнадцать строк, любой язык",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Ничто из описанного выше не привязано к TypeScript, Node или этой кодовой базе. Последовательность ван дер Корпута представляет собой арифметику над целыми числами, а PRNG представляет собой арифметику над 32-битными целыми числами. Вот весь алгоритм назначения тонов на Python:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "python",
+          "code": "MASK32 = 0xFFFFFFFF\n\ndef van_der_corput(ordinal: int) -> float:\n    bits = ordinal\n    result = 0.0\n    denominator = 1\n    while bits > 0:\n        denominator *= 2\n        result += (bits & 1) / denominator\n        bits >>= 1\n    return result\n\ndef hue_for_ordinal(ordinal: int) -> float:\n    return van_der_corput(ordinal) * 360.0"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "А вот детерминированный PRNG. Здесь есть одна особенность, которую необходимо назвать явно, поскольку именно такие расхождения незаметно порождают ошибки вида «в основном работает, только числа немного неверные»: **целые числа Python имеют произвольную точность, а целые числа JavaScript нет.** Операции JavaScript `|0`, `>>> 0` и `Math.imul` выполняют одну задачу: принудительно возвращают промежуточный результат к 32-битной беззнаковой арифметике с переполнением по модулю. В Python такого неявного поведения нет. В каждом месте, где оригинал делает это незаметно, перенесённая версия должна делать это явно, с помощью `& MASK32`:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "python",
+          "code": "def cyrb128(value: str) -> tuple[int, int, int, int]:\n    h1, h2, h3, h4 = 1779033703, 3144134277, 1013904242, 2773480762\n    for ch in value:\n        k = ord(ch)\n        h1 = (h2 ^ ((h1 ^ k) * 597399067)) & MASK32\n        h2 = (h3 ^ ((h2 ^ k) * 2869860233)) & MASK32\n        h3 = (h4 ^ ((h3 ^ k) * 951274213)) & MASK32\n        h4 = (h1 ^ ((h4 ^ k) * 2716044179)) & MASK32\n    h1 = ((h3 ^ (h1 >> 18)) * 597399067) & MASK32\n    h2 = ((h4 ^ (h2 >> 22)) * 2869860233) & MASK32\n    h3 = ((h1 ^ (h3 >> 17)) * 951274213) & MASK32\n    h4 = ((h2 ^ (h4 >> 19)) * 2716044179) & MASK32\n    h1 ^= h2 ^ h3 ^ h4\n    h2 ^= h1; h3 ^= h1; h4 ^= h1\n    return h1 & MASK32, h2 & MASK32, h3 & MASK32, h4 & MASK32\n\ndef sfc32(seed_a: int, seed_b: int, seed_c: int, seed_d: int):\n    state = [seed_a & MASK32, seed_b & MASK32, seed_c & MASK32, seed_d & MASK32]\n\n    def next_value() -> float:\n        a, b, c, d = state\n        t = (a + b) & MASK32\n        a = (b ^ (b >> 9)) & MASK32\n        b = (c + ((c << 3) & MASK32)) & MASK32\n        c = (((c << 21) & MASK32) | (c >> 11)) & MASK32\n        d = (d + 1) & MASK32\n        t = (t + d) & MASK32\n        c = (c + t) & MASK32\n        state[0], state[1], state[2], state[3] = a, b, c, d\n        return t / 4294967296\n\n    return next_value\n\ndef prng_from_seed(seed: str):\n    a, b, c, d = cyrb128(seed)\n    return sfc32(a, b, c, d)"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "В Go ситуация противоположная, и уже ради этого сопоставления его стоит рассмотреть сразу после Python: тип `uint32` в Go действительно имеет фиксированную разрядность, поэтому при переполнении переход по модулю происходит *автоматически*, а маскирование, которое в Python приходилось прописывать вручную, просто исчезает. Перенос становится почти буквальным:"
+      },
+      {
+        "type": "code",
+        "data": {
+          "filename": "",
+          "language": "go",
+          "code": "func vanDerCorput(ordinal uint32) float64 {\n    bits := ordinal\n    result := 0.0\n    denominator := 1.0\n    for bits > 0 {\n        denominator *= 2\n        result += float64(bits&1) / denominator\n        bits >>= 1\n    }\n    return result\n}\n\nfunc hueForOrdinal(ordinal uint32) float64 {\n    return vanDerCorput(ordinal) * 360.0\n}\n\nfunc cyrb128(value string) (uint32, uint32, uint32, uint32) {\n    h1, h2, h3, h4 := uint32(1779033703), uint32(3144134277), uint32(1013904242), uint32(2773480762)\n    for _, r := range value {\n        k := uint32(r)\n        h1 = h2 ^ ((h1 ^ k) * 597399067)\n        h2 = h3 ^ ((h2 ^ k) * 2869860233)\n        h3 = h4 ^ ((h3 ^ k) * 951274213)\n        h4 = h1 ^ ((h4 ^ k) * 2716044179)\n    }\n    h1 = (h3 ^ (h1 >> 18)) * 597399067\n    h2 = (h4 ^ (h2 >> 22)) * 2869860233\n    h3 = (h1 ^ (h3 >> 17)) * 951274213\n    h4 = (h2 ^ (h4 >> 19)) * 2716044179\n    h1 ^= h2 ^ h3 ^ h4\n    h2 ^= h1\n    h3 ^= h1\n    h4 ^= h1\n    return h1, h2, h3, h4\n}\n\ntype Prng func() float64\n\nfunc sfc32(a, b, c, d uint32) Prng {\n    return func() float64 {\n        t := a + b\n        a = b ^ (b >> 9)\n        b = c + (c << 3)\n        c = (c << 21) | (c >> 11)\n        d = d + 1\n        t = t + d\n        c = c + t\n        return float64(t) / 4294967296\n    }\n}"
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Этот вывод применим и за пределами двух рассмотренных языков: любой язык с настоящим беззнаковым целочисленным типом фиксированной разрядности (`uint32_t` в C, `u32` в Rust, соответствующим образом маскированный `Int` в Swift, `int`, обрабатываемый как беззнаковый с помощью `>>>` в Java) позволяет перенести алгоритм почти без затруднений. Любой язык, где целые числа по умолчанию имеют произвольную точность, требует ровно одной дисциплинированной привычки: применять маску после каждой операции, для которой JavaScript делал это неявно через `|0`/`>>> 0`/`Math.imul`. Очевидный пример такого языка: Python, но сюда же относятся Ruby и наивный перенос на библиотеку длинной арифметики в любой экосистеме. Пропустите одну операцию, и ошибки выполнения не будет: вместо неё вы незаметно получите *другой, но правдоподобный* поток чисел. Это самый опасный вид ошибки, ради предотвращения которой и существует вся система."
+      },
+      {
+        "type": "heading",
+        "text": "Что я сказал бы каждому, кто создаёт такую систему самостоятельно",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Если из всей этой работы стоит вынести одну мысль, она состоит в следующем: **процедурная генерация не является эвфемизмом для случайности; это противоположность случайности, которой придан вид спонтанности.** Каждое видимое решение в сгенерированной обложке, будь то тон, количество кривых, высота волны или слово, используемое для маски из букв, восходит либо к реальному содержанию (заголовку, анонсу, категории), либо к детерминированной функции от стабильного идентификатора (slug). В существенном смысле ничто не оставлено на волю случая: вероятность невоспроизводимого результата по построению равна ровно нулю, и в этом весь смысл."
+      },
+      {
+        "type": "paragraph",
+        "text": "Три ограничения из самого первого раздела, детерминизм, фирменный стиль и отсутствие затрат при чтении, не являются списком, заполненным задним числом для оправдания уже построенной системы. Они были спецификацией в том строгом смысле, который придаёт этому слову Роберт Мартин: не перечнем пожеланий, а совокупностью сил, которые вместе оставляют удивительно мало возможностей для иного устройства системы. Хеш-функция не удовлетворяет второму ограничению. `Math.random` не удовлетворяет первому. Отрисовка SVG на клиенте не удовлетворяет третьему. После исключения вариантов остаётся, по существу, описанная выше система. Усвоить этот принцип полезнее, чем получить саму систему."
+      },
+      {
+        "type": "paragraph",
+        "text": "*Полная реализация находится в* `backend/src/media/`* в* *[репозитории этого сайта](https://github.com/yuriisurzhykov/Portfolio-Website)**:* `cover-hue.ts`*,* `cover-seed.ts`*,* `cover-composition.ts`*, а также соседние файлы, если требуется изучить больше кода, чем позволяет удобно привести статья.*"
+      }
+    ]
+  }
+}

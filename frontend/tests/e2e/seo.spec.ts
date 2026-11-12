@@ -129,6 +129,8 @@ test("an UNTRANSLATED Russian page canonicalizes to the English URL and declares
         nodes.map((node) => node.getAttribute("hreflang")),
     );
     expect(hreflangs).not.toContain("ru");
+    expect(await head(page, 'meta[property="og:locale"]', "content")).toBe("en_US");
+    expect(await page.locator('meta[property="og:locale:alternate"]').count()).toBe(0);
 });
 
 test("a renamed post's OLD address permanently redirects instead of 404ing", async ({ request }) => {
@@ -264,4 +266,30 @@ test("every page in the sitemap keeps its meta description within a search-snipp
         expect(description, pathname).toBeTruthy();
         expect((description ?? "").length, pathname).toBeLessThanOrEqual(160);
     }
+});
+
+
+test("translated URLs have separate sitemap entries with reciprocal language links", async ({ request }) => {
+    const xml = await (await request.get("/sitemap.xml")).text();
+    const entries = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((match) => match[1]);
+    const ru = entries.find((entry) => entry.includes("<loc>") && /<loc>[^<]+\/ru\/journal\/flowbus<\/loc>/.test(entry));
+    expect(ru).toBeDefined();
+    expect(ru).toContain('hreflang="en"');
+    expect(ru).toContain('hreflang="ru"');
+    expect(ru).toContain('hreflang="x-default"');
+});
+
+test("Russian structured data uses the page's canonical for article identity and breadcrumbs", async ({ page }) => {
+    await page.goto(RU_POST);
+    const canonical = await head(page, 'link[rel="canonical"]', "href");
+    const raw = await page.locator('script[type="application/ld+json"]').first().textContent();
+    const nodes = JSON.parse(raw ?? "")["@graph"];
+    const post = nodes.find((node: Record<string, unknown>) => node["@type"] === "BlogPosting");
+    const breadcrumbs = nodes.find((node: Record<string, unknown>) => node["@type"] === "BreadcrumbList");
+    expect(post.mainEntityOfPage).toBe(canonical);
+    expect(post["@id"]).toBe(`${canonical}#post`);
+    expect(post.inLanguage).toBe("ru");
+    expect(breadcrumbs.itemListElement.map((item: { item: string }) => new URL(item.item).pathname)).toEqual([
+        "/ru", "/ru/journal", "/ru/journal/flowbus",
+    ]);
 });

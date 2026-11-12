@@ -47,8 +47,9 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             return NOINDEX;
         }
 
-        const title = pickFor(item.title, locale);
-        const description = clampMetaDescription(pickFor(item.summary, locale));
+        const contentLocale = item.availableLocales.includes(locale) ? locale : "en";
+        const title = pickFor(item.title, contentLocale);
+        const description = clampMetaDescription(pickFor(item.summary, contentLocale));
         const path = alternatesFor(`/work/${ slug }`, locale, item.availableLocales).canonical;
 
         return {
@@ -60,13 +61,13 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 title,
                 description,
                 siteName: config.name,
-                locale: ogLocale(locale),
-                alternateLocale: ogAlternateLocales(locale),
+                locale: ogLocale(contentLocale),
+                alternateLocale: ogAlternateLocales(contentLocale, item.availableLocales),
                 url: `${ SITE_URL }${ path }`,
                 publishedTime: item.publishedAt ?? undefined,
                 modifiedTime: item.contentUpdatedAt ?? item.publishedAt ?? undefined,
                 // See `journal/[slug]/page.tsx`'s comment on the same line.
-                images: [{ url: workOgImagePath(slug, locale), width: 1200, height: 630, alt: title }],
+                images: [{ url: workOgImagePath(slug, contentLocale), width: 1200, height: 630, alt: title }],
             },
             twitter: { card: TWITTER_CARD, title, description },
         };
@@ -123,9 +124,9 @@ export default async function Page({ params, searchParams }: PageProps) {
                                 sameAs: [config.social.github, config.social.linkedin],
                             }),
                             breadcrumbJsonLd(SITE_URL, [
-                                { name: config.name, path: "/" },
-                                { name: "Work", path: "/work" },
-                                { name: pickFor(item.title, locale), path: `/work/${ item.slug }` },
+                                { name: config.name, path: localizedPath("/", locale) },
+                                { name: locale === "ru" ? "Проекты" : "Work", path: localizedPath("/work", locale) },
+                                { name: pickFor(item.title, locale), path: alternatesFor(`/work/${ item.slug }`, locale, item.availableLocales).canonical },
                             ]),
                         ]),
                     )}

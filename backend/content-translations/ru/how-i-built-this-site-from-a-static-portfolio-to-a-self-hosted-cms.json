@@ -1,0 +1,446 @@
+{
+  "kind": "work",
+  "slug": "how-i-built-this-site-from-a-static-portfolio-to-a-self-hosted-cms",
+  "source": {
+    "title": "How I Built This Site: From a Static Portfolio to a Self-Hosted CMS",
+    "summary": "This site didn't start as a CMS - it started as a static Vite SPA with a hand-built design system. Here's the full story of how it turned into a database-backed Next.js app with its own admin panel, bilingual content, and a VPS I provisioned myself.",
+    "startedLabel": "Nov, 2025",
+    "shippedLabel": "July, 2026",
+    "role": "Sole Engineer",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Why I Even Started This",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "I'm an Android engineer by trade — Jetpack Compose, architecture, performance, the whole stack. But every time I wanted to talk about the projects I'd built or the decisions behind them, I was stuck writing README files that nobody but me would ever read. I wanted a real portfolio. Not a template, not a page builder — something I actually engineered, the same way I'd approach a production Android app: a real design system, real tests, a real deployment pipeline, and eventually, a real backend I own end to end."
+      },
+      {
+        "type": "paragraph",
+        "text": "This post is the story of how that turned into a much bigger project than \"a personal website.\""
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 1: A Design System Before a Single Page",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The first version wasn't a page. It was a design system: a Vite + React SPA, organized with Feature-Sliced Design (`shared` / `widgets` / `feature` / `pages`), with its own design tokens, a light/dark theme engine, and an i18n layer that supported English and Russian from day one. I built `Button`, `Card`, `Tag`, `IconBadge`, `ProgressBar`, and a syntax-highlighted `CodeBlock` from scratch, with a small internal playground to see every variant side by side before it ever touched a real page."
+      },
+      {
+        "type": "paragraph",
+        "text": "It felt slow at the time — building buttons before building a \"site\" — but it meant every page after that was assembly, not invention."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 2: Making It Trustworthy: Visual Regression and CI/CD",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A design system is only as good as your ability to *know* when you've broken it. So before I let myself add more pages, I wired up Playwright visual regression tests across both themes and multiple viewports, plus a GitHub Actions workflow that could accept new baseline screenshots on demand (`/update-snapshots`) instead of me eyeballing diffs by hand. Alongside that came the actual deploy pipeline — a script that shipped the built SPA straight to a VPS I manage myself."
+      },
+      {
+        "type": "paragraph",
+        "text": "At this point the site looked finished. It wasn't."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 3: The Itch That Wouldn't Go Away",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Here's the problem: this was a **static** site. Every time I wanted to publish a journal entry or add a project, I had to edit a TypeScript file, open a PR, wait for CI, and redeploy. For a \"journal,\" that's backwards — the entire point of a journal is that you can write in it without a release cycle."
+      },
+      {
+        "type": "paragraph",
+        "text": "So I decided to do the harder thing: migrate the whole site to a real, database-backed CMS, with an admin panel only I could reach, while keeping the live site online the entire time."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 4: Choosing Next.js and a Single-Process Architecture",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "I moved the project to Next.js (App Router), built fresh in a new `web/` directory so the old SPA (`frontend/`) kept deploying untouched until the cutover was actually proven."
+      },
+      {
+        "type": "paragraph",
+        "text": "The architectural question that mattered most: where does the backend live? I didn't want a second service to operate, monitor, and pay for — just for a personal site. So `backend/` became an npm **workspace package** (`@portfolio/backend`), imported directly into the Next.js process. One process, one systemd service, no network hop between \"frontend\" and \"backend\" for a single request."
+      },
+      {
+        "type": "paragraph",
+        "text": "Getting there wasn't clean on the first try. My first attempt was a plain `tsconfig.json` path alias into `../backend/src` — and Turbopack (the default bundler in Next.js) flatly refused to resolve an import outside the project directory. I could have downgraded to Webpack to make it work, but that meant giving up Turbopack everywhere, forever, for one workaround. npm workspaces turned out to be the real fix: once `backend/` had its own `package.json`, `npm install` symlinked it into `node_modules`, and Turbopack treated it like any other library."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 5: Auth, and a Content Model That Doesn't Need Migrations for New Ideas",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "With Prisma and PostgreSQL in place, I modeled `User`/`Session` for JWT-based auth (access + refresh tokens, hashed refresh tokens so a leaked DB dump alone can't impersonate a session), and then the actual content: `Post` and `Work`, each pointing at a `Document`, which is just an ordered list of `Block`s."
+      },
+      {
+        "type": "paragraph",
+        "text": "The key decision was making `Block.type` a plain string, not a database enum, with the actual shape of each block type (`paragraph`, `heading`, `quote`, `note`, `image`, `code`, `approachList`) validated by Zod at the application layer instead of the schema layer. It means I can invent a new block type without ever writing a migration for it — the database doesn't need to know what a \"note\" callout is, only the code that renders one does."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 6: Building the Admin Panel, Then Actually Using It",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Phase 4 was the payoff: `/admin`, protected by the same JWT session, with full CRUD for posts and projects — talking to `/api/admin/*` through a plain `fetch()`, deliberately not Next.js Server Actions, so the exact same contract could someday serve a mobile client, not just this browser session."
+      },
+      {
+        "type": "paragraph",
+        "text": "Then I actually tried to use it, and immediately found six things that only show up when a real human writes a real post: the slug should generate itself from the title, the publish date shouldn't be a form field at all (it's set automatically, once), status needed a color indicator instead of a plain dropdown, and read time should be estimated from the content instead of typed in by hand. Every one of those became a small, deliberate fix rather than something I \"meant to get to later.\""
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 7: Going Bilingual, and Swapping in a Real WYSIWYG Editor",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Two harder problems came next: real localized routing (`/ru/...`, resolved on the server via a `proxy.ts` rewrite, not just a client-side language switch after the page already loaded), and a proper rich-text editor instead of a form with \"select block type → fill in fields.\""
+      },
+      {
+        "type": "paragraph",
+        "text": "The editor became [BlockNote](https://www.blocknotejs.org/) — a real slash-menu, real bold/italic/link toolbar, drag-to-reorder blocks. It also gave me two of the more interesting bugs in this whole project:"
+      },
+      {
+        "type": "paragraph",
+        "text": "BlockNote's underlying schema (ProseMirror) doesn't allow the same name to be both a *block* and an inline *style* — and my custom `code` block collided with the built-in inline `code` mark, crashing the editor with an error message that pointed nowhere near the real cause. Renaming the internal block type fixed it in five minutes, once I found it."
+      },
+      {
+        "type": "paragraph",
+        "text": "BlockNote needs a real browser `document` to construct itself, but Next.js renders client components on the server first for the initial HTML. The fix wasn't `next/dynamic` — it was a small \"mounted gate\": render a placeholder until a `useEffect` (which never runs during SSR) flips a flag, then mount the real editor. The BlockNote-dependent code becomes *unreachable* on the server, not just conditionally skipped."
+      },
+      {
+        "type": "paragraph",
+        "text": "Translations became their own dedicated screens (`/admin/journal/[slug]/translate`) rather than a second language field bolted onto the English form — a translator (future me, or an actual translator) works on a focused page, not a form twice the size."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 8: Even the Landing Page Comes From the Database Now",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "By the time content management worked, the landing page itself — hero copy, contact section, tech stack, principles — was still hardcoded TypeScript. So Phase 5 moved all of it into a generic `SiteContent` table (one row per section, validated per-key), with one small form per section in the admin. Now literally every visible string on this site can change without a deploy."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 9: The Bugs That Taught Me the Most",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A few issues only surfaced once things were actually running in production-like conditions, and they're worth remembering:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**Next.js silently pre-baked database content into static HTML at build time.** The whole point of the migration was publishing without a redeploy — and the very first build after wiring up the database quietly generated static pages, defeating the purpose. The fix was one line per route: `export const dynamic = \"force-dynamic\"`."
+      },
+      {
+        "type": "paragraph",
+        "text": "**The Edge runtime doesn't run Node.js.** My route-protection middleware imported the backend package's main entry point, which pulled in `node:crypto` transitively through the auth/session code — completely unsupported in Next.js's Edge runtime. The fix was a second, deliberately narrow entry point (`@portfolio/backend/edge`) exporting only what the Edge runtime actually needs."
+      },
+      {
+        "type": "paragraph",
+        "text": "`instanceof`** lies across bundle boundaries.** A custom error class thrown in one Turbopack bundle (Server Components) wasn't recognized by `instanceof` in another bundle (Route Handlers) — same file on disk, different compiled module identity. The fix was checking `error.name` instead, which survives the boundary."
+      },
+      {
+        "type": "paragraph",
+        "text": "**Two copies of React in one workspace.** A dependency pinned an exact React version without a caret, so `web/`'s own `node_modules` diverged from the version everything else in the workspace resolved to — `render()` mounted one React instance while my components called hooks on another, producing a null hook dispatcher. `overrides` in the root `package.json` pinned one version for the whole tree."
+      },
+      {
+        "type": "paragraph",
+        "text": "None of these were exotic. They were the ordinary cost of moving fast on real infrastructure — and every one of them is now a comment in the code explaining exactly why the fix looks the way it does, so it never gets \"cleaned up\" back into the bug."
+      },
+      {
+        "type": "heading",
+        "text": "Chapter 10: Taking It Live for Real",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The last piece was making this whole thing operable, not just functional. I provisioned the VPS myself, step by step, verifying every invariant by hand over SSH before turning it into a script: PostgreSQL bound to `localhost` only, a dedicated non-superuser database role, a no-shell system account running the app (separate from my own SSH/deploy account, so a compromised app process can't reach root), a hardened systemd unit, nginx rate-limiting on the login endpoint, and nightly encrypted database backups shipped off-box."
+      },
+      {
+        "type": "paragraph",
+        "text": "Everything ships through GitHub Actions now: a push to `master` deploys to a staging domain first, a version tag ships to production. Even the deploy pipeline itself got hardened along the way — the first version relied on wildcard `sudo` rules for the deploy user, which got replaced with a single root-owned wrapper script that only performs the exact actions a deploy needs, nothing broader."
+      },
+      {
+        "type": "heading",
+        "text": "Where This Leaves Things",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The post you're reading right now is proof the whole thing works: I wrote it in the admin panel I built, in the block editor I debugged, saved to the database I provisioned, on the VPS I hardened myself — without touching a single line of code or waiting for a deploy."
+      },
+      {
+        "type": "paragraph",
+        "text": "It didn't start as a CMS. It became one because a static portfolio couldn't keep up with wanting to actually write. That's usually how the interesting projects go."
+      },
+      {
+        "type": "paragraph",
+        "text": ""
+      }
+    ]
+  },
+  "translation": {
+    "title": "Как я создал этот сайт: от статического портфолио до CMS на собственном сервере",
+    "summary": "Этот сайт начинался не с CMS, а со статического SPA на Vite с собственной дизайн-системой. Здесь я рассказываю, как он превратился в приложение Next.js с базой данных, собственной панелью администрирования, контентом на двух языках и VPS, который я настроил самостоятельно.",
+    "startedLabel": "Нояб. 2025",
+    "shippedLabel": "Июль 2026",
+    "role": "Единственный разработчик",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Зачем я вообще за это взялся",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "По профессии я Android-инженер: Jetpack Compose, архитектура, производительность, весь стек. Но каждый раз, когда я хотел рассказать о созданных проектах или принятых при их разработке решениях, всё сводилось к README-файлам, которые никто, кроме меня, не прочитал бы. Мне требовалось полноценное портфолио. Не шаблон и не конструктор страниц, а система, которую я действительно спроектировал и разработал, с тем же подходом, что и к промышленному Android-приложению: собственная дизайн-система, полноценные тесты, настоящий конвейер развёртывания и со временем серверная часть, за которую я отвечаю целиком."
+      },
+      {
+        "type": "paragraph",
+        "text": "В этой статье я рассказываю, как из этого получился проект, значительно превышающий масштаб «личного сайта»."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 1: дизайн-система раньше первой страницы",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Первой версией была не страница. Это была дизайн-система: SPA на Vite + React, организованное по Feature-Sliced Design (`shared` / `widgets` / `feature` / `pages`), с собственными дизайн-токенами, механизмом светлой и тёмной тем и слоем i18n, который с первого дня поддерживал английский и русский языки. Я с нуля создал `Button`, `Card`, `Tag`, `IconBadge`, `ProgressBar` и `CodeBlock` с подсветкой синтаксиса, а также небольшую внутреннюю площадку для просмотра всех вариантов рядом ещё до того, как они попадут на реальную страницу."
+      },
+      {
+        "type": "paragraph",
+        "text": "Тогда это казалось медленным процессом: создавать кнопки до создания «сайта». Но благодаря этому каждую следующую страницу я собирал из готовых частей, а не изобретал заново."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 2: обеспечение надёжности: визуальные регрессионные тесты и CI/CD",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Ценность дизайн-системы ограничена вашей способностью *знать*, когда вы её сломали. Поэтому, прежде чем добавлять новые страницы, я подключил визуальные регрессионные тесты Playwright для обеих тем и нескольких размеров области просмотра, а также процесс GitHub Actions, который по команде принимал новые эталонные скриншоты (`/update-snapshots`), избавляя меня от ручного визуального сравнения изменений. Одновременно появился и сам конвейер развёртывания: скрипт, который отправлял собранное SPA прямо на VPS, администрируемый мной."
+      },
+      {
+        "type": "paragraph",
+        "text": "К этому моменту сайт выглядел законченным. Но работа ещё не была завершена."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 3: проблема, которая не давала покоя",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Проблема состояла в том, что сайт был **статическим**. Каждый раз, когда я хотел опубликовать запись в журнале или добавить проект, приходилось редактировать TypeScript-файл, открывать PR, ждать CI и заново развёртывать сайт. Для «журнала» это обратная логика: весь его смысл в том, чтобы писать без прохождения цикла выпуска."
+      },
+      {
+        "type": "paragraph",
+        "text": "Поэтому я выбрал более сложную задачу: перенести весь сайт на полноценную CMS с базой данных и панелью администрирования, доступной только мне, сохраняя работающий сайт онлайн в течение всего перехода."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 4: выбор Next.js и однопроцессной архитектуры",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Я перенёс проект на Next.js (App Router), создав новую реализацию в каталоге `web/`, чтобы прежнее SPA (`frontend/`) продолжало развёртываться без изменений, пока готовность к переключению не будет подтверждена."
+      },
+      {
+        "type": "paragraph",
+        "text": "Главный архитектурный вопрос заключался в том, где разместить серверную часть. Ради личного сайта я не хотел эксплуатировать, контролировать и оплачивать второй сервис. Поэтому `backend/` стал **пакетом рабочего пространства** npm (`@portfolio/backend`), который импортируется прямо в процесс Next.js. Один процесс, один сервис systemd, ни одного сетевого перехода между «клиентской» и «серверной» частями при обработке запроса."
+      },
+      {
+        "type": "paragraph",
+        "text": "С первого раза получить такую схему не удалось. Сначала я попробовал обычный псевдоним пути в `tsconfig.json`, указывающий на `../backend/src`, но Turbopack, стандартный сборщик Next.js, категорически отказывался разрешать импорт за пределами каталога проекта. Я мог перейти на Webpack, чтобы обойти ограничение, но это означало бы полностью и навсегда отказаться от Turbopack ради одного обходного решения. Настоящим исправлением оказались рабочие пространства npm: как только у `backend/` появился собственный `package.json`, команда `npm install` создала символическую ссылку на него в `node_modules`, и Turbopack стал воспринимать его как обычную библиотеку."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 5: аутентификация и модель контента, которой не нужны миграции для новых идей",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Подключив Prisma и PostgreSQL, я создал модели `User`/`Session` для аутентификации на основе JWT: токены доступа и обновления, причём токены обновления хранятся в виде хешей, чтобы одной утечки дампа базы было недостаточно для подмены сеанса. Затем я описал сам контент: `Post` и `Work`, каждый из которых ссылается на `Document`, представляющий собой упорядоченный список блоков `Block`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ключевым решением было сделать `Block.type` обычной строкой, а не перечислением в базе данных, и проверять фактическую структуру каждого типа блока (`paragraph`, `heading`, `quote`, `note`, `image`, `code`, `approachList`) через Zod на уровне приложения, а не схемы базы. Это позволяет вводить новый тип блока без единой миграции: базе не нужно знать, что представляет собой выделенная вставка «примечание», это должен знать только код, который её отображает."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 6: создание панели администрирования и её реальное использование",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Результатом четвёртого этапа стал раздел `/admin`, защищённый тем же сеансом JWT, с полным набором CRUD-операций для записей и проектов. Он обращался к `/api/admin/*` через обычный `fetch()`. Я сознательно выбрал этот подход вместо Next.js Server Actions, чтобы тот же контракт в будущем мог обслуживать и мобильный клиент, а не только текущий сеанс браузера."
+      },
+      {
+        "type": "paragraph",
+        "text": "Затем я попробовал действительно им пользоваться и сразу обнаружил шесть проблем, которые проявляются только тогда, когда реальный человек пишет настоящую статью: slug должен автоматически формироваться из заголовка, дата публикации вообще не должна быть полем формы, поскольку она устанавливается автоматически и только один раз, статусу нужен цветовой индикатор вместо обычного выпадающего списка, а время чтения следует оценивать по содержимому, а не вводить вручную. Каждый из этих пунктов стал небольшим целенаправленным исправлением, а не задачей, которую я «собирался когда-нибудь сделать»."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 7: два языка и переход на полноценный WYSIWYG-редактор",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Следом возникли две более сложные задачи: полноценная локализованная маршрутизация (`/ru/...`, разрешаемая на сервере через перезапись URL в `proxy.ts`, а не простое переключение языка на клиенте после загрузки страницы) и настоящий редактор форматированного текста вместо формы «выбрать тип блока → заполнить поля»."
+      },
+      {
+        "type": "paragraph",
+        "text": "Редактором стал [BlockNote](https://www.blocknotejs.org/): полноценное меню по клавише «/», панель полужирного и курсивного начертания и ссылок, изменение порядка блоков перетаскиванием. Он также принёс две наиболее интересные ошибки во всём проекте:"
+      },
+      {
+        "type": "paragraph",
+        "text": "Схема, лежащая в основе BlockNote (ProseMirror), не допускает, чтобы одно и то же имя одновременно обозначало *блок* и встроенный *стиль*. Мой собственный блок `code` конфликтовал со встроенной строчной меткой `code`, из-за чего редактор аварийно завершал работу с сообщением об ошибке, совершенно не указывавшим на истинную причину. Когда я её нашёл, переименование внутреннего типа блока заняло пять минут."
+      },
+      {
+        "type": "paragraph",
+        "text": "Для создания экземпляра BlockNote нужен настоящий браузерный `document`, но Next.js сначала отображает клиентские компоненты на сервере, формируя исходный HTML. Исправлением стал не `next/dynamic`, а небольшой барьер монтирования: показывать заглушку, пока `useEffect`, который никогда не выполняется при SSR, не переключит флаг, и лишь затем монтировать настоящий редактор. Код, зависящий от BlockNote, становится *недостижимым* на сервере, а не просто пропускается по условию."
+      },
+      {
+        "type": "paragraph",
+        "text": "Для переводов появились отдельные специализированные экраны (`/admin/journal/[slug]/translate`), а не дополнительное поле второго языка в английской форме. Переводчик, будь то я сам в будущем или профессиональный переводчик, работает на целевой странице, а не в форме удвоенного размера."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 8: теперь даже главная страница берётся из базы данных",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Когда управление контентом уже заработало, сама главная страница, включая текст первого экрана, раздел контактов, технологический стек и принципы, всё ещё оставалась жёстко заданной в TypeScript. Поэтому на пятом этапе я перенёс всё это в универсальную таблицу `SiteContent`: по одной строке на раздел, с валидацией по ключу, и добавил в панели администрирования небольшую форму для каждого раздела. Теперь буквально любую видимую строку на сайте можно изменить без развёртывания."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 9: ошибки, которые научили меня больше всего",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Несколько проблем проявились только после запуска в условиях, близких к промышленной эксплуатации. Их стоит запомнить:"
+      },
+      {
+        "type": "paragraph",
+        "text": "**Next.js незаметно встраивал содержимое базы данных в статический HTML во время сборки.** Весь смысл миграции состоял в публикации без повторного развёртывания, но уже первая сборка после подключения базы молча создала статические страницы и лишила переход смысла. Исправление состояло в одной строке на маршрут: `export const dynamic = \"force-dynamic\"`."
+      },
+      {
+        "type": "paragraph",
+        "text": "**Среда выполнения Edge не поддерживает Node.js.** Промежуточный обработчик защиты маршрутов импортировал главную точку входа серверного пакета, которая транзитивно подтягивала `node:crypto` через код аутентификации и сеансов. Эта возможность совершенно не поддерживается средой выполнения Edge в Next.js. Исправлением стала вторая, намеренно узкая точка входа (`@portfolio/backend/edge`), экспортирующая только то, что действительно требуется среде Edge."
+      },
+      {
+        "type": "paragraph",
+        "text": "`instanceof`** даёт неверный результат на границах сборок.** Пользовательский класс ошибки, выброшенный в одной сборке Turbopack (Server Components), не распознавался оператором `instanceof` в другой сборке (Route Handlers): файл на диске один и тот же, но идентичность скомпилированного модуля различается. Исправлением стала проверка `error.name`, которая сохраняет корректность при пересечении этой границы."
+      },
+      {
+        "type": "paragraph",
+        "text": "**Две копии React в одном рабочем пространстве.** Одна зависимость фиксировала точную версию React без символа каретки, поэтому в `web/` собственный каталог `node_modules` содержал версию, отличавшуюся от той, которую получало всё остальное рабочее пространство. Вызов `render()` монтировал один экземпляр React, а компоненты вызывали хуки другого, в результате чего диспетчер хуков оказывался равен null. Секция `overrides` в корневом `package.json` закрепила одну версию для всего дерева зависимостей."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ни одна из этих проблем не была экзотической. Это обычная цена быстрой работы с реальной инфраструктурой. Теперь каждое исправление сопровождается комментарием в коде с точным объяснением того, почему оно выглядит именно так, чтобы очередная «чистка» кода не вернула ошибку."
+      },
+      {
+        "type": "heading",
+        "text": "Глава 10: полноценный запуск в эксплуатацию",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Последним шагом было обеспечить не только работоспособность всей системы, но и возможность её эксплуатации. Я самостоятельно и последовательно настроил VPS, вручную проверяя каждый инвариант по SSH перед тем, как переносить его в скрипт: PostgreSQL слушает только `localhost`, для базы создана отдельная роль без прав суперпользователя, приложение запускается от системной учётной записи без оболочки, отделённой от моей учётной записи для SSH и развёртывания, чтобы скомпрометированный процесс приложения не мог получить доступ к root. Также я создал защищённый юнит systemd, ограничение частоты запросов nginx для точки входа аутентификации и ночное зашифрованное резервное копирование базы данных с отправкой на другой сервер."
+      },
+      {
+        "type": "paragraph",
+        "text": "Теперь всё доставляется через GitHub Actions: отправка изменений в `master` сначала развёртывает их на тестовом домене, а тег версии запускает выпуск в промышленную среду. По ходу работы был усилен и сам конвейер развёртывания: в первой версии для учётной записи развёртывания использовались правила `sudo` с подстановочными символами. Их заменил единственный скрипт-обёртка, принадлежащий root, который выполняет только конкретные действия, необходимые для развёртывания, без более широких полномочий."
+      },
+      {
+        "type": "heading",
+        "text": "К чему это привело",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Статья, которую вы сейчас читаете, подтверждает работу всей системы: я написал её в созданной мной панели администрирования, в блочном редакторе, который сам отладил, сохранил в настроенную мной базу данных на VPS, который я самостоятельно защитил. При этом мне не потребовалось менять ни одной строки кода или ждать развёртывания."
+      },
+      {
+        "type": "paragraph",
+        "text": "Сайт начинался не с CMS. Он стал ею потому, что статическое портфолио перестало соответствовать желанию действительно писать. Обычно так и развиваются интересные проекты."
+      },
+      {
+        "type": "paragraph",
+        "text": ""
+      }
+    ]
+  }
+}

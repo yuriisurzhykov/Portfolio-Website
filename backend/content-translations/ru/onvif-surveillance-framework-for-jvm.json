@@ -1,0 +1,66 @@
+{
+  "kind": "work",
+  "slug": "onvif-surveillance-framework-for-jvm",
+  "source": {
+    "title": "ONVIF surveillance framework for Android/JVM",
+    "summary": "Working on JVM/Android streaming library for ONVIF-compliant IP cameras, built to run four simultaneous Wi-Fi camera feeds on the same constrained hardware that runs the rest of the platform. It's the project I'm actively building right now.",
+    "startedLabel": "May, 2026",
+    "shippedLabel": "Q4 2026",
+    "role": "Architect and Lead Engineer",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "**Overview**",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A streaming library for ONVIF-compliant IP cameras, built to run four simultaneous Wi-Fi camera feeds on the same constrained hardware that runs the rest of the platform. It's the project I'm actively building right now."
+      },
+      {
+        "type": "heading",
+        "text": "**The challenge**",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Cheap, embedded hardware has no room for four decoded video streams running at once, and ONVIF cameras vary wildly in supported stream profiles, codecs, and discovery behavior. The library needs to find cameras reliably (WS-Discovery and IP scanning), onboard and poll them, negotiate a stream profile that fits the device's budget, and still leave room for two-way audio."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Фреймворк ONVIF-видеонаблюдения для Android/JVM",
+    "summary": "Я разрабатываю библиотеку потоковой передачи для JVM/Android и IP-камер, совместимых с ONVIF. Она рассчитана на одновременную работу с четырьмя видеопотоками от Wi-Fi-камер на том же оборудовании с ограниченными ресурсами, на котором работает остальная платформа. Это проект, над которым я активно работаю сейчас.",
+    "startedLabel": "Май 2026",
+    "shippedLabel": "IV кв. 2026",
+    "role": "Архитектор и ведущий инженер",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "**Обзор**",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Библиотека потоковой передачи для IP-камер, совместимых с ONVIF, рассчитанная на одновременную работу с четырьмя видеопотоками от Wi-Fi-камер на том же оборудовании с ограниченными ресурсами, на котором работает остальная платформа. Это проект, над которым я активно работаю сейчас."
+      },
+      {
+        "type": "heading",
+        "text": "**Задача**",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Недорогое встраиваемое оборудование не располагает ресурсами для одновременного декодирования четырёх видеопотоков, а камеры ONVIF существенно различаются по поддерживаемым профилям потоковой передачи, кодекам и поведению при обнаружении. Библиотека должна надёжно находить камеры с помощью WS-Discovery и сканирования IP-адресов, выполнять их первоначальное подключение и периодический опрос, согласовывать профиль потока с учётом доступных ресурсов устройства и при этом оставлять ресурсы для двусторонней передачи звука."
+      }
+    ]
+  }
+}
