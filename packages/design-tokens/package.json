@@ -16,9 +16,9 @@
     "test:mutation": "stryker run"
   },
   "devDependencies": {
-    "@types/estree": "^1.0.8",
-    "@types/node": "^26",
-    "eslint": "^10.8.0",
+    "@types/estree": "^1.0.10",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }
