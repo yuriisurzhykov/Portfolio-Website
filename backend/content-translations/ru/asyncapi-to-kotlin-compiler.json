@@ -1,0 +1,216 @@
+{
+  "kind": "work",
+  "slug": "asyncapi-to-kotlin-compiler",
+  "source": {
+    "title": "AsyncAPI to Kotlin Compiler",
+    "summary": "AsyncAPI describes the messages a service publishes and subscribes to; this compiler turns that specification directly into working Kotlin - the MQTT broker client, project specification files, message models, and topic wiring generated automatically, with HiveMQ used for the generated client at runtime.",
+    "startedLabel": "Dec 2023",
+    "shippedLabel": "Feb 2024",
+    "role": "Tooling Engineer (API code-generation infrastructure)",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "One Spec, Three Languages: Building a Multi-Target API Code Generator",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A home-security and automation platform I worked on had a physical panel, a cloud-connected backend, and eventually a new Android application, all talking to each other and to a remote monitoring provider over MQTT. The wire protocol was substantial - dozens of channels, messages with nested and recursive schemas, several composite types - and it lived in three separate codebases: an embedded C++ client, a Python service, and, once the Android app started, a Kotlin library sharing none of the first two's code. Every protocol change meant editing serialization logic by hand in three languages and trusting that all three edits agreed on the same edge cases. I designed and built a code generator that removed that trust requirement entirely: one AsyncAPI YAML specification as the single source of truth, and a pipeline that turns it into working, type-safe source for all three targets."
+      },
+      {
+        "type": "heading",
+        "text": "Three Layers, One Direction of Dependency",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The generator split into three separate packages, each with one job and a dependency arrow pointing only one way: an orchestration layer resolved file paths and environment settings and drove the overall run; a protocol layer read channel, server, and operation definitions and decided what client classes to emit; and a schema layer turned JSON Schema definitions into actual data classes. The schema layer had zero knowledge of MQTT, channels, or operations - it only knew about types, properties, and validation rules, which meant it served the protocol layer's message payloads unmodified and would serve any other JSON-Schema-shaped data just as well. Both upper layers rendered through the same open-source templating engine (Jinja2); the Python code decided *what* to render, never *how* to format the output text, which kept every target language's syntax quirks contained to templates instead of leaking into the generator's own control flow."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Orchestration[\"Orchestration layer\\npaths, env vars, run driver\"] -->|\"depends on\"| Protocol[\"Protocol layer\\nchannels, servers, operations\"]\n    Protocol -->|\"depends on\"| Schema[\"Schema layer\\nJSON Schema to data classes\"]"
+        }
+      },
+      {
+        "type": "heading",
+        "text": "Getting Reference Resolution Wrong Once",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "AsyncAPI specs reference each other constantly - a message reused across five channels, a schema pulled from a shared file everyone imports. Two kinds of references needed resolving: a local one pointing inside the same YAML file, and a global one starting with a file name and pointing into a different file entirely. My first resolver implementation always looked a reference up against whichever file was currently being processed, which is correct right up until a schema loaded from *inside* an externally-referenced document contains its own local reference - at that point \"currently being processed\" and \"the document that actually owns this reference\" are two different files, and the lookup fails with an error that gives no hint a file was ever swapped underneath it. The fix was to thread an explicit root-document argument through every recursive resolution call, so a schema always knows which document actually defines it, independent of which file happened to trigger the recursion that reached it. It's a small code change and a real change in mental model: reference resolution has to be a property of the reference's own document, not of whatever call stack got there first."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Ref[\"$ref encountered while resolving a schema\"] --> Kind{\"Local or global reference?\"}\n    Kind -->|\"local\"| Local[\"Look up inside the same YAML file\"]\n    Kind -->|\"global\"| Global[\"Look up inside the file named in the ref\"]\n    Local --> Context{\"Which file is the 'current' one?\"}\n    Global --> Context\n    Context -->|\"first version:\\nwhichever file is being processed right now\"| Bug[\"Bug: a local ref nested inside an externally-referenced document resolves against the wrong file\"]\n    Context -->|\"fix:\\nexplicit root-document argument\"| Fixed[\"Correct: a reference always resolves against the document that actually defines it\"]"
+        }
+      },
+      {
+        "type": "heading",
+        "text": "Wrapping Data Instead of Reaching Into It",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A parsed YAML spec is just nested dictionaries — accurate, but useless for template code that needs to ask real questions like \"what includes does this C++ struct need\" or \"what's the default retry behavior for this operation.\" I wrapped every schema and every spec node in a small adapter layer that exposed typed, purpose-built methods -  a method that lists a schema's property names, one that computes required includes for a given target language, one that reads an operation's defaults - instead of templates reaching into a dictionary and hoping a key exists. This is also where the composite schema types lived: a schema requiring exactly one of several shapes generated a small visitor-style interface for reading back whichever branch was actually populated; a schema requiring all of several shapes generated a constructor that demanded every one of them up front; a schema allowing any subset generated optional properties throughout. Three genuinely different runtime contracts, expressed through the same wrapper interface, so the templates rendering them stayed symmetric instead of special-casing each type inline."
+      },
+      {
+        "type": "heading",
+        "text": "Generated Builders, Extended Through Configuration, Not Code",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Every non-primitive schema also got a generated builder class, a simplified setter for primitive-typed properties, a plain setter for object-typed ones,\\\n and a `build()` that throws if a required property was never set. Making that generation configuration-driven mattered more than making it merely\\\n correct: a small, separate JSON file (introduced specifically so I'd stop hardcoding build wiring into templates) controlled per-module dependencies,\\\n plugin lists, language versions, and which generated modules depended on which others — all editable without touching a line of the generator's own\\\n code. That's the open/closed principle applied to the generator itself: a new module, a bumped dependency, or a changed language-version target became a JSON edit, not a change to generation logic."
+      },
+      {
+        "type": "heading",
+        "text": "The Build-System Wiring Problem",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Generating correct classes was only half the job they also had to compile as a real, linkable multi-module project. Every run regenerated each module's own build file, plus one root settings file listing every module as a subproject; the generator rewrote that file from the actual on-disk folder structure every time, specifically so an added or removed module could never silently drift out of sync with what the build tool believed existed. The host Android app then pulled in the whole generated library with a single `includeBuild()` and linked individual modules the ordinary way, by name - which meant a module rename on the generator side was a breaking change on the app side unless both were updated together, a sharp edge I documented explicitly rather than leave for someone to rediscover as a mysterious sync failure."
+      },
+      {
+        "type": "heading",
+        "text": "A Narrow, Predictable Failure Surface",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Generated code deliberately threw only a handful of exception types - `IllegalArgumentException` for a primitive value that failed validation,\\\n `IllegalStateException` for a builder left incomplete or a composite type left uninitialized, and two custom exceptions for malformed input at parse\\\n time — and every generated class documented exactly which of those it could throw and why. That narrowness was a deliberate constraint, not an accident of whatever got implemented first: a generator producing thousands of classes across three languages is only maintainable if failures are boring and enumerable, not a different ad hoc exception per schema author's mood. I also kept a running catalog of the resolution bugs real enough to bite more than once, including the root-document bug above, with root cause and fix recorded together, so the next engineer hitting the same symptom didn't have to re-derive it from scratch."
+      },
+      {
+        "type": "paragraph",
+        "text": "The result: a single specification edit propagated, unattended, into a compiling C++ client, a running Python service, and a Kotlin module ready to link into the Android app - and the entire MQTT client and data layer of that Android app was never hand-written at all."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Компилятор AsyncAPI в Kotlin",
+    "summary": "AsyncAPI описывает сообщения, которые сервис публикует и на которые подписывается; этот компилятор преобразует спецификацию непосредственно в работающий код на Kotlin: клиент MQTT-брокера, файлы спецификации проекта, модели сообщений и привязки к топикам генерируются автоматически, а во время выполнения сгенерированный клиент использует HiveMQ.",
+    "startedLabel": "Дек. 2023",
+    "shippedLabel": "Фев. 2024",
+    "role": "Инженер по инструментам разработки (инфраструктура генерации кода API)",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Одна спецификация, три языка: создание генератора кода API для нескольких целевых платформ",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Платформа домашней безопасности и автоматизации, над которой я работал, включала физическую панель, серверную часть с подключением к облаку и впоследствии новое Android-приложение. Все они обменивались данными друг с другом и с удалённым центром мониторинга по MQTT. Протокол обмена был объёмным: десятки каналов, сообщения с вложенными и рекурсивными схемами, несколько составных типов. При этом он существовал в трёх отдельных кодовых базах: встраиваемом клиенте на C++, сервисе на Python и, с началом разработки Android-приложения, библиотеке на Kotlin, которая не использовала код первых двух. Каждое изменение протокола требовало вручную править логику сериализации на трёх языках и полагаться на то, что все три реализации одинаково обрабатывают граничные случаи. Я спроектировал и разработал генератор кода, который полностью устранил необходимость в таком доверии: одна YAML-спецификация AsyncAPI стала единым источником истины, а конвейер преобразовывал её в работающий типобезопасный код для всех трёх целевых языков."
+      },
+      {
+        "type": "heading",
+        "text": "Три слоя и одно направление зависимостей",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Генератор состоял из трёх отдельных пакетов, каждый из которых решал одну задачу, а зависимости были направлены только в одну сторону. Слой оркестрации определял пути к файлам и настройки окружения и управлял всем запуском; слой протокола считывал определения каналов, серверов и операций и определял, какие клиентские классы нужно сгенерировать; слой схем преобразовывал определения JSON Schema в классы данных. Слой схем ничего не знал об MQTT, каналах или операциях: он работал только с типами, свойствами и правилами валидации. Поэтому он без изменений обслуживал полезную нагрузку сообщений слоя протокола и с таким же успехом мог обрабатывать любые другие данные, описанные JSON Schema. Оба верхних слоя формировали результат через один и тот же открытый шаблонизатор Jinja2; код на Python решал, *что* формировать, но никогда не определял, *как* форматировать выходной текст. Благодаря этому синтаксические особенности каждого целевого языка оставались в шаблонах и не проникали в управляющую логику самого генератора."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart LR\n    Orchestration[\"Orchestration layer\\npaths, env vars, run driver\"] -->|\"depends on\"| Protocol[\"Protocol layer\\nchannels, servers, operations\"]\n    Protocol -->|\"depends on\"| Schema[\"Schema layer\\nJSON Schema to data classes\"]"
+        }
+      },
+      {
+        "type": "heading",
+        "text": "Ошибка разрешения ссылок, которую я допустил один раз",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Спецификации AsyncAPI постоянно ссылаются друг на друга: одно сообщение повторно используется в пяти каналах, а схема берётся из общего файла, который импортируют все. Требовалось разрешать два вида ссылок: локальные, указывающие внутрь того же YAML-файла, и глобальные, которые начинаются с имени файла и указывают в совершенно другой файл. Моя первая реализация механизма разрешения ссылок всегда искала ссылку в том файле, который обрабатывался в текущий момент. Это работало до тех пор, пока схема, загруженная *изнутри* документа, на который ведёт внешняя ссылка, не содержала собственную локальную ссылку. В этот момент «обрабатываемый сейчас файл» и «документ, которому на самом деле принадлежит ссылка» оказывались двумя разными файлами, и поиск завершался ошибкой, никак не указывавшей на незаметную смену файлового контекста. Исправление состояло в явной передаче аргумента с корневым документом через каждый рекурсивный вызов разрешения ссылок. Теперь схема всегда знала, какой документ на самом деле её определяет, независимо от того, какой файл запустил приведшую к ней рекурсию. Это небольшое изменение кода, но существенное изменение модели мышления: разрешение ссылки должно определяться документом, которому она принадлежит, а не стеком вызовов, который первым до неё добрался."
+      },
+      {
+        "type": "diagram",
+        "text": null,
+        "data": {
+          "engine": "mermaid",
+          "source": "flowchart TD\n    Ref[\"$ref encountered while resolving a schema\"] --> Kind{\"Local or global reference?\"}\n    Kind -->|\"local\"| Local[\"Look up inside the same YAML file\"]\n    Kind -->|\"global\"| Global[\"Look up inside the file named in the ref\"]\n    Local --> Context{\"Which file is the 'current' one?\"}\n    Global --> Context\n    Context -->|\"first version:\\nwhichever file is being processed right now\"| Bug[\"Bug: a local ref nested inside an externally-referenced document resolves against the wrong file\"]\n    Context -->|\"fix:\\nexplicit root-document argument\"| Fixed[\"Correct: a reference always resolves against the document that actually defines it\"]"
+        }
+      },
+      {
+        "type": "heading",
+        "text": "Обёртки над данными вместо прямого доступа к ним",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Разобранная YAML-спецификация представляет собой лишь вложенные словари. Они точно передают данные, но бесполезны для шаблонов, которым нужно отвечать на содержательные вопросы: «какие подключения нужны этой структуре C++» или «каково стандартное поведение повторных попыток для этой операции». Я обернул каждую схему и каждый узел спецификации небольшим слоем адаптеров с типизированными методами для конкретных задач: один метод перечислял имена свойств схемы, другой вычислял необходимые подключения для заданного целевого языка, третий считывал параметры операции по умолчанию. Шаблонам больше не приходилось обращаться к словарю в надежде, что нужный ключ существует. Здесь же находилась логика составных типов схем: схема, требующая ровно одну из нескольких структур, порождала небольшой интерфейс в стиле паттерна «Посетитель» для чтения фактически заполненной ветви; схема, требующая все перечисленные структуры, порождала конструктор, который сразу требовал каждую из них; схема, допускающая любое подмножество, делала все соответствующие свойства необязательными. Это три разных контракта времени выполнения, выраженные через один интерфейс обёртки. Поэтому формирующие их шаблоны сохраняли симметричную структуру и не обрабатывали каждый тип как отдельный частный случай прямо в тексте шаблона."
+      },
+      {
+        "type": "heading",
+        "text": "Сгенерированные строители, расширяемые через конфигурацию, а не код",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Для каждой непримитивной схемы также генерировался класс строителя: упрощённый сеттер для свойств примитивных типов, обычный сеттер для свойств объектных типов,\\\n и метод `build()`, выбрасывающий исключение, если обязательное свойство не было задано. Возможность управлять генерацией через конфигурацию была важнее, чем просто\\\n её корректность: небольшой отдельный JSON-файл, введённый специально для того, чтобы я перестал жёстко прописывать настройки сборки в шаблонах, управлял зависимостями модулей,\\\n списками плагинов, версиями языков и зависимостями сгенерированных модулей друг от друга. Всё это можно было менять, не затрагивая ни одной строки собственного\\\n кода генератора. Это применение принципа открытости/закрытости к самому генератору: новый модуль, обновление зависимости или изменение целевой версии языка становились правкой JSON, а не изменением логики генерации."
+      },
+      {
+        "type": "heading",
+        "text": "Задача интеграции с системой сборки",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Генерация корректных классов была лишь половиной работы: они также должны были компилироваться как полноценный многомодульный проект, пригодный для подключения. При каждом запуске заново создавались файлы сборки всех модулей и один корневой файл настроек, перечислявший каждый модуль как подпроект. Генератор каждый раз переписывал этот файл по фактической структуре каталогов на диске, чтобы добавленный или удалённый модуль не мог незаметно разойтись с представлением инструмента сборки о составе проекта. Затем основное Android-приложение подключало всю сгенерированную библиотеку одним вызовом `includeBuild()` и связывало отдельные модули обычным способом, по имени. Поэтому переименование модуля на стороне генератора нарушало совместимость на стороне приложения, если обе стороны не обновлялись одновременно. Я явно описал эту особенность в документации, чтобы следующему разработчику не пришлось заново обнаруживать её по загадочной ошибке синхронизации."
+      },
+      {
+        "type": "heading",
+        "text": "Узкий и предсказуемый набор ошибок",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Сгенерированный код намеренно выбрасывал лишь несколько типов исключений: `IllegalArgumentException` для примитивного значения, не прошедшего валидацию,\\\n `IllegalStateException` для незавершённого строителя или неинициализированного составного типа и два собственных исключения для некорректных входных данных на этапе разбора.\\\n Каждый сгенерированный класс документировал, какие именно из этих исключений он может выбросить и почему. Такая узость набора была сознательным ограничением, а не случайным следствием того, что реализовали первым: генератор, создающий тысячи классов на трёх языках, можно сопровождать только тогда, когда ошибки однообразны и поддаются перечислению, а не зависят от произвольного исключения, выбранного автором каждой схемы. Я также вёл каталог ошибок разрешения ссылок, которые действительно могли проявляться неоднократно, включая описанную выше ошибку корневого документа. Для каждой рядом фиксировались первопричина и исправление, чтобы следующему инженеру с тем же симптомом не пришлось выводить всё заново."
+      },
+      {
+        "type": "paragraph",
+        "text": "Результат: одна правка спецификации без ручного вмешательства превращалась в компилируемый клиент на C++, работающий сервис на Python и модуль Kotlin, готовый к подключению в Android-приложение. При этом весь MQTT-клиент и слой данных этого Android-приложения вообще не писались вручную."
+      }
+    ]
+  }
+}

@@ -73,8 +73,9 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             return NOINDEX;
         }
 
-        const title = pickFor(post.title, locale);
-        const description = clampMetaDescription(pickFor(post.excerpt, locale));
+        const contentLocale = post.availableLocales.includes(locale) ? locale : "en";
+        const title = pickFor(post.title, contentLocale);
+        const description = clampMetaDescription(pickFor(post.excerpt, contentLocale));
         const path = alternatesFor(`/journal/${ slug }`, locale, post.availableLocales).canonical;
 
         return {
@@ -86,8 +87,8 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 title,
                 description,
                 siteName: config.name,
-                locale: ogLocale(locale),
-                alternateLocale: ogAlternateLocales(locale),
+                locale: ogLocale(contentLocale),
+                alternateLocale: ogAlternateLocales(contentLocale, post.availableLocales),
                 url: `${ SITE_URL }${ path }`,
                 publishedTime: post.publishedAt ?? undefined,
                 modifiedTime: post.contentUpdatedAt ?? post.publishedAt ?? undefined,
@@ -96,7 +97,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 // see `shared/lib/seo/og/paths.ts` for the build output
                 // that forced that correction. `twitter:image` is derived
                 // from this automatically.
-                images: [{ url: postOgImagePath(slug, locale), width: 1200, height: 630, alt: title }],
+                images: [{ url: postOgImagePath(slug, contentLocale), width: 1200, height: 630, alt: title }],
             },
             twitter: { card: TWITTER_CARD, title, description },
         };
@@ -162,18 +163,18 @@ export default async function Page({ params, searchParams }: PageProps) {
                             }),
                             blogPostingJsonLd({
                                 siteUrl: SITE_URL,
-                                path: `/journal/${ post.slug }`,
+                                path: alternatesFor(`/journal/${ post.slug }`, locale, post.availableLocales).canonical,
                                 headline: pickFor(post.title, locale),
                                 description: pickFor(post.excerpt, locale),
                                 image: `${ SITE_URL }${ postOgImagePath(post.slug, locale) }`,
                                 datePublished: post.publishedAt,
                                 dateModified: post.contentUpdatedAt ?? post.publishedAt,
-                                inLanguage: locale,
+                                inLanguage: post.availableLocales.includes(locale) ? locale : "en",
                             }),
                             breadcrumbJsonLd(SITE_URL, [
-                                { name: config.name, path: "/" },
-                                { name: "Journal", path: "/journal" },
-                                { name: pickFor(post.title, locale), path: `/journal/${ post.slug }` },
+                                { name: config.name, path: localizedPath("/", locale) },
+                                { name: locale === "ru" ? "Журнал" : "Journal", path: localizedPath("/journal", locale) },
+                                { name: pickFor(post.title, locale), path: alternatesFor(`/journal/${ post.slug }`, locale, post.availableLocales).canonical },
                             ]),
                         ]),
                     )}

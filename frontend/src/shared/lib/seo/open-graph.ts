@@ -13,8 +13,8 @@ export function ogLocale(locale: ContentLocale): string {
 }
 
 /** Every OG locale except the one being rendered — what `openGraph.alternateLocale` expects. */
-export function ogAlternateLocales(locale: ContentLocale): string[] {
-    return (Object.keys(OG_LOCALES) as ContentLocale[])
+export function ogAlternateLocales(locale: ContentLocale, availableLocales: ContentLocale[] = Object.keys(OG_LOCALES) as ContentLocale[]): string[] {
+    return availableLocales
         .filter((candidate) => candidate !== locale)
         .map((candidate) => OG_LOCALES[candidate]);
 }

@@ -1,0 +1,252 @@
+{
+  "kind": "work",
+  "slug": "aosp-platform-customizations",
+  "source": {
+    "title": "AOSP Platform Customizations",
+    "summary": "A set of AOSP/SystemUI-level platform tweaks: suppressing system notifications on demand, hiding camera/mic privacy indicators on Android 13, log rotation for the on-device MQTT broker via a custom init.rc process, and kiosk-mode setup.",
+    "startedLabel": "Sep 2023",
+    "shippedLabel": "-",
+    "role": "Platform Engineer",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Customizing Android 13 for a Dedicated Security Panel",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "At Nice N.A. I worked on an Android panel built on a Rockchip RK3568 with 2 GB of RAM and a 1024×800 display - a controlled device, not a general-purpose phone: one platform-signed application, installed under `/system/priv-app`, was the entire user interface and talked to an MQTT broker, cameras, and audio through middleware. What follows is what I actually did at the boundary between the application and the platform, without rounding it up to \"built the whole BSP.\""
+      },
+      {
+        "type": "heading",
+        "text": "Camera and Microphone Indicators",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Android 13 shows a system privacy indicator on any camera or microphone access. On a panel where the camera runs in a permanent, controlled mode rather than being accessed occasionally, that system indicator didn't match the product's UX - but hiding camera usage outright wasn't an option, only replacing the indicator with the product's own. I found the `config.xml` inside `SystemUI` in the AOSP build tree that controls this behavior, configured the dedicated Android 13 build so the stock indicators no longer appeared, and wired the result to the panel's own UI indicator instead."
+      },
+      {
+        "type": "heading",
+        "text": "Notification Listener: from a Regular App Grant to an AOSP Default",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The panel needed to read and act on incoming system notifications. The first attempt declared `NotificationListenerService` the way any regular third-party app does - a manifest entry backed by `BIND_NOTIFICATION_LISTENER_SERVICE`. That path relies on the user opening Settings → Notification Access and enabling it by hand, which doesn't exist as an option on a kiosk device with no user ever touching system settings - so `onListenerConnected()` never fired, not because of a platform bug, but because nothing had ever granted the service access in the first place."
+      },
+      {
+        "type": "paragraph",
+        "text": "The actual fix lived in the AOSP build tree: `config_defaultListenerAccessPackages`, a colon-separated list in `config.xml` (overridable per product/device overlay) that the system reads once at boot/upgrade and uses to grant notification listener access automatically — writing straight into `Settings.Secure.ENABLED_NOTIFICATION_LISTENERS` — without any user interaction. Adding the panel's package there made the Listener connect and receive notifications correctly, and it's what the product still runs on."
+      },
+      {
+        "type": "heading",
+        "text": "Device Owner and DND for System-Level Notification Suppression",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "A separate, unrelated problem needed a separate mechanism: some system UI notifications - for example, the Wi-Fi stack reporting a wrong password or a dropped connection — had to be suppressed outright, since the product ran its own managed connection flow and didn't want the stock Android message competing with it. For that, I used the panel's Device Owner status to control the interruption filter, including `INTERRUPTION_FILTER_NONE`, which is a policy-level tool for blocking system notifications rather than something tied to the Notification Listener path above."
+      },
+      {
+        "type": "heading",
+        "text": "Priv-App Deployment and Gradle Tooling",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The main application wasn't installed as an ordinary APK - it shipped as part of the system image: platform signing, `/system/priv-app` placement, privileged permissions, `privapp-permissions` configuration. I removed the repeated manual steps that came with that by writing a Gradle plugin that automated deploying the system app and handling its artifacts, turning platform deployment into a normal part of the developer workflow instead of a separate manual procedure."
+      },
+      {
+        "type": "heading",
+        "text": "An `init.rc` Service for Mosquitto's Logs",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The Mosquitto MQTT broker wrote logs that needed rotating independently of the UI application's own lifecycle. I added an `init.rc` service that starts at boot and rotates Mosquitto's logs - small in scope, but a real change to the AOSP init layer rather than something bolted onto the app."
+      },
+      {
+        "type": "heading",
+        "text": "Hidden Wi-Fi API",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The product needed to control SoftAP functionality that's only exposed through a hidden API (`SoftApConfiguration` and related interfaces) - the public SDK didn't cover it. I compiled the app against a vendor-provided stub JAR (`compileOnly`), while the real implementation lived separately, on the device itself. It worked, but it was a forced approach, and I named its risks explicitly at the time: tight coupling to one specific vendor build, no isolation around the privileged calls, a real possibility of the stub and the runtime API drifting apart, and no easy way to test any of it off the target hardware."
+      },
+      {
+        "type": "heading",
+        "text": "Platform Bridge",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Calling hidden APIs and holding privileged permissions directly from a large UI application was blurring the line between the app and the platform. I designed an alternative: a small system service, built alongside the BSP, with legitimate access to the hidden and privileged APIs, exposing a narrow AIDL contract that the main application would call instead - with caller verification through Binder identity, an allowlist of clients, input validation, and rate limiting. The design was worked out and partially prototyped, but it never reached production: the vendor went with the cheaper stub-JAR path instead, because there wasn't engineering time to build the service properly."
+      },
+      {
+        "type": "heading",
+        "text": "Diagnostics Below the Application Layer",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Twice, understanding a problem meant going past the ordinary Android SDK entirely."
+      },
+      {
+        "type": "paragraph",
+        "text": "**First:** a process running from `/system/priv-app` couldn't load native libraries from `/vendor/lib`. I traced the cause to a linker-namespace and Treble partition-boundary restriction — being a privileged/system app doesn't by itself grant access to every vendor library."
+      },
+      {
+        "type": "paragraph",
+        "text": "**Second:** playing several RTSP streams at once through multiple ExoPlayer instances made the device degrade and reboot, which looked to a user like a system crash. I looked past the app's own heap, compared memory use between the application and the system's media processes, and found the real cost sitting in `android.hardware.media.c2@1.1-service` and the `C2.RK.avc.decoder` hardware decoder. A `dma-buf_dump` showed roughly 400 MB of DMA-BUF allocations for six 1080p streams; checking `/proc/<pid>/fd` and `/proc/<pid>/maps` for the Codec2 process and comparing hardware and software decoder behavior showed the software decoder freeing memory once a player instance was destroyed, while Rockchip's hardware decoder didn't - not after  an ordinary `release()`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Neither case turned into a platform patch - both stayed diagnostics: I found and localized the cause without touching linker configuration, SELinux  policy, or the Codec2/MPP implementation itself. That's the honest boundary  of this work: real changes at the application-platform edge — SystemUI,  init, priv-app deployment, Device Owner, hidden APIs — plus diagnostics  reaching into Binder, HAL, vendor, and native memory, but not writing a HAL,  kernel, or framework component from scratch."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Изменения платформы AOSP",
+    "summary": "Набор изменений платформы на уровне AOSP/SystemUI: подавление системных уведомлений по требованию, скрытие индикаторов конфиденциальности камеры и микрофона в Android 13, ротация журналов MQTT-брокера на устройстве с помощью отдельного процесса init.rc и настройка режима киоска.",
+    "startedLabel": "сент. 2023",
+    "shippedLabel": "-",
+    "role": "Инженер платформы",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Адаптация Android 13 для специализированной охранной панели",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "В Nice N.A. я работал над Android-панелью на базе Rockchip RK3568 с 2 ГБ оперативной памяти и дисплеем 1024×800. Это было управляемое специализированное устройство, а не телефон общего назначения: одно приложение, подписанное ключом платформы и установленное в `/system/priv-app`, составляло весь пользовательский интерфейс и взаимодействовало с MQTT-брокером, камерами и аудиосистемой через промежуточный слой. Далее описано то, что я действительно делал на границе приложения и платформы, без обобщения до «разработал весь BSP»."
+      },
+      {
+        "type": "heading",
+        "text": "Индикаторы камеры и микрофона",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Android 13 показывает системный индикатор конфиденциальности при любом обращении к камере или микрофону. На панели, где камера работает постоянно в управляемом режиме, а не используется время от времени, этот системный индикатор не соответствовал пользовательскому опыту продукта. Однако полностью скрывать использование камеры было недопустимо: можно было лишь заменить индикатор собственным индикатором продукта. Я нашёл `config.xml` внутри `SystemUI` в дереве сборки AOSP, который управляет этим поведением, настроил специализированную сборку Android 13 так, чтобы стандартные индикаторы больше не появлялись, и вместо них подключил собственный индикатор в интерфейсе панели."
+      },
+      {
+        "type": "heading",
+        "text": "Прослушивание уведомлений: от разрешения обычному приложению к настройке AOSP по умолчанию",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Панели требовалось читать входящие системные уведомления и реагировать на них. В первой попытке `NotificationListenerService` был объявлен так же, как в любом обычном стороннем приложении: записью в манифесте с разрешением `BIND_NOTIFICATION_LISTENER_SERVICE`. Этот подход предполагает, что пользователь откроет «Настройки» → «Доступ к уведомлениям» и включит доступ вручную. На устройстве в режиме киоска, где пользователь вообще не обращается к системным настройкам, такой возможности нет. Поэтому `onListenerConnected()` ни разу не вызывался: причиной была не ошибка платформы, а то, что службе изначально никто не предоставил доступ."
+      },
+      {
+        "type": "paragraph",
+        "text": "Фактическое исправление находилось в дереве сборки AOSP: `config_defaultListenerAccessPackages`, список пакетов в `config.xml`, разделённых двоеточиями, который можно переопределить через оверлей продукта или устройства. Система однократно читает его при загрузке или обновлении и использует для автоматического предоставления доступа к прослушиванию уведомлений, записывая значение непосредственно в `Settings.Secure.ENABLED_NOTIFICATION_LISTENERS`, без участия пользователя. После добавления туда пакета панели слушатель стал корректно подключаться и получать уведомления. Продукт до сих пор работает с этой настройкой."
+      },
+      {
+        "type": "heading",
+        "text": "Device Owner и DND для подавления уведомлений на системном уровне",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Другая, независимая задача требовала отдельного механизма: некоторые уведомления системного интерфейса, например сообщения стека Wi-Fi о неверном пароле или разрыве соединения, нужно было полностью подавлять, поскольку в продукте был собственный управляемый сценарий подключения и стандартное сообщение Android не должно было с ним конкурировать. Для этого я использовал статус Device Owner у панели, чтобы управлять фильтром прерываний, включая `INTERRUPTION_FILTER_NONE`. Это инструмент блокировки системных уведомлений на уровне политики, не связанный с описанным выше механизмом прослушивания уведомлений."
+      },
+      {
+        "type": "heading",
+        "text": "Развёртывание Priv-App и инструменты Gradle",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Основное приложение не устанавливалось как обычный APK, а поставлялось в составе системного образа: подпись ключом платформы, размещение в `/system/priv-app`, привилегированные разрешения, конфигурация `privapp-permissions`. Я устранил повторяющиеся ручные действия, написав плагин Gradle для автоматического развёртывания системного приложения и работы с его артефактами. Благодаря этому развёртывание на платформе стало обычной частью рабочего процесса разработчика, а не отдельной ручной процедурой."
+      },
+      {
+        "type": "heading",
+        "text": "Служба `init.rc` для журналов Mosquitto",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "MQTT-брокер Mosquitto записывал журналы, ротацию которых нужно было выполнять независимо от жизненного цикла приложения с пользовательским интерфейсом. Я добавил службу `init.rc`, которая запускается при загрузке и выполняет ротацию журналов Mosquitto. Это было небольшое по объёму, но реальное изменение слоя init в AOSP, а не дополнительный механизм внутри приложения."
+      },
+      {
+        "type": "heading",
+        "text": "Скрытый API Wi-Fi",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Продукту требовалось управлять функциями SoftAP, доступными только через скрытый API (`SoftApConfiguration` и связанные интерфейсы), поскольку публичный SDK их не предоставлял. Я компилировал приложение с предоставленным производителем JAR-файлом с заглушками (`compileOnly`), тогда как настоящая реализация находилась отдельно, на самом устройстве. Это работало, но подход был вынужденным, и я сразу явно обозначил его риски: жёсткая привязка к конкретной сборке производителя, отсутствие изоляции привилегированных вызовов, реальная возможность расхождения заглушек и API во время выполнения и отсутствие простого способа тестировать всё это вне целевого оборудования."
+      },
+      {
+        "type": "heading",
+        "text": "Мост к платформе",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Прямые вызовы скрытых API и использование привилегированных разрешений из крупного приложения с пользовательским интерфейсом размывали границу между приложением и платформой. Я спроектировал альтернативу: небольшую системную службу, собираемую вместе с BSP, с правомерным доступом к скрытым и привилегированным API. Она должна была предоставлять узкий контракт AIDL, к которому обращалось бы основное приложение, с проверкой вызывающей стороны через идентификационные данные Binder, списком разрешённых клиентов, проверкой входных данных и ограничением частоты запросов. Проект был проработан и частично реализован в виде прототипа, но до промышленного использования не дошёл: производитель выбрал более дешёвый вариант с JAR-заглушками, поскольку инженерного времени на полноценную реализацию службы не было."
+      },
+      {
+        "type": "heading",
+        "text": "Диагностика ниже уровня приложения",
+        "data": {
+          "level": 2
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "В двух случаях для понимания проблемы потребовалось полностью выйти за пределы обычного Android SDK."
+      },
+      {
+        "type": "paragraph",
+        "text": "**Первый случай:** процесс, запущенный из `/system/priv-app`, не мог загрузить нативные библиотеки из `/vendor/lib`. Я установил, что причина заключалась в ограничениях пространств имён компоновщика и границ разделов Treble: статус привилегированного или системного приложения сам по себе не даёт доступа к любой библиотеке производителя."
+      },
+      {
+        "type": "paragraph",
+        "text": "**Второй случай:** одновременное воспроизведение нескольких RTSP-потоков через несколько экземпляров ExoPlayer приводило к ухудшению работы устройства и перезагрузке, что для пользователя выглядело как сбой системы. Я вышел за пределы кучи самого приложения, сравнил использование памяти приложением и системными медиапроцессами и обнаружил, что основные затраты приходились на `android.hardware.media.c2@1.1-service` и аппаратный декодер `C2.RK.avc.decoder`. Вывод `dma-buf_dump` показал примерно 400 МБ выделений DMA-BUF для шести потоков 1080p. Проверка `/proc/<pid>/fd` и `/proc/<pid>/maps` процесса Codec2 и сравнение поведения аппаратного и программного декодеров показали, что программный декодер освобождал память после уничтожения экземпляра проигрывателя, а аппаратный декодер Rockchip этого не делал, по крайней мере после обычного `release()`."
+      },
+      {
+        "type": "paragraph",
+        "text": "Ни один из этих случаев не привёл к патчу платформы: оба остались диагностикой. Я нашёл и локализовал причины, не меняя конфигурацию компоновщика, политику SELinux или саму реализацию Codec2/MPP. Такова точная граница этой работы: реальные изменения на стыке приложения и платформы, включая SystemUI, init, развёртывание priv-app, Device Owner и скрытые API, а также диагностика, затрагивавшая Binder, HAL, компоненты производителя и нативную память, но без написания HAL, ядра или компонента фреймворка с нуля."
+      }
+    ]
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "kind": "post",
+  "slug": "the-bug-turned-out-to-be-completely-different-from-where-it-was-expected",
+  "source": {
+    "title": "The bug turned out to be completely different from where it was expected",
+    "category": "Video Streaming",
+    "excerpt": "At work, it can happen that a problem might look exactly like what you're used to. But it might turn out to be much deeper and more interesting. This is exactly the problem we encountered with RTSP video streaming in our environment.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "What was the initial concern?",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "In our application, we must have ONVIF cameras supported, and we decided to use the ExoPlayer to not write a ton of code for the RTSP layer. But there was a problem: when several video streams were opened concurrently, the application eventually failed. From the user's perspective, it seems like a crash, but looking at the logs, I've seen nothing. Really nothing was in there. Then, after going deeper, it appeared that our app caught an ANR error, and then the whole OS crashed because it ran out of available memory. The Java and native application memory did not fully explain the increase. And it was the first time I learned about DMA-BUF memory, and using the tools, I found out that DMA BUF actually increased significantly while the streams were active and did not return to the original level after the player instances were released."
+      },
+      {
+        "type": "heading",
+        "text": "Investigation path",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "The investigation was performed using the following sequence. First, DMA-BUF usage was collected while the system was idle, before starting the video streams. Next, six concurrent 1080p AVC streams were started using ExoPlayer and the default vendor hardware decoder, c2.rk.avc.decoder. While the streams were active, DMA-BUF usage increased from the normal baseline to several hundred megabytes (~300-400 MB). A per-process DMA-BUF dump was then collected to identify which processes held references to the allocated buffers. The dump showed that the `android.hardware.media.c2@1.1-service` process held approximately 579,360 kB of DMA-BUF memory while the six streams were running. All ExoPlayer instances were then released. After that, the application process was force-stopped to guarantee that all file descriptors and Binder references belonging to the application were closed by the operating system. A second per-process DMA-BUF dump was collected after the force-stop. The application process was no longer present, but `android.hardware.media.c2@1.1-service` still held exactly 579,360 kB of DMA-BUF memory. The file descriptors of the Codec2 service process were also inspected. While the streams were active, the process contained hundreds of /dmabuf: descriptors, multiple gralloc_shared_memory descriptors, and an open /dev/mpp_service descriptor. Finally, the `android.hardware.media.c2@1.1-service` process was terminated. After the service process was terminated, DMA-BUF usage dropped substantially toward the original system baseline. The service was subsequently restarted by Android with a new process instance and significantly fewer DMA-BUF descriptors."
+      },
+      {
+        "type": "heading",
+        "text": "So what's the lesson?",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Sometimes, things may look like a standard workflow you dealt with all the years before. But apparently, sometimes you need to look at the situation from a completely different angle, and it may turn out that you are not at all to blame."
+      }
+    ]
+  },
+  "translation": {
+    "title": "Ошибка обнаружилась совсем не там, где её ожидали",
+    "category": "Потоковое видео",
+    "excerpt": "В работе бывает так, что проблема выглядит в точности как та, с которой вы уже сталкивались. Но она может оказаться гораздо глубже и интереснее. Именно с такой проблемой мы столкнулись при потоковой передаче видео по RTSP в нашей среде.",
+    "blocks": [
+      {
+        "type": "heading",
+        "text": "Что изначально вызвало подозрения?",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Наше приложение должно поддерживать камеры ONVIF, и мы решили использовать ExoPlayer, чтобы не писать огромный объём кода для уровня RTSP. Но возникла проблема: при одновременном открытии нескольких видеопотоков приложение со временем переставало работать. С точки зрения пользователя это выглядело как аварийное завершение, но в логах я ничего не обнаружил. Действительно ничего. При более глубоком изучении выяснилось, что в нашем приложении возникала ошибка ANR, а затем аварийно завершалась работа всей ОС из-за исчерпания доступной памяти. Память Java и нативная память приложения не объясняли этот рост полностью. Тогда я впервые узнал о памяти DMA-BUF и с помощью инструментов выяснил, что использование DMA BUF действительно значительно увеличивалось во время работы потоков и не возвращалось к исходному уровню после освобождения экземпляров проигрывателя."
+      },
+      {
+        "type": "heading",
+        "text": "Ход расследования",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Расследование проводилось в следующей последовательности. Сначала были собраны данные об использовании DMA-BUF в состоянии простоя системы, до запуска видеопотоков. Затем были запущены шесть одновременных потоков 1080p AVC с помощью ExoPlayer и стандартного аппаратного декодера производителя c2.rk.avc.decoder. Во время работы потоков использование DMA-BUF выросло с обычного базового уровня до нескольких сотен мегабайт (~300-400 MB). После этого был собран дамп DMA-BUF с разбивкой по процессам, чтобы определить, какие процессы удерживали ссылки на выделенные буферы. Дамп показал, что во время работы шести потоков процесс `android.hardware.media.c2@1.1-service` удерживал приблизительно 579,360 kB памяти DMA-BUF. Затем все экземпляры ExoPlayer были освобождены. После этого процесс приложения был принудительно остановлен, чтобы гарантировать закрытие операционной системой всех файловых дескрипторов и ссылок Binder, принадлежащих приложению. После принудительной остановки был собран второй дамп DMA-BUF с разбивкой по процессам. Процесс приложения уже отсутствовал, но `android.hardware.media.c2@1.1-service` по-прежнему удерживал ровно 579,360 kB памяти DMA-BUF. Также были изучены файловые дескрипторы процесса службы Codec2. Во время работы потоков процесс содержал сотни дескрипторов /dmabuf:, несколько дескрипторов gralloc_shared_memory и открытый дескриптор /dev/mpp_service. Наконец, процесс `android.hardware.media.c2@1.1-service` был завершён. После завершения процесса службы использование DMA-BUF существенно снизилось, приблизившись к исходному базовому уровню системы. Впоследствии Android перезапустил службу в новом экземпляре процесса со значительно меньшим количеством дескрипторов DMA-BUF."
+      },
+      {
+        "type": "heading",
+        "text": "Какой из этого вывод?",
+        "data": {
+          "level": 3
+        }
+      },
+      {
+        "type": "paragraph",
+        "text": "Иногда происходящее может выглядеть как стандартный рабочий процесс, с которым вы сталкивались все предыдущие годы. Но порой нужно посмотреть на ситуацию под совершенно другим углом, и тогда может оказаться, что вашей вины в ней вовсе нет."
+      }
+    ]
+  }
+}
