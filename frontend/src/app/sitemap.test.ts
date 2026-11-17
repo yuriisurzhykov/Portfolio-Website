@@ -37,6 +37,12 @@ describe("sitemap", () => {
         }
     });
 
+    it("never lists the privacy policy of the mobile app, in either language", async () => {
+        const entries = await sitemap();
+
+        expect(entries.filter((entry) => /^https:\/\/example\.com(\/ru)?\/privacy(\/|$)/.test(entry.url))).toEqual([]);
+    });
+
     it("lists translated details separately, excludes fallbacks and non-renderable content, and preserves lastmod", async () => {
         vi.mocked(getJournalEntries).mockResolvedValue([
             post({ slug: "translated", status: "published", hasBody: true, availableLocales: ["en", "ru"], contentUpdatedAt: "2026-11-01T00:00:00.000Z" }),
