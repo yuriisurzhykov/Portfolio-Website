@@ -28,6 +28,10 @@ export const dynamic = "force-dynamic";
  * content at all — worse than either half on its own. Those pages are kept
  * out of the index by `noindex` instead, which — unlike `Disallow` — only
  * works if the page may be fetched in the first place.
+ *
+ * `/privacy` (and its `/ru` rewrite) holds the policy of a mobile app. Google
+ * Play needs its address, search does not, so crawlers are kept away; it is also
+ * left out of `sitemap.ts`.
  */
 export default function robots(): MetadataRoute.Robots {
     if (!IS_INDEXABLE) {
@@ -35,7 +39,7 @@ export default function robots(): MetadataRoute.Robots {
     }
 
     return {
-        rules: { userAgent: "*", disallow: ["/admin", "/api", "/storybook"] },
+        rules: { userAgent: "*", disallow: ["/admin", "/api", "/storybook", "/privacy", "/ru/privacy"] },
         sitemap: `${ SITE_URL }/sitemap.xml`,
     };
 }
