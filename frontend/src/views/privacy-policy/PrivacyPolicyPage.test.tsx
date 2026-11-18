@@ -10,7 +10,7 @@ function allTexts(policy: PolicyDocument): string[] {
     for (const section of policy.sections) {
         texts.push(section.heading);
         for (const block of section.blocks) {
-            if (block.kind === "paragraph") {
+            if (block.kind === "paragraph" || block.kind === "subheading") {
                 texts.push(block.text);
             } else if (block.kind === "list") {
                 texts.push(...block.items);
@@ -46,12 +46,25 @@ describe("the privacy policy page", () => {
         }
     });
 
-    it("offers the contact address as a mailto link in the contact sections", () => {
+    it("shows a subheading as a level-3 heading inside its section", () => {
         render(<PrivacyPolicyPage policy={ IP_CAMERAS_HUB_POLICY } />);
+
+        const subheading = screen.getByRole("heading", { level: 3, name: "Firebase Analytics" });
+
+        expect(subheading.closest("section")).toBe(
+            screen.getByRole("region", { name: "6. Services of other companies" }),
+        );
+    });
+
+    it("offers the contact address as a mailto link wherever the policy names it", () => {
+        render(<PrivacyPolicyPage policy={ IP_CAMERAS_HUB_POLICY } />);
+        const namedInText = allTexts(IP_CAMERAS_HUB_POLICY)
+            .flatMap((text) => [...text.matchAll(/\]\(mailto:/g)]);
 
         const links = screen.getAllByRole("link", { name: PRIVACY_CONTACT_EMAIL });
 
-        expect(links).toHaveLength(2);
+        expect(links).toHaveLength(namedInText.length);
+        expect(links.length).toBeGreaterThanOrEqual(4);
         for (const link of links) {
             expect(link).toHaveAttribute("href", `mailto:${ PRIVACY_CONTACT_EMAIL }`);
         }

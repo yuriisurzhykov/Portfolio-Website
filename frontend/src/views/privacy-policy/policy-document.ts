@@ -9,6 +9,7 @@ export interface PolicyTable {
  * the same subset `shared/ui/markdown` renders, which never interprets raw HTML.
  */
 export type PolicyBlock =
+    | { kind: "subheading"; text: string }
     | { kind: "paragraph"; text: string }
     | { kind: "list"; items: string[] }
     | { kind: "table"; table: PolicyTable };
