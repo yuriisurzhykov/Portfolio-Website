@@ -167,7 +167,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
-          token: ${{ secrets.BASELINE_COMMIT_PAT }}
+          persist-credentials: false
 
       - name: Download generated baselines as data
         if: needs.update-snapshots.result == 'success'
@@ -176,48 +176,24 @@ jobs:
           name: visual-baselines
           path: ${{ runner.temp }}/visual-baselines
 
-      - name: Verify that the pull request still points to the approved commit
-        id: current
+      - name: Commit validated snapshots against the approved SHA
+        id: commit
         if: needs.update-snapshots.result == 'success'
         uses: actions/github-script@v9
         env:
           PR_SHA: ${{ needs.guard.outputs.head_sha }}
           PR_BRANCH: ${{ needs.guard.outputs.head_ref }}
-        with:
-          script: |
-            const { data: pr } = await github.rest.pulls.get({
-              ...context.repo, pull_number: context.issue.number,
-            });
-            const current = pr.state === "open" &&
-              pr.head.repo?.full_name === process.env.GITHUB_REPOSITORY &&
-              pr.head.ref !== context.payload.repository.default_branch &&
-              pr.head.sha === process.env.PR_SHA && pr.head.ref === process.env.PR_BRANCH;
-            core.setOutput("current", String(current));
-
-      - name: Commit and push verified snapshot files
-        id: commit
-        if: steps.current.outputs.current == 'true'
-        env:
-          PR_SHA: ${{ needs.guard.outputs.head_sha }}
-          PR_BRANCH: ${{ needs.guard.outputs.head_ref }}
           SNAPSHOT_ARTIFACT: ${{ runner.temp }}/visual-baselines
-          GIT_INDEX_FILE: ${{ runner.temp }}/visual-baselines.index
-        run: |
-          [[ "$PR_SHA" =~ ^[0-9a-f]{40}$ ]]
-          branch_ref="refs/heads/$PR_BRANCH"
-          git check-ref-format "$branch_ref"
-          git fetch --no-tags origin "$PR_SHA"
-          export PR_TREE
-          PR_TREE="$(git rev-parse "$PR_SHA^{tree}")"
-          changed="$(node .github/scripts/publish-visual-baselines.cjs)"
-          if [ "$changed" = true ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            tree="$(git write-tree)"
-            commit="$(git commit-tree "$tree" -p "$PR_SHA" -m "chore: accept visual regression baselines (via /update-snapshots)")"
-            git push --force-with-lease="$branch_ref:$PR_SHA" origin "$commit:$branch_ref"
-          fi
-          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+        with:
+          github-token: ${{ secrets.BASELINE_COMMIT_PAT }}
+          script: |
+            const { publishBaselines } = require('./.github/scripts/publish-visual-baselines.cjs');
+            const status = await publishBaselines({
+              github, repo: context.repo, number: context.issue.number,
+              head: process.env.PR_SHA, branch: process.env.PR_BRANCH,
+              artifact: process.env.SNAPSHOT_ARTIFACT,
+            });
+            core.setOutput("status", status);
 
       - name: Comment with the result
         if: always()
@@ -226,15 +202,14 @@ jobs:
           script: |
             const outcome = "${{ job.status }}";
             const generation = "${{ needs.update-snapshots.result }}";
-            const current = "${{ steps.current.outputs.current }}";
-            const changed = "${{ steps.commit.outputs.changed }}";
+            const status = "${{ steps.commit.outputs.status }}";
             let body;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             if (outcome !== "success" || generation !== "success") {
               body = `❌ \`/update-snapshots\` failed — check the [workflow run](${runUrl}) for details.`;
-            } else if (current !== "true") {
+            } else if (status === "stale") {
               body = "The PR changed while snapshots were being generated. Run the command again on the new commit.";
-            } else if (changed === "true") {
+            } else if (status === "published") {
               body = "✅ Baselines updated and pushed to this PR's branch. The visual check will re-run automatically.";
             } else {
               body = "ℹ️ No baseline differences found — nothing to update. Check the [workflow run](${runUrl}) for details.";

@@ -1,4 +1,4 @@
-const { execFileSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
 const { lstatSync, readdirSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
@@ -45,47 +45,61 @@ function readSnapshots(artifact) {
     return snapshots;
 }
 
-function stageSnapshots({ artifact, repo, tree }) {
-    if (!/^[0-9a-f]{40}$/.test(tree)) throw new Error("Expected an immutable Git tree SHA.");
-    const git = (args, input) => execFileSync("git", args, { cwd: repo, input }).toString();
-    const snapshots = readSnapshots(artifact);
-    // A snapshot entry must never replace a file or symlink in an ancestor path.
-    for (const parent of ["frontend", "frontend/tests", prefix]) {
-        const entry = git(["ls-tree", tree, "--", parent]);
-        if (entry && !entry.startsWith("040000 tree ")) {
-            throw new Error("Expected a snapshot directory in the original tree: " + parent);
-        }
-    }
-    const original = git(["ls-tree", "-r", "-z", tree, "--", prefix]).split("\0").filter(Boolean);
-    const changes = [];
+function validateOriginalTree(tree) {
     const previous = new Map();
-
-    for (const entry of original) {
-        const [metadata, path] = entry.split("\t");
-        const [mode, type, sha] = metadata.split(" ");
-        if (mode !== "100644" || type !== "blob" || !path?.startsWith(prefix + "/") ||
-            !path.endsWith(".png") || !path.split("/").every(part => safeComponent.test(part))) {
+    const directories = ["frontend", "frontend/tests", prefix];
+    for (const entry of tree) {
+        if (directories.includes(entry.path)) {
+            if (entry.type !== "tree") throw new Error("Expected a snapshot directory: " + entry.path);
+            continue;
+        }
+        if (!entry.path.startsWith(prefix + "/")) continue;
+        if (!entry.path.split("/").every(part => safeComponent.test(part) && !part.endsWith("."))) {
             throw new Error("Unexpected entry in the original snapshot tree.");
         }
-        previous.set(path, sha);
-        if (!snapshots.has(path)) changes.push("0 " + "0".repeat(40) + "\t" + path);
+        if (entry.type === "tree") continue;
+        if (entry.type !== "blob" || entry.mode !== "100644" || !entry.path.endsWith(".png")) {
+            throw new Error("Unexpected entry in the original snapshot tree.");
+        }
+        previous.set(entry.path, entry.sha);
+    }
+    return previous;
+}
+
+async function publishBaselines({ github, repo, number, head, branch, artifact }) {
+    if (!/^[0-9a-f]{40}$/.test(head)) throw new Error("Expected an immutable PR head SHA.");
+    const repositoryNameWithOwner = repo.owner + "/" + repo.repo;
+    const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: number });
+    if (pr.state !== "open" || pr.head.repo?.full_name !== repositoryNameWithOwner ||
+        pr.head.sha !== head || pr.head.ref !== branch || branch === pr.base.repo.default_branch) {
+        return "stale";
     }
 
+    const snapshots = readSnapshots(artifact);
+    const { data: commit } = await github.rest.git.getCommit({ ...repo, commit_sha: head });
+    const { data: tree } = await github.rest.git.getTree({ ...repo, tree_sha: commit.tree.sha, recursive: "1" });
+    if (tree.truncated) throw new Error("Cannot publish from a truncated Git tree.");
+    const previous = validateOriginalTree(tree.tree);
+    const deletions = [...previous.keys()].filter(path => !snapshots.has(path)).map(path => ({ path }));
+    const additions = [];
     for (const [path, contents] of snapshots) {
-        const sha = git(["hash-object", "-w", "--stdin", "--no-filters"], contents).trim();
-        if (previous.get(path) !== sha) changes.push("100644 " + sha + "\t" + path);
+        // Compute the Git blob identifier to skip unchanged images.
+        const oid = createHash("sha1").update("blob " + contents.length + "\0").update(contents).digest("hex");
+        if (previous.get(path) !== oid) additions.push({ path, contents: contents.toString("base64") });
     }
-
-    git(["read-tree", tree]);
-    if (changes.length === 0) return false;
-    git(["update-index", "-z", "--index-info"], changes.join("\0") + "\0");
-    return true;
+    if (!additions.length && !deletions.length) return "no_changes";
+    await github.graphql(
+        "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+        {
+            input: {
+                branch: { repositoryNameWithOwner, branchName: branch },
+                expectedHeadOid: head,
+                message: { headline: "chore: accept visual regression baselines (via /update-snapshots)" },
+                fileChanges: { additions, deletions },
+            },
+        },
+    );
+    return "published";
 }
 
-if (require.main === module) {
-    const { SNAPSHOT_ARTIFACT, PR_TREE } = process.env;
-    const changed = stageSnapshots({ artifact: SNAPSHOT_ARTIFACT, repo: process.cwd(), tree: PR_TREE });
-    process.stdout.write(String(changed));
-}
-
-module.exports = { stageSnapshots };
+module.exports = { publishBaselines };
