@@ -7,9 +7,15 @@ export interface PolicyBlockViewProps {
     block: PolicyBlock;
 }
 
-/** One paragraph, list or table of a policy section. */
+/** One subheading, paragraph, list or table of a policy section. */
 export function PolicyBlockView({ block }: PolicyBlockViewProps) {
     switch (block.kind) {
+        case "subheading":
+            return (
+                <Text as="h3" variant="h3" className="m-0 mt-lg">
+                    { block.text }
+                </Text>
+            );
         case "paragraph":
             return (
                 <Text className="mt-sm">
