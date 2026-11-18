@@ -592,45 +592,18 @@ content change (not a real bug), comment exactly:
 
 on the PR. The bot reacts with 👍, then:
 
-1. A separate `guard` job verifies the comment author and that the PR's branch actually lives in
-   this repository (not a fork), capturing an immutable commit SHA in that same API call.
-2. A second `update-snapshots` job, gated on `guard`'s output, checks out **that exact SHA** (not a
-   mutable branch ref — see the workflow file's own top comment for why this is split into two
-   jobs instead of one).
-3. Regenerates `tests/visual-snapshots/` (`npm run test:e2e:prepare && npx playwright
-   test tests/e2e/visual.spec.ts --update-snapshots`) in the same Ubuntu/Chromium environment CI
-   uses — no local Docker step needed. Needs the CI Postgres service container reachable, same as
-   the main check (section 7).
-4. Commits and pushes straight to that branch if anything actually changed.
-5. Posts a follow-up comment: ✅ if it pushed an update, ℹ️ if there was nothing to update, ❌ with
-   a link to the run if something went wrong.
+1. The `guard` job checks the commenter and verifies that the open PR comes from a branch in this
+   repository. It records the branch and its exact commit SHA.
+2. The `update-snapshots` job checks out that commit with read-only permissions, runs
+   `npm run test:e2e:update:all` against the CI Postgres service, and uploads the generated PNGs.
+3. The `publish` job runs on a fresh runner and loads code from the default branch. It validates
+   the snapshot paths and files, rechecks the PR head, and commits only the snapshot changes.
+   The push requires the branch to still point to the same commit and uses `BASELINE_COMMIT_PAT`
+   so GitHub triggers the normal `pull_request: synchronize` checks.
+4. The bot reports whether it published an update, found no changes, or needs the command rerun.
 
-That push automatically re-triggers the normal `pull_request: synchronize` event, so
-`visual-tests.yml` re-runs and the check turns green on its own — no need to re-run anything by
-hand, and no second build on `master` either, since the PR's branch already has the correct
-baselines by the time you merge.
-
-**Restricted to trusted commenters — but that alone is not enough:**
-`github.event.comment.author_association` (`OWNER`/`MEMBER`/`COLLABORATOR`) vets *who posted the
-comment*, not *whose code is about to run*. That distinction matters: without a second check, a
-trusted maintainer commenting `/update-snapshots` on a malicious fork PR would still cause the
-job to `gh pr checkout` that fork's branch and then `npm ci` (runs the fork's own `postinstall`
-scripts) / `npx playwright test` (runs the fork's own `playwright.config.ts` and test files) —
-all while the job still holds a `contents: write` token. That's the "pwn request" pattern: a
-trusted action approving untrusted code that then runs with privileged credentials. Fixed with an
-explicit **"Verify the PR branch is not from a fork"** step, *before* any checkout of PR content:
-it fetches the PR via the API and compares `head.repo.full_name` to this repository; if they
-don't match, the job fails closed (`core.setFailed`) before fetching or running a single line of
-the PR's code, and the final comment reports "ignored — this PR is from a fork" instead of a
-generic failure. See the `[RESOLVED]` entry in section 11 for how this was found. (This is all
-`frontend/tests/`-era history, carried over here unchanged — the fork guard doesn't need any
-`frontend/`-specific change once the workflow itself is retargeted.)
-
-**Known limitation:** only works for PRs whose branch lives in this repository (not a fork) —
-pushing an updated baseline needs write access to the branch, which a fork's branch doesn't grant
-the base repo's `GITHUB_TOKEN`, and the guard above now also refuses to try. Not a concern today
-(personal, single-maintainer repo) but this was a real, exploitable gap, not just a theoretical
-one, given the repo is public.
+Repository owners, members and collaborators can run the command on same-repository PRs.
+For a fork, regenerate the baselines locally and push them to the fork.
 
 **Permissions gotcha, found live (not in the REST docs):** both jobs grant `pull-requests: write`,
 not `issues: write` — even though `github.rest.reactions.createForIssueComment` /

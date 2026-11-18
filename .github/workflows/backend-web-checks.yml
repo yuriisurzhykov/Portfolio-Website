@@ -31,6 +31,8 @@ jobs:
           node-version: "24"
       - name: Test repair security helpers
         run: node --test .github/actions/dependabot-repair/scripts/*/*.test.cjs
+      - name: Test visual baseline publication boundaries
+        run: node --test .github/scripts/publish-visual-baselines.test.cjs
       - name: Probe hostile install and container network isolation (no paid inference)
         run: node .github/actions/dependabot-repair/scripts/probe/probe.cjs
 

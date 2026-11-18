@@ -21,11 +21,5 @@ export function slugify(title: string): string {
         .normalize("NFKD")
         .replace(/[\u0300-\u036f]/g, "") // strip accents (é → e) after NFKD decomposition
         .replace(/[^a-z0-9]+/g, "-");
-    // Same redundancy already proven by hand for the frontend original
-    // (see its own comment) — this is the same algorithm, not a
-    // reimplementation, so the same proof applies: the `.replace()` above
-    // already collapses any run of non-alphanumeric characters into a
-    // single "-", so two adjacent hyphens can never reach the line below.
-    // Stryker disable next-line Regex
-    return collapsed.replace(/^-+|-+$/g, "");
+    return collapsed.replace(/^-|-$/g, "");
 }

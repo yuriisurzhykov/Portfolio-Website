@@ -14,13 +14,9 @@ name: Accept Visual Baselines
 # frontend/tests/e2e/generate-pages-manifest.ts needs a real, seeded database to build the page
 # list.
 #
-# SECURITY (CWE-367, "Untrusted Checkout TOCTOU"): split into two jobs so `guard` can capture an
-# IMMUTABLE commit SHA (via the same API call that checks the branch isn't a fork) for
-# `update-snapshots` to check out — never a mutable branch ref. CodeQL still flags the checkout as
-# a residual finding, dismissed as a false positive: its query only recognizes the literal
-# `github.event.pull_request.head.sha` expression as "provably immutable", which can't exist for
-# `issue_comment` events (no `pull_request.head` in the payload) — see dismissal note in the code
-# scanning UI for the full reasoning.
+# Generate on a read-only runner. Publish snapshot files on a fresh runner.
+permissions: {}
+
 on:
   issue_comment:
     types: [ created ]
@@ -38,7 +34,6 @@ jobs:
     permissions:
       pull-requests: write
     outputs:
-      is_fork: ${{ steps.guard.outputs.is_fork }}
       head_sha: ${{ steps.guard.outputs.head_sha }}
       head_ref: ${{ steps.guard.outputs.head_ref }}
     steps:
@@ -69,38 +64,24 @@ jobs:
             });
             const expectedFullName = `${context.repo.owner}/${context.repo.repo}`;
             const sameRepo = Boolean(pr.head.repo) && pr.head.repo.full_name === expectedFullName;
-            core.setOutput("is_fork", String(!sameRepo));
-            if (!sameRepo) {
+            if (pr.state !== "open" || !sameRepo ||
+                pr.head.ref === context.payload.repository.default_branch) {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                ...context.repo,
                 issue_number: context.issue.number,
-                body: "🚫 `/update-snapshots` was ignored — this PR's branch isn't in this " +
-                  "repository (looks like a fork). For security, this command only runs against " +
-                  "same-repo PR branches: running it here would mean checking out and executing " +
-                  "the fork's own code (install scripts, test config, ...) while a job still " +
-                  "holds write-scoped credentials.",
+                body: "/update-snapshots requires an open PR from a branch in this repository.",
               });
-              core.setFailed(
-                "Refusing to run: this PR's branch is not in this repository (looks like a fork). " +
-                "/update-snapshots only supports same-repo PR branches, specifically to avoid " +
-                "checking out and executing untrusted code while holding write-scoped credentials."
-              );
-              return;
+              throw new Error("The PR branch is not eligible to receive baselines.");
             }
             core.setOutput("head_sha", pr.head.sha);
             core.setOutput("head_ref", pr.head.ref);
 
   update-snapshots:
     needs: guard
-    if: needs.guard.outputs.is_fork != 'true'
+    if: needs.guard.outputs.head_sha != ''
     runs-on: ubuntu-latest
-    # contents: write for the push, pull-requests: write for the comment (see
-    # guard's comment above). Job-level only — GitHub Actions ignores
-    # permissions: on individual steps (a reverted CodeQL autofix tried that).
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
 
     services:
       # Same reasoning as visual-tests.yml: frontend/tests/e2e/generate-pages-manifest.ts needs a
@@ -141,15 +122,19 @@ jobs:
         with:
           repository: ${{ github.repository }}
           ref: ${{ needs.guard.outputs.head_sha }}
-          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Prepare workspace
-        uses: ./.github/actions/prepare-workspace
+      - name: Set up Node without the default branch npm cache
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
+          package-manager-cache: false
 
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
+      - run: npm ci --include=optional
+      - run: npx prisma migrate deploy
+        working-directory: backend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
 
       - name: Regenerate baselines
         working-directory: frontend
@@ -160,19 +145,79 @@ jobs:
         # together instead of needing two separate commands.
         run: npm run test:e2e:update:all
 
-      - name: Commit and push to the PR branch
+      - name: Upload generated baselines
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: frontend/tests/visual-snapshots/
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  publish:
+    needs: [guard, update-snapshots]
+    if: always() && needs.guard.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout the trusted workflow commit
+        if: needs.update-snapshots.result == 'success'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          token: ${{ secrets.BASELINE_COMMIT_PAT }}
+
+      - name: Download generated baselines as data
+        if: needs.update-snapshots.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: visual-baselines
+          path: ${{ runner.temp }}/visual-baselines
+
+      - name: Verify that the pull request still points to the approved commit
+        id: current
+        if: needs.update-snapshots.result == 'success'
+        uses: actions/github-script@v9
+        env:
+          PR_SHA: ${{ needs.guard.outputs.head_sha }}
+          PR_BRANCH: ${{ needs.guard.outputs.head_ref }}
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo, pull_number: context.issue.number,
+            });
+            const current = pr.state === "open" &&
+              pr.head.repo?.full_name === process.env.GITHUB_REPOSITORY &&
+              pr.head.ref !== context.payload.repository.default_branch &&
+              pr.head.sha === process.env.PR_SHA && pr.head.ref === process.env.PR_BRANCH;
+            core.setOutput("current", String(current));
+
+      - name: Commit and push verified snapshot files
         id: commit
+        if: steps.current.outputs.current == 'true'
+        env:
+          PR_SHA: ${{ needs.guard.outputs.head_sha }}
+          PR_BRANCH: ${{ needs.guard.outputs.head_ref }}
+          SNAPSHOT_ARTIFACT: ${{ runner.temp }}/visual-baselines
+          GIT_INDEX_FILE: ${{ runner.temp }}/visual-baselines.index
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/tests/visual-snapshots
-          if git diff --cached --quiet; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            git commit -m "chore: accept visual regression baselines (via /update-snapshots)"
-            git push origin HEAD:${{ needs.guard.outputs.head_ref }}
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+          [[ "$PR_SHA" =~ ^[0-9a-f]{40}$ ]]
+          branch_ref="refs/heads/$PR_BRANCH"
+          git check-ref-format "$branch_ref"
+          git fetch --no-tags origin "$PR_SHA"
+          export PR_TREE
+          PR_TREE="$(git rev-parse "$PR_SHA^{tree}")"
+          changed="$(node .github/scripts/publish-visual-baselines.cjs)"
+          if [ "$changed" = true ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            tree="$(git write-tree)"
+            commit="$(git commit-tree "$tree" -p "$PR_SHA" -m "chore: accept visual regression baselines (via /update-snapshots)")"
+            git push --force-with-lease="$branch_ref:$PR_SHA" origin "$commit:$branch_ref"
           fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Comment with the result
         if: always()
@@ -180,11 +225,15 @@ jobs:
         with:
           script: |
             const outcome = "${{ job.status }}";
+            const generation = "${{ needs.update-snapshots.result }}";
+            const current = "${{ steps.current.outputs.current }}";
             const changed = "${{ steps.commit.outputs.changed }}";
             let body;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            if (outcome !== "success") {
+            if (outcome !== "success" || generation !== "success") {
               body = `❌ \`/update-snapshots\` failed — check the [workflow run](${runUrl}) for details.`;
+            } else if (current !== "true") {
+              body = "The PR changed while snapshots were being generated. Run the command again on the new commit.";
             } else if (changed === "true") {
               body = "✅ Baselines updated and pushed to this PR's branch. The visual check will re-run automatically.";
             } else {
