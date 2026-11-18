@@ -13,9 +13,7 @@ const PATH = "/privacy/ip-cameras-hub";
 
 const TITLE = "Privacy Policy – IP Cameras Hub";
 
-const DESCRIPTION =
-    "What the IP Cameras Hub Android app does with your information: it has no account, no advertising and no analytics, "
-    + "and what it keeps stays on your phone.";
+const DESCRIPTION = "Learn how IP Cameras Hub handles camera connections, local storage, crash reports, and optional analytics.";
 
 /** English only, so a `/ru` request canonicalizes to the English URL (see `alternatesFor`). */
 export async function generateMetadata(): Promise<Metadata> {
