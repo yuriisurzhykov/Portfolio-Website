@@ -6,6 +6,7 @@ import type { LinkPreviewMap, PostDetail, WorkDetail } from "@portfolio/backend"
 import { Text } from "@/shared/ui/text";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
+import { SoliDeoGloria } from "@/shared/ui/soli-deo-gloria";
 import { RelatedContentCallout } from "@/shared/ui/related-content-callout";
 import { useTranslation } from "@/shared/i18n";
 import { formatMonthYear } from "@/shared/lib/date-format";
@@ -83,6 +84,7 @@ export function JournalDetailPage({ post, relatedWork, hue, isPreview = false, l
                 ) }
 
                 <ContentBlocks blocks={ post.body } linkPreviews={ linkPreviews }/>
+                <SoliDeoGloria />
 
                 { relatedWork && relatedWork.caseStudy && (
                     <RelatedContentCallout

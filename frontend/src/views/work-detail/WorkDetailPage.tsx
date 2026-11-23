@@ -9,6 +9,7 @@ import { WorkCoverImage } from "@/shared/ui/work-cover-image";
 import { TagList } from "@/shared/ui/tag-list";
 import { RelatedContentCallout } from "@/shared/ui/related-content-callout";
 import { ContentBlocks } from "@/shared/ui/content-blocks";
+import { SoliDeoGloria } from "@/shared/ui/soli-deo-gloria";
 import { useTranslation } from "@/shared/i18n";
 import { accentColorForHue } from "@/shared/lib/hue-accent";
 
@@ -95,6 +96,7 @@ export function WorkDetailPage({ item, relatedPost, hue, isPreview = false, link
                 />
 
                 <ContentBlocks blocks={ caseStudy.blocks } linkPreviews={ linkPreviews }/>
+                <SoliDeoGloria />
 
                 <Text as="h2" variant="h2" className="mb-sm">
                     { ln("work.caseStudy.stackHeading") }

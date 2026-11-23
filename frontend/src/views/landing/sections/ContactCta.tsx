@@ -4,6 +4,7 @@ import * as React from "react";
 import type { ContactContent } from "@portfolio/backend";
 import { Text } from "@/shared/ui/text";
 import { LinkButton } from "@/shared/ui/button";
+import { SoliDeoGloria } from "@/shared/ui/soli-deo-gloria";
 import { useTranslation } from "@/shared/i18n";
 
 export interface ContactCtaProps {
@@ -32,6 +33,7 @@ export function ContactCta({ contact, email }: ContactCtaProps) {
                     { ln("button.getInTouch") }
                 </LinkButton>
             </div>
+            <SoliDeoGloria />
         </section>
     );
 }
