@@ -1,0 +1,1 @@
+export { SoliDeoGloria } from "./SoliDeoGloria";
