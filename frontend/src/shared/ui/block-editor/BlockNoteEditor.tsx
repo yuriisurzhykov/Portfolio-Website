@@ -3,7 +3,8 @@
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import * as React from "react";
-import { filterSuggestionItems, SuggestionMenu } from "@blocknote/core";
+import { filterSuggestionItems } from "@blocknote/core";
+import { SuggestionMenu } from "@blocknote/core/extensions";
 import { useCreateBlockNote, SuggestionMenuController } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import type { Block, BlockInput } from "@portfolio/backend";
