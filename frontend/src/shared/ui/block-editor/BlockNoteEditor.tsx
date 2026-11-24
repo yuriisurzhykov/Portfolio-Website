@@ -7,6 +7,7 @@ import { filterSuggestionItems } from "@blocknote/core";
 import { SuggestionMenu } from "@blocknote/core/extensions";
 import { useCreateBlockNote, SuggestionMenuController } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
+import { TextSelection } from "prosemirror-state";
 import type { Block, BlockInput } from "@portfolio/backend";
 import { useTheme } from "@/shared/theme";
 import { blockNoteSchema } from "./schema";
@@ -135,6 +136,7 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
     });
 
     const selectionRef = React.useRef<{ from: number; to: number } | null>(null);
+    const linkSelectionRef = React.useRef<{ from: number; to: number } | null>(null);
     const [blockType, setBlockType] = React.useState<"paragraph" | "heading2" | "heading3" | "custom">("paragraph");
     const [activeStyles, setActiveStyles] = React.useState({ bold: false, italic: false });
     const [linkOpen, setLinkOpen] = React.useState(false);
@@ -190,7 +192,8 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
         editor.focus();
         if (action === "bold" || action === "italic") editor.toggleStyles({ [action]: true });
         else if (action === "link") {
-            selectionRef.current = captureSelection();
+            // The dialog moves focus and can change the editor's live selection.
+            linkSelectionRef.current = captureSelection();
             setLinkUrl(editor.getSelectedLinkUrl() ?? "");
             setLinkError(undefined);
             setLinkOpen(true);
@@ -216,8 +219,14 @@ const MountedBlockEditor = React.forwardRef<BlockEditorHandle, BlockEditorProps>
             setLinkError("Enter an HTTP, HTTPS, email or relative link.");
             return;
         }
-        restoreSelection(selectionRef.current);
-        editor.createLink(value);
+        const selection = linkSelectionRef.current;
+        if (selection) {
+            editor.transact((tr) => {
+                const size = tr.doc.content.size;
+                tr.setSelection(TextSelection.create(tr.doc, Math.min(selection.from, size), Math.min(selection.to, size)));
+                editor.createLink(value);
+            });
+        }
         setLinkOpen(false);
     }
 
