@@ -182,17 +182,12 @@ function splitAnchorAtCursor(editor: PortfolioBlockNoteEditor, anchor: Portfolio
 
     const cursorInfo = editor.transact((tr) => {
         const blockInfo = getBlockInfoFromSelection(tr);
-        // Always true for a block with `content: "inline"` (the only kind
-        // this function is ever called with — guarded above) — narrowed
-        // explicitly since `blockContent` only exists on this branch of
-        // `BlockInfo`'s union.
-        if (!blockInfo.isBlockContainer) {
+        if (blockInfo.contentKind !== "inline") {
             return null;
         }
-        const contentStart = blockInfo.blockContent.beforePos + 1;
         return {
-            offset: tr.selection.from - contentStart,
-            atEnd: tr.selection.from === blockInfo.blockContent.afterPos - 1,
+            offset: tr.selection.from - blockInfo.contentStart,
+            atEnd: tr.selection.from === blockInfo.contentEnd,
         };
     });
     if (!cursorInfo || cursorInfo.atEnd) {

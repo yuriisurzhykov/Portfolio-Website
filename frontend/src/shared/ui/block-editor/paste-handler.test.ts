@@ -9,11 +9,10 @@ function placeCursorAt(editor: ReturnType<typeof BlockNoteEditor.create>, block:
     editor.setTextCursorPosition(block, "start");
     editor.transact((tr: Transaction) => {
         const blockInfo = getBlockInfoFromSelection(tr);
-        if (!blockInfo.isBlockContainer) {
-            throw new Error("expected a block-container block in this test");
+        if (blockInfo.contentKind !== "inline") {
+            throw new Error("expected a block with inline content in this test");
         }
-        const contentStart = blockInfo.blockContent.beforePos + 1;
-        tr.setSelection(TextSelection.near(tr.doc.resolve(contentStart + offset)));
+        tr.setSelection(TextSelection.near(tr.doc.resolve(blockInfo.contentStart + offset)));
     });
 }
 
